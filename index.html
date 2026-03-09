@@ -645,8 +645,22 @@ async function parsePdf(file){
       });
       dbg('\nPage '+p+' H='+H.toFixed(0));
       words.forEach(function(w){dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"');});
+      // Render page to canvas and store as image for label printing
+      var canvas=document.createElement('canvas');
+      // Scale 3x = ~216 DPI for standard label (72pt base) — enough for barcode scanning
+      // Use devicePixelRatio too if high-DPI screen, but cap at 3x minimum
+      var printScale=Math.max(3, window.devicePixelRatio||1);
+      var vp2=page.getViewport({scale:printScale});
+      canvas.width=vp2.width; canvas.height=vp2.height;
+      var ctx2=canvas.getContext('2d');
+      ctx2.imageSmoothingEnabled=false; // no blur — keep edges sharp for barcodes
+      await page.render({canvasContext:ctx2,viewport:vp2}).promise;
+      var pageImg=canvas.toDataURL('image/png'); // PNG = lossless, no JPEG artifacts on barcodes
+
       var o=extractOrder(words,H);
       if(o){
+        o.pageImg=pageImg;
+        o.pageW=vp2.width; o.pageH=vp2.height;
         out.push(o);
         dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf+' sku='+o.skus.map(function(s){return s.sku+'*'+s.qty;}).join(','));
       } else {
@@ -1039,139 +1053,110 @@ function autoAssign(){
 function printSkuSort(){
   if(!orders.length){alert('Import a PDF batch first.');return;}
 
-  // Group orders by primary SKU
+  var withImg=orders.filter(function(o){return o.pageImg;});
+  if(!withImg.length){
+    alert('No label images - re-import the PDF first.');
+    return;
+  }
+
+  // Show progress in pmsg
+  pm('⟳ Building sorted label print… '+withImg.length+' labels');
+
+  // Group by primary SKU
   var groups={};
   orders.forEach(function(o){
+    if(!o.pageImg) return;
     var sku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
     if(!groups[sku]) groups[sku]=[];
     groups[sku].push(o);
   });
-
-  // Sort groups by SKU name, then within each group sort by shelf
   var skuKeys=Object.keys(groups).sort();
+  pm('⟳ '+skuKeys.length+' SKU groups — opening print window…');
 
-  var totalOrders=orders.length;
-  var totalSkuGroups=skuKeys.length;
-
-  // Build HTML — one section per SKU group
-  var sectionsHtml=skuKeys.map(function(sku){
-    var grp=groups[sku].sort(function(a,b){
-      return (a.shelf||'').localeCompare(b.shelf||'');
-    });
-    var totalQty=grp.reduce(function(s,o){
-      return s+(o.skus&&o.skus[0]?o.skus[0].qty:1);
-    },0);
-
-    var rows=grp.map(function(o,idx){
-      var allSkus=o.skus.map(function(s){return s.sku+' ×'+s.qty;}).join('<br>');
-      var carrierCol=o.carrier||'—';
-      var trackShort=o.tracking.length>20?o.tracking.slice(-16):o.tracking;
-      return '<tr class="sku-row">'
-        +'<td class="sku-num">'+(idx+1)+'</td>'
-        +'<td class="sku-shelf">'+( o.shelf||'—')+'</td>'
-        +'<td class="sku-skucol">'+allSkus+'</td>'
-        +'<td class="sku-track">'+trackShort+'</td>'
-        +'<td class="sku-carrier"><span class="sku-cbadge" style="background:'+cc(carrierCol)+'22;color:'+cc(carrierCol)+';border:1px solid '+cc(carrierCol)+'55;">'+carrierCol+'</span></td>'
-        +'<td class="sku-dest">'+o.dest+'</td>'
-        +'<td class="sku-qty">'+(o.skus&&o.skus[0]?o.skus[0].qty:1)+'</td>'
-        +'</tr>';
-    }).join('');
-
-    return '<div class="sku-section">'
-      +'<div class="sku-group-header">'
-        +'<div>'
-          +'<div class="sku-group-name">'+sku+'</div>'
-          +'<div class="sku-group-shelf">Shelf: '+(grp[0]&&grp[0].shelf?grp[0].shelf:'—')+'</div>'
-        +'</div>'
-        +'<div class="sku-group-meta">'+grp.length+' order'+(grp.length!==1?'s':'')+' &nbsp;·&nbsp; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</div>'
-      +'</div>'
-      +'<table class="sku-table">'
-        +'<thead><tr>'
-          +'<th>#</th><th>SHELF</th><th>SKU / QTY</th><th>TRACKING</th><th>CARRIER</th><th>SHIP TO</th><th>QTY</th>'
-        +'</tr></thead>'
-        +'<tbody>'+rows+'</tbody>'
-      +'</table>'
-      +'</div>';
-  }).join('');
-
-  var existing=document.getElementById('skusort-overlay');
-  if(existing) existing.remove();
-  var styleEl=document.getElementById('skusort-style');
-  if(styleEl) styleEl.remove();
-
-  var ov=document.createElement('div');
-  ov.id='skusort-overlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:24px 16px;';
-
-  ov.innerHTML=
-    '<div style="width:100%;max-width:960px;">'
-      // Header bar
-      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;">'
-        +'<div>'
-          +'<div style="font-size:13px;font-weight:700;letter-spacing:3px;color:#fff;">BATCH SORTED BY SKU</div>'
-          +'<div style="font-size:10px;color:#888;margin-top:4px;letter-spacing:1px;">DOUBLE SIDED ISCM LLC &nbsp;·&nbsp; '+shiftDate+'</div>'
-          +'<div style="font-size:10px;color:#aaa;margin-top:3px;">'+totalOrders+' orders &nbsp;·&nbsp; '+totalSkuGroups+' SKU groups</div>'
-        +'</div>'
-        +'<div style="display:flex;gap:8px;flex-shrink:0;">'
-          +'<button id="sks-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'
-          +'<button id="sks-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'
-        +'</div>'
-      +'</div>'
-      // SKU index strip
-      +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'
-        +skuKeys.map(function(sku){
-          return '<div style="padding:4px 10px;background:#1a1a2e;border:1px solid #333;font-size:9px;color:#ccc;letter-spacing:1px;">'+sku+' ('+groups[sku].length+')</div>';
-        }).join('')
-      +'</div>'
-      +'<div id="sks-area">'+sectionsHtml+'</div>'
-    +'</div>';
-
-  var style=document.createElement('style');
-  style.id='skusort-style';
-  style.textContent=
-    '.sku-section{background:#fff;margin-bottom:24px;border-radius:6px;overflow:hidden;page-break-inside:avoid;}'
-    +'.sku-group-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1a1a2e;border-bottom:3px solid #00e5ff;}'
-    +'.sku-group-name{font-family:Arial,sans-serif;font-weight:900;font-size:18px;color:#00e5ff;letter-spacing:3px;}'
-    +'.sku-group-meta{font-family:Arial,sans-serif;font-size:11px;color:#aaa;letter-spacing:1px;}'
-    +'.sku-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;}'
-    +'.sku-table th{background:#f4f4f4;padding:7px 10px;font-size:9px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;color:#555;}'
-    +'.sku-table td{padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top;}'
-    +'.sku-num{color:#999;width:28px;}'
-    +'.sku-shelf{font-weight:700;color:#1a1a2e;white-space:nowrap;}'
-    +'.sku-track{font-family:monospace;font-size:10px;color:#333;}'
-    +'.sku-carrier{font-size:10px;color:#666;white-space:nowrap;}'
-    +'.sku-dest{color:#333;max-width:200px;}'
-    +'.sku-qty{font-weight:700;text-align:center;color:#1a1a2e;}'
-    +'.sku-skucol{font-weight:700;color:#1a1a2e;line-height:1.7;}'
-    +'.sku-cbadge{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;white-space:nowrap;}'
-    +'.sku-group-shelf{font-size:10px;color:#aaa;letter-spacing:1px;margin-top:2px;}'
-    +'.sku-row:nth-child(even) td{background:#fafafa;}'
+  var css='*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{background:#fff;font-family:Arial,sans-serif;}'
+    +'.divider-page{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:#111;page-break-after:always;}'
+    +'.div-inner{text-align:center;}'
+    +'.div-company{font-size:11px;letter-spacing:4px;color:#666;margin-bottom:16px;}'
+    +'.div-sku{font-size:52px;font-weight:900;color:#00e5ff;letter-spacing:6px;margin-bottom:12px;}'
+    +'.div-shelf{font-size:18px;color:#aaa;letter-spacing:2px;margin-bottom:10px;}'
+    +'.div-count{font-size:13px;color:#555;letter-spacing:2px;}'
+    +'.label-page{width:100%;page-break-after:always;background:#fff;display:block;}'
+    +'.label-img{width:100%;height:auto;display:block;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
     +'@media print{'
-      +'body>*{display:none!important;}'
-      +'#skusort-overlay{display:block!important;position:static!important;background:#fff!important;padding:8px!important;overflow:visible!important;}'
-      +'#sks-print,#sks-close,#skusort-overlay>div>div:first-child,#skusort-overlay>div>div:nth-child(2){display:none!important;}'
-      +'.sku-section{margin-bottom:12px;page-break-after:always;border-radius:0;box-shadow:none;}'
-      +'.sku-group-header{background:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-      +'.sku-group-name{color:#fff!important;}'
-      +'.sku-table th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-      +'.sku-row:nth-child(even) td{background:#f5f5f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'@page{margin:0;size:auto;}'
+      +'body{margin:0;}'
+      +'.divider-page{background:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.div-sku{color:#00e5ff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'}';
-  document.head.appendChild(style);
-  document.body.appendChild(ov);
 
-  document.getElementById('sks-close').addEventListener('click',function(){
-    ov.remove(); var s=document.getElementById('skusort-style'); if(s) s.remove();
-  });
-  document.getElementById('sks-print').addEventListener('click',function(){
-    var area=document.getElementById('sks-area');
-    if(!area||!area.innerHTML.trim()){alert('Nothing to print.');return;}
-    var win=window.open('','_blank','width=1000,height=800');
-    if(!win){alert('Allow pop-ups for this page then try again.');return;}
-    var css='body{margin:10mm;font-family:Arial,sans-serif;background:#fff;color:#000;}.sku-section{margin-bottom:8mm;page-break-after:always;border:1px solid #ccc;overflow:hidden;}.sku-section:last-child{page-break-after:avoid;}.sku-group-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-group-name{font-weight:900;font-size:18px;color:#00e5ff!important;letter-spacing:3px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-group-shelf{font-size:10px;color:#aaa;margin-top:2px;}.sku-group-meta{font-size:11px;color:#ccc;}.sku-table{width:100%;border-collapse:collapse;font-size:11px;}.sku-table th{background:#eee!important;padding:6px 10px;font-size:9px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ccc;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-table td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top;}.sku-num{color:#999;width:24px;}.sku-shelf{font-weight:700;white-space:nowrap;}.sku-skucol{font-weight:700;line-height:1.7;}.sku-track{font-family:monospace;font-size:10px;color:#333;}.sku-carrier{font-size:10px;color:#555;white-space:nowrap;}.sku-cbadge{font-size:9px;padding:2px 6px;border:1px solid #999;border-radius:3px;font-weight:600;}.sku-dest{color:#333;max-width:180px;}.sku-qty{font-weight:700;text-align:center;}.sku-row:nth-child(even) td{background:#f8f8f8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>SKU Sort</title><style>'+css+'</style></head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt></body></html>');
-    win.document.close();
-  });
+  var win=window.open('','_blank');
+  if(!win){
+    pm('⚠ Pop-up blocked! Allow pop-ups for this site in your browser bar, then try again.');
+    return;
+  }
+
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels by SKU — ISCM</title>'
+    +'<style>'+css+'</style>'
+    +'</head><body id="pb">'
+    +'<div style="padding:40px;font-family:Arial;font-size:14px;color:#333;">Loading labels…</div>'
+    +'</body></html>');
+  win.document.close();
+
+  // Use setTimeout to let the window fully open before DOM injection
+  setTimeout(function(){
+    var body=win.document.getElementById('pb');
+    if(!body){
+      pm('✗ Could not access print window DOM. Try allowing pop-ups and retry.');
+      return;
+    }
+    // Clear loading message
+    body.innerHTML='';
+
+    skuKeys.forEach(function(sku){
+      var grp=groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
+      var totalQty=grp.reduce(function(s,o){return s+(o.skus&&o.skus[0]?o.skus[0].qty:1);},0);
+
+      // Divider page
+      var div=win.document.createElement('div');
+      div.className='divider-page';
+      div.innerHTML='<div class="div-inner">'
+        +'<div class="div-company">DOUBLE SIDED ISCM LLC</div>'
+        +'<div class="div-sku">'+sku+'</div>'
+        +'<div class="div-shelf">'+(grp[0]&&grp[0].shelf?'Shelf: '+grp[0].shelf:'')+'</div>'
+        +'<div class="div-count">'+grp.length+' label'+(grp.length!==1?'s':'')+' &middot; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</div>'
+        +'</div>';
+      body.appendChild(div);
+
+      // Label pages
+      grp.forEach(function(o){
+        var pg=win.document.createElement('div');
+        pg.className='label-page';
+        var img=win.document.createElement('img');
+        img.className='label-img';
+        img.src=o.pageImg;
+        pg.appendChild(img);
+        body.appendChild(pg);
+      });
+    });
+
+    pm('✓ '+withImg.length+' labels loaded in print window — waiting for images…');
+
+    // Wait for all images then print
+    var imgs=Array.from(body.querySelectorAll('img'));
+    var done=0;
+    function tryPrint(){
+      done++;
+      if(done>=imgs.length){
+        pm('✓ Ready — print dialog opening…');
+        setTimeout(function(){ win.focus(); win.print(); },300);
+      }
+    }
+    if(!imgs.length){ win.focus(); win.print(); }
+    else{ imgs.forEach(function(img){ if(img.complete){tryPrint();}else{img.onload=tryPrint;img.onerror=tryPrint;} }); }
+  }, 600);
 }
+
 
 function printPickLists(){
   if(!packers.length){alert('No packers added.');return;}
