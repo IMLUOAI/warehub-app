@@ -1051,12 +1051,22 @@ function autoAssign(){
 }
 
 function printSkuSort(){
-  if(!orders.length){alert('Import a PDF batch first.');return;}
-
+  // Diagnose why it might think orders are empty
   var withImg=orders.filter(function(o){return o.pageImg;});
-  if(!withImg.length){
-    alert('No label images - re-import the PDF first.');
+  var noImg=orders.filter(function(o){return !o.pageImg;});
+
+  if(!orders.length){
+    pm('Nothing to print — import a PDF batch first.');
     return;
+  }
+  if(!withImg.length){
+    // Orders exist but no images — PDF was imported before image-capture was added
+    pm('Re-importing to capture label images… ('+orders.length+' orders found but no images)');
+    alert('Labels found but no images captured.\nThis happens if the PDF was imported before the last update.\nPlease re-import the PDF to capture images.');
+    return;
+  }
+  if(noImg.length){
+    pm(noImg.length+' orders missing images — they will be skipped.');
   }
 
   pm('Building sorted labels... '+withImg.length+' labels');
@@ -1071,7 +1081,7 @@ function printSkuSort(){
   var skuKeys=Object.keys(groups).sort();
   pm(''+skuKeys.length+' SKU groups — opening print window...');
 
-  var css='*{margin:0;padding:0;box-sizing:border-box;}'+'html,body{margin:0;padding:0;background:#fff;}'+'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'+'.group-strip{background:#fff;color:#000;font-family:Arial,sans-serif;font-weight:900;font-size:12px;letter-spacing:2px;padding:4px 10px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;}'+'.group-strip-meta{font-size:9px;color:#444;letter-spacing:1px;font-weight:400;}'+'@media print{'+'@page{margin:0;padding:0;size:auto;}'+'html,body{margin:0;padding:0;}'+'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;}'+'.group-strip{background:#fff!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+'}';
+  var css='*{margin:0;padding:0;box-sizing:border-box;}'+'html,body{margin:0;padding:0;background:#fff;}'+'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'+'.group-strip{width:100%;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;page-break-after:always;border-bottom:none;box-sizing:border-box;padding:20mm;}'+'.group-strip-company{font-family:Arial,sans-serif;font-size:14px;letter-spacing:4px;color:#999;margin-bottom:20px;}'+'.group-strip-sku{font-family:Arial,sans-serif;font-size:48px;font-weight:900;color:#000;letter-spacing:6px;margin-bottom:16px;border-bottom:3px solid #000;padding-bottom:14px;}'+'.group-strip-shelf{font-family:Arial,sans-serif;font-size:22px;color:#333;letter-spacing:2px;margin-bottom:12px;}'+'.group-strip-meta{font-family:Arial,sans-serif;font-size:16px;color:#666;letter-spacing:2px;}'+'@media print{'+'@page{margin:0;padding:0;size:auto;}'+'html,body{margin:0;padding:0;}'+'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;}'+'.group-strip{background:#fff!important;page-break-after:always;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+'}';
 
 
   var win=window.open('','_blank');
@@ -1095,13 +1105,15 @@ function printSkuSort(){
         var pg=win.document.createElement('div');
         pg.className='label-page';
 
-        // Only first label in group gets the SKU header strip
+        // First label in group: insert standalone summary page BEFORE the label
         if(idx===0){
           var strip=win.document.createElement('div');
           strip.className='group-strip';
-          strip.innerHTML='<span>'+sku+(o.shelf?' &nbsp;·&nbsp; Shelf: '+o.shelf:'')+'</span>'
-            +'<span class="group-strip-meta">'+grp.length+' label'+(grp.length!==1?'s':'')+' &middot; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</span>';
-          pg.appendChild(strip);
+          strip.innerHTML='<div class="group-strip-company">DOUBLE SIDED ISCM LLC</div>'
+            +'<div class="group-strip-sku">'+sku+'</div>'
+            +(o.shelf?'<div class="group-strip-shelf">Shelf: '+o.shelf+'</div>':'')
+            +'<div class="group-strip-meta">'+grp.length+' label'+(grp.length!==1?'s':'')+' &nbsp;&middot;&nbsp; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</div>';
+          body.appendChild(strip);
         }
 
         var img=win.document.createElement('img');
