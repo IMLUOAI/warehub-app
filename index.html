@@ -183,8 +183,9 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
         <div id="pmsg"></div>
       </div>
       <input id="fi" type="file" accept="application/pdf" style="display:none"/>
-      <div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center;flex-wrap:wrap;">
         <button class="btn btn-r" id="clear-btn" style="font-size:9px;">✕ CLEAR ALL ORDERS</button>
+        <button class="btn" id="print-sku-sort-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT BY SKU GROUP</button>
         <button class="btn" id="copy-debug-btn" style="font-size:9px;border-color:var(--am);color:var(--am);">📋 COPY DEBUG LOG</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
@@ -247,7 +248,10 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div class="lbl" style="margin:0;">ASSIGN ORDERS TO PACKERS</div>
-          <button class="btn btn-g" id="auto-assign-btn" style="font-size:8px;">⚡ AUTO-ASSIGN</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-g" id="auto-assign-btn" style="font-size:8px;">⚡ SKU AUTO-ASSIGN</button>
+            <button class="btn" id="print-picklist-btn" style="font-size:8px;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT PICK LISTS</button>
+          </div>
         </div>
         <div id="assign-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:5px;"></div>
       </div>
@@ -995,8 +999,290 @@ function renderAssignPanel(){
 function autoAssign(){
   if(!packers.length){alert('Add packers first.');return;}
   var pending=orders.filter(function(o){return o.status==='pending';});
-  pending.forEach(function(o,i){ o.assignedTo=packers[i%packers.length].id; });
+  if(!pending.length){alert('No pending orders to assign.');return;}
+
+  // Step 1: Group orders by primary SKU (first SKU on label)
+  var groups={};
+  pending.forEach(function(o){
+    var primarySku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
+    if(!groups[primarySku]) groups[primarySku]=[];
+    groups[primarySku].push(o);
+  });
+
+  // Step 2: Sort groups by order count descending (assign biggest groups first)
+  var groupList=Object.keys(groups).map(function(sku){
+    return{sku:sku,orders:groups[sku]};
+  }).sort(function(a,b){return b.orders.length-a.orders.length;});
+
+  // Step 3: Load-balance — assign each group to packer with fewest orders so far
+  var loads={};
+  packers.forEach(function(p){ loads[p.id]=0; });
+
+  groupList.forEach(function(g){
+    // Find packer with lowest current load
+    var minPacker=packers.reduce(function(best,p){
+      return loads[p.id]<loads[best.id]?p:best;
+    },packers[0]);
+    // Assign all orders in this group to that packer
+    g.orders.forEach(function(o){ o.assignedTo=minPacker.id; });
+    loads[minPacker.id]+=g.orders.length;
+  });
+
   renderAssignPanel(); renderQueue();
+  // Show summary
+  var summary=packers.map(function(p){
+    return p.name+': '+loads[p.id]+' orders';
+  }).join(' · ');
+  pm('✓ SKU-grouped assignment: '+summary);
+}
+
+function printSkuSort(){
+  if(!orders.length){alert('Import a PDF batch first.');return;}
+
+  // Group orders by primary SKU
+  var groups={};
+  orders.forEach(function(o){
+    var sku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
+    if(!groups[sku]) groups[sku]=[];
+    groups[sku].push(o);
+  });
+
+  // Sort groups by SKU name, then within each group sort by shelf
+  var skuKeys=Object.keys(groups).sort();
+
+  var totalOrders=orders.length;
+  var totalSkuGroups=skuKeys.length;
+
+  // Build HTML — one section per SKU group
+  var sectionsHtml=skuKeys.map(function(sku){
+    var grp=groups[sku].sort(function(a,b){
+      return (a.shelf||'').localeCompare(b.shelf||'');
+    });
+    var totalQty=grp.reduce(function(s,o){
+      return s+(o.skus&&o.skus[0]?o.skus[0].qty:1);
+    },0);
+
+    var rows=grp.map(function(o,idx){
+      var allSkus=o.skus.map(function(s){return s.sku+' ×'+s.qty;}).join('<br>');
+      var carrierCol=o.carrier||'—';
+      var trackShort=o.tracking.length>20?o.tracking.slice(-16):o.tracking;
+      return '<tr class="sku-row">'
+        +'<td class="sku-num">'+(idx+1)+'</td>'
+        +'<td class="sku-shelf">'+( o.shelf||'—')+'</td>'
+        +'<td class="sku-skucol">'+allSkus+'</td>'
+        +'<td class="sku-track">'+trackShort+'</td>'
+        +'<td class="sku-carrier"><span class="sku-cbadge" style="background:'+cc(carrierCol)+'22;color:'+cc(carrierCol)+';border:1px solid '+cc(carrierCol)+'55;">'+carrierCol+'</span></td>'
+        +'<td class="sku-dest">'+o.dest+'</td>'
+        +'<td class="sku-qty">'+(o.skus&&o.skus[0]?o.skus[0].qty:1)+'</td>'
+        +'</tr>';
+    }).join('');
+
+    return '<div class="sku-section">'
+      +'<div class="sku-group-header">'
+        +'<div>'
+          +'<div class="sku-group-name">'+sku+'</div>'
+          +'<div class="sku-group-shelf">Shelf: '+(grp[0]&&grp[0].shelf?grp[0].shelf:'—')+'</div>'
+        +'</div>'
+        +'<div class="sku-group-meta">'+grp.length+' order'+(grp.length!==1?'s':'')+' &nbsp;·&nbsp; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</div>'
+      +'</div>'
+      +'<table class="sku-table">'
+        +'<thead><tr>'
+          +'<th>#</th><th>SHELF</th><th>SKU / QTY</th><th>TRACKING</th><th>CARRIER</th><th>SHIP TO</th><th>QTY</th>'
+        +'</tr></thead>'
+        +'<tbody>'+rows+'</tbody>'
+      +'</table>'
+      +'</div>';
+  }).join('');
+
+  var existing=document.getElementById('skusort-overlay');
+  if(existing) existing.remove();
+  var styleEl=document.getElementById('skusort-style');
+  if(styleEl) styleEl.remove();
+
+  var ov=document.createElement('div');
+  ov.id='skusort-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:24px 16px;';
+
+  ov.innerHTML=
+    '<div style="width:100%;max-width:960px;">'
+      // Header bar
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;">'
+        +'<div>'
+          +'<div style="font-size:13px;font-weight:700;letter-spacing:3px;color:#fff;">BATCH SORTED BY SKU</div>'
+          +'<div style="font-size:10px;color:#888;margin-top:4px;letter-spacing:1px;">DOUBLE SIDED ISCM LLC &nbsp;·&nbsp; '+shiftDate+'</div>'
+          +'<div style="font-size:10px;color:#aaa;margin-top:3px;">'+totalOrders+' orders &nbsp;·&nbsp; '+totalSkuGroups+' SKU groups</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;flex-shrink:0;">'
+          +'<button id="sks-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'
+          +'<button id="sks-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'
+        +'</div>'
+      +'</div>'
+      // SKU index strip
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'
+        +skuKeys.map(function(sku){
+          return '<div style="padding:4px 10px;background:#1a1a2e;border:1px solid #333;font-size:9px;color:#ccc;letter-spacing:1px;">'+sku+' ('+groups[sku].length+')</div>';
+        }).join('')
+      +'</div>'
+      +'<div id="sks-area">'+sectionsHtml+'</div>'
+    +'</div>';
+
+  var style=document.createElement('style');
+  style.id='skusort-style';
+  style.textContent=
+    '.sku-section{background:#fff;margin-bottom:24px;border-radius:6px;overflow:hidden;page-break-inside:avoid;}'
+    +'.sku-group-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1a1a2e;border-bottom:3px solid #00e5ff;}'
+    +'.sku-group-name{font-family:Arial,sans-serif;font-weight:900;font-size:18px;color:#00e5ff;letter-spacing:3px;}'
+    +'.sku-group-meta{font-family:Arial,sans-serif;font-size:11px;color:#aaa;letter-spacing:1px;}'
+    +'.sku-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;}'
+    +'.sku-table th{background:#f4f4f4;padding:7px 10px;font-size:9px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;color:#555;}'
+    +'.sku-table td{padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top;}'
+    +'.sku-num{color:#999;width:28px;}'
+    +'.sku-shelf{font-weight:700;color:#1a1a2e;white-space:nowrap;}'
+    +'.sku-track{font-family:monospace;font-size:10px;color:#333;}'
+    +'.sku-carrier{font-size:10px;color:#666;white-space:nowrap;}'
+    +'.sku-dest{color:#333;max-width:200px;}'
+    +'.sku-qty{font-weight:700;text-align:center;color:#1a1a2e;}'
+    +'.sku-skucol{font-weight:700;color:#1a1a2e;line-height:1.7;}'
+    +'.sku-cbadge{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;white-space:nowrap;}'
+    +'.sku-group-shelf{font-size:10px;color:#aaa;letter-spacing:1px;margin-top:2px;}'
+    +'.sku-row:nth-child(even) td{background:#fafafa;}'
+    +'@media print{'
+      +'body>*{display:none!important;}'
+      +'#skusort-overlay{display:block!important;position:static!important;background:#fff!important;padding:8px!important;overflow:visible!important;}'
+      +'#sks-print,#sks-close,#skusort-overlay>div>div:first-child,#skusort-overlay>div>div:nth-child(2){display:none!important;}'
+      +'.sku-section{margin-bottom:12px;page-break-after:always;border-radius:0;box-shadow:none;}'
+      +'.sku-group-header{background:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.sku-group-name{color:#fff!important;}'
+      +'.sku-table th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.sku-row:nth-child(even) td{background:#f5f5f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+    +'}';
+  document.head.appendChild(style);
+  document.body.appendChild(ov);
+
+  document.getElementById('sks-close').addEventListener('click',function(){
+    ov.remove(); var s=document.getElementById('skusort-style'); if(s) s.remove();
+  });
+  document.getElementById('sks-print').addEventListener('click',function(){
+    var area=document.getElementById('sks-area');
+    if(!area){alert('Nothing to print.');return;}
+    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
+    var win=window.open('','_blank','width=900,height=700');
+    if(!win){alert('Allow pop-ups for this page then try again.');return;}
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>SKU Sort — Double Sided ISCM</title>'
+      +'<style>'+styles+'</style>'
+      +'<style>body{margin:10mm;font-family:Arial,sans-serif;background:#fff;} .sku-section{page-break-after:always;} .sku-section:last-child{page-break-after:avoid;}</style>'
+      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
+      +'</body></html>');
+    win.document.close();
+  });
+}
+
+function printPickLists(){
+  if(!packers.length){alert('No packers added.');return;}
+  var assigned=orders.filter(function(o){return o.assignedTo&&o.status==='pending';});
+  if(!assigned.length){alert('No assigned orders. Run Auto-Assign first.');return;}
+
+  var html='';
+  packers.forEach(function(p){
+    var myOrders=assigned.filter(function(o){return o.assignedTo===p.id;});
+    if(!myOrders.length) return;
+    var col=packerColor(p);
+
+    // Build SKU summary: {sku: {shelf, totalQty, orderCount}}
+    var skuMap={};
+    myOrders.forEach(function(o){
+      o.skus.forEach(function(s){
+        var key=s.sku;
+        if(!skuMap[key]) skuMap[key]={sku:s.sku,shelf:o.shelf||'',totalQty:0,orderCount:0};
+        skuMap[key].totalQty+=s.qty;
+        skuMap[key].orderCount++;
+      });
+    });
+
+    // Sort by shelf location
+    var skuRows=Object.values(skuMap).sort(function(a,b){
+      return (a.shelf||'').localeCompare(b.shelf||'');
+    });
+
+    var totalItems=skuRows.reduce(function(s,r){return s+r.totalQty;},0);
+
+    html+='<div class="pl-card">'
+      +'<div class="pl-header" style="background:'+col+';">'
+        +'<div class="pl-name">'+p.name+'</div>'
+        +'<div class="pl-meta">'+myOrders.length+' orders · '+totalItems+' items</div>'
+      +'</div>'
+      +'<table class="pl-table">'
+        +'<thead><tr><th>SHELF</th><th>SKU</th><th>QTY TOTAL</th><th>ORDERS</th></tr></thead>'
+        +'<tbody>'
+        +skuRows.map(function(r){
+          return '<tr><td>'+r.shelf+'</td><td style="font-weight:700;">'+r.sku+'</td><td>'+r.totalQty+'</td><td>'+r.orderCount+'</td></tr>';
+        }).join('')
+        +'</tbody>'
+      +'</table>'
+      +'<div class="pl-footer">DOUBLE SIDED ISCM LLC &nbsp;·&nbsp; '+shiftDate+'</div>'
+      +'</div>';
+  });
+
+  var existing=document.getElementById('picklist-overlay');
+  if(existing) existing.remove();
+
+  var ov=document.createElement('div');
+  ov.id='picklist-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
+
+  ov.innerHTML=
+    '<div style="width:100%;max-width:900px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+        +'<div>'
+          +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">PICK LISTS — DOUBLE SIDED ISCM LLC</div>'
+          +'<div style="font-size:9px;color:#666;margin-top:2px;">Sorted by shelf · One sheet per packer</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;">'
+          +'<button id="pl-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'
+          +'<button id="pl-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'
+        +'</div>'
+      +'</div>'
+      +'<div id="pl-area">'+html+'</div>'
+    +'</div>';
+
+  var style=document.createElement('style');
+  style.id='pl-style';
+  style.textContent=
+    '.pl-card{background:#fff;border-radius:8px;margin-bottom:20px;overflow:hidden;page-break-inside:avoid;}'
+    +'.pl-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}'
+    +'.pl-name{font-family:Arial,sans-serif;font-weight:900;font-size:22px;color:#fff;letter-spacing:2px;}'
+    +'.pl-meta{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.85);letter-spacing:1px;}'
+    +'.pl-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;}'
+    +'.pl-table th{background:#f0f0f0;padding:8px 14px;font-size:10px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;}'
+    +'.pl-table td{padding:9px 14px;font-size:12px;border-bottom:1px solid #eee;}'
+    +'.pl-table tr:nth-child(even) td{background:#fafafa;}'
+    +'.pl-footer{padding:8px 14px;font-size:9px;color:#999;letter-spacing:1px;border-top:1px solid #eee;text-align:right;}'
+    +'@media print{'
+      +'body>*{display:none!important;}'
+      +'#picklist-overlay{display:block!important;position:static!important;background:#fff!important;padding:0!important;overflow:visible!important;}'
+      +'#pl-print,#pl-close,#picklist-overlay>div>div:first-child{display:none!important;}'
+      +'.pl-card{margin-bottom:0;page-break-after:always;border-radius:0;}'
+      +'.pl-table th,.pl-table td{font-size:11pt;padding:6pt 10pt;}'
+    +'}';
+  document.head.appendChild(style);
+  document.body.appendChild(ov);
+
+  document.getElementById('pl-close').addEventListener('click',function(){
+    ov.remove(); var s=document.getElementById('pl-style'); if(s) s.remove();
+  });
+  document.getElementById('pl-print').addEventListener('click',function(){
+    var area=document.getElementById('pl-area');
+    if(!area){alert('Nothing to print.');return;}
+    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
+    var win=window.open('','_blank','width=900,height=700');
+    if(!win){alert('Please allow pop-ups for this page, then try again.');return;}
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pick Lists — Double Sided ISCM</title>'
+      +'<style>'+styles+'</style>'
+      +'<style>body{margin:12mm;font-family:Arial,sans-serif;background:#fff;}</style>'
+      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
+      +'</body></html>');
+    win.document.close();
+  });
 }
 
 // ══════════════════════════════════════════
@@ -1669,7 +1955,19 @@ function printPackerCards(){
   document.getElementById('ov-close').addEventListener('click',function(){
     ov.remove(); var s=document.getElementById('card-print-style'); if(s) s.remove();
   });
-  document.getElementById('ov-print').addEventListener('click',function(){ window.print(); });
+  document.getElementById('ov-print').addEventListener('click',function(){
+    var area=document.getElementById('card-print-area');
+    if(!area){alert('Nothing to print.');return;}
+    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
+    var win=window.open('','_blank','width=900,height=700');
+    if(!win){alert('Please allow pop-ups for this page, then try again.');return;}
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ID Cards — Double Sided ISCM</title>'
+      +'<style>'+styles+'</style>'
+      +'<style>body{margin:12mm;font-family:Arial,sans-serif;background:#fff;}</style>'
+      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
+      +'</body></html>');
+    win.document.close();
+  });
 }
 
 // ══════════════════════════════════════════
@@ -1726,6 +2024,8 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('add-mgr-btn').addEventListener('click', addManager);
   document.getElementById('add-packer-btn').addEventListener('click', addPacker);
   document.getElementById('auto-assign-btn').addEventListener('click', autoAssign);
+  document.getElementById('print-picklist-btn').addEventListener('click', printPickLists);
+  document.getElementById('print-sku-sort-btn').addEventListener('click', printSkuSort);
   document.getElementById('export-csv-btn').addEventListener('click', exportPayrollCSV);
   // Enter key on all staff fields
   ['new-mgr-name','new-mgr-id'].forEach(function(id){
