@@ -1164,15 +1164,11 @@ function printSkuSort(){
   });
   document.getElementById('sks-print').addEventListener('click',function(){
     var area=document.getElementById('sks-area');
-    if(!area){alert('Nothing to print.');return;}
-    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
-    var win=window.open('','_blank','width=900,height=700');
+    if(!area||!area.innerHTML.trim()){alert('Nothing to print.');return;}
+    var win=window.open('','_blank','width=1000,height=800');
     if(!win){alert('Allow pop-ups for this page then try again.');return;}
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>SKU Sort — Double Sided ISCM</title>'
-      +'<style>'+styles+'</style>'
-      +'<style>body{margin:10mm;font-family:Arial,sans-serif;background:#fff;} .sku-section{page-break-after:always;} .sku-section:last-child{page-break-after:avoid;}</style>'
-      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
-      +'</body></html>');
+    var css='body{margin:10mm;font-family:Arial,sans-serif;background:#fff;color:#000;}.sku-section{margin-bottom:8mm;page-break-after:always;border:1px solid #ccc;overflow:hidden;}.sku-section:last-child{page-break-after:avoid;}.sku-group-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-group-name{font-weight:900;font-size:18px;color:#00e5ff!important;letter-spacing:3px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-group-shelf{font-size:10px;color:#aaa;margin-top:2px;}.sku-group-meta{font-size:11px;color:#ccc;}.sku-table{width:100%;border-collapse:collapse;font-size:11px;}.sku-table th{background:#eee!important;padding:6px 10px;font-size:9px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ccc;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.sku-table td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top;}.sku-num{color:#999;width:24px;}.sku-shelf{font-weight:700;white-space:nowrap;}.sku-skucol{font-weight:700;line-height:1.7;}.sku-track{font-family:monospace;font-size:10px;color:#333;}.sku-carrier{font-size:10px;color:#555;white-space:nowrap;}.sku-cbadge{font-size:9px;padding:2px 6px;border:1px solid #999;border-radius:3px;font-weight:600;}.sku-dest{color:#333;max-width:180px;}.sku-qty{font-weight:700;text-align:center;}.sku-row:nth-child(even) td{background:#f8f8f8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>SKU Sort</title><style>'+css+'</style></head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt></body></html>');
     win.document.close();
   });
 }
