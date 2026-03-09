@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>WAREHUB — Double Sided ISCM LLC</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;700;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --bg:#05080f;--sur:#0a0f1e;--bdr:#162035;
+  --cy:#00e5ff;--gn:#00ff88;--am:#ffb300;
+  --rd:#ff3d5a;--pu:#c77dff;--dim:#2a3f5f;
+  --tx:#e8f0fe;--td:#4a6080;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:13px;}
+
+/* ── HEADER ── */
+#hdr{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:48px;border-bottom:1px solid var(--bdr);background:var(--sur);}
+#logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
+#dot{width:7px;height:7px;border-radius:50%;background:var(--bdr);margin-right:8px;transition:all .4s;}
+#dot.live{background:var(--gn);box-shadow:0 0 8px var(--gn);}
+#badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
+.tabs{display:flex;gap:1px;}
+.tab{padding:5px 13px;font-size:9px;letter-spacing:2px;border:1px solid var(--bdr);cursor:pointer;font-family:inherit;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;}
+.tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
+
+/* ── LAYOUT ── */
+#app{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow:hidden;}
+.view.on{display:flex;}
+
+/* ── SHARED ── */
+.card{background:var(--sur);border:1px solid var(--bdr);padding:15px;}
+.lbl{font-size:9px;letter-spacing:3px;color:var(--td);margin-bottom:6px;}
+.bar{background:var(--bdr);height:4px;}.barf{height:100%;transition:width .6s;}
+.bdg{display:inline-block;font-size:9px;padding:2px 7px;border:1px solid;border-radius:1px;}
+.btn{padding:6px 14px;font-size:9px;letter-spacing:2px;border:1px solid;cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .15s;}
+.btn-c{border-color:var(--cy);background:#00e5ff10;color:var(--cy);}.btn-c:hover{background:#00e5ff20;}
+.btn-r{border-color:var(--rd);background:#ff3d5a10;color:var(--rd);}.btn-r:hover{background:#ff3d5a20;}
+.btn-g{border-color:var(--gn);background:#00ff8810;color:var(--gn);}.btn-g:hover{background:#00ff8820;}
+.inp{background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 11px;font-size:12px;font-family:inherit;outline:none;}
+.inp:focus{border-color:var(--cy);}
+
+/* ── IMPORT ── */
+#dz{border:2px dashed var(--bdr);padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px;}
+#dz.over,#dz:hover{border-color:var(--cy);background:#00e5ff06;}
+#pmsg{font-size:11px;color:var(--am);min-height:16px;margin-top:8px;}
+#debug-box{display:none;margin-top:10px;}
+
+/* ── MANAGER: PACKER SETUP ── */
+#mgr-wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;flex:1;min-height:0;overflow:hidden;}
+#packer-panel{display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
+.packer-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--bdr);}
+.packer-row.online{border-color:var(--gn);}
+.packer-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow',sans-serif;font-weight:900;font-size:13px;flex-shrink:0;}
+.packer-info{flex:1;min-width:0;}
+.packer-name{font-size:12px;font-weight:600;letter-spacing:1px;}
+.packer-id{font-size:9px;color:var(--td);margin-top:1px;}
+.packer-stats-mini{font-size:9px;color:var(--td);margin-top:2px;}
+#assign-panel{display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
+.order-assign-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--bdr);}
+.oar-track{font-size:11px;color:var(--cy);font-weight:600;flex:1;}
+.oar-dest{font-size:10px;color:var(--td);min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oar-skus{font-size:9px;color:var(--td);}
+.packer-select{background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:4px 7px;font-size:10px;font-family:inherit;outline:none;min-width:100px;}
+.packer-select:focus{border-color:var(--cy);}
+
+/* ── PACK STATION ── */
+/* Packer login overlay */
+#packer-login{position:absolute;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+#packer-login.hide{display:none;}
+#login-scan-in{width:320px;background:var(--sur);border:2px solid var(--cy);color:var(--tx);padding:12px 16px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:2px;}
+#login-scan-in:focus{border-color:var(--gn);}
+#login-msg{font-size:11px;color:var(--td);min-height:16px;}
+#current-packer-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--sur);border:1px solid var(--bdr);}
+#cp-avatar{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow',sans-serif;font-weight:900;font-size:11px;flex-shrink:0;}
+#cp-name{font-size:11px;font-weight:600;letter-spacing:1px;flex:1;}
+#cp-stats{font-size:9px;color:var(--td);}
+#cp-switch{font-size:9px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--dim);color:var(--td);cursor:pointer;background:transparent;font-family:inherit;}
+#cp-switch:hover{border-color:var(--cy);color:var(--cy);}
+
+#pack-wrap{display:grid;grid-template-columns:1fr 300px;gap:10px;flex:1;min-height:0;overflow:hidden;}
+#left-col{display:flex;flex-direction:column;gap:8px;overflow:hidden;}
+#active-card{background:var(--sur);border:2px solid var(--cy);padding:18px;position:relative;transition:border-color .12s,background .12s;flex-shrink:0;}
+#active-card.ok{background:#00ff8814;border-color:var(--gn);}
+#active-card.err{background:#ff3d5a14;border-color:var(--rd);}
+#ac-top{font-size:9px;color:var(--td);margin-bottom:5px;}
+#ac-track{font-family:'Barlow',sans-serif;font-size:19px;font-weight:700;color:var(--cy);margin-bottom:3px;}
+#ac-dest{font-size:11px;color:var(--td);margin-bottom:12px;}
+#checklist{display:flex;flex-direction:column;gap:5px;}
+.ski{display:flex;align-items:center;gap:11px;padding:9px 13px;border:1px solid var(--bdr);background:var(--bg);}
+.ski.done{opacity:.3;}
+.ski.bad{border-color:var(--rd);background:#ff3d5a0c;animation:shk .3s;}
+.skbox{width:20px;height:20px;border:2px solid var(--bdr);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:all .18s;}
+.ski.done .skbox{border-color:var(--gn);background:var(--gn);color:#000;}
+.sknm{font-size:13px;font-weight:600;flex:1;letter-spacing:1px;}
+.skqt{font-size:11px;color:var(--td);}
+#done-ov{display:none;position:absolute;inset:0;background:#00ff8820;border:2px solid var(--gn);flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+#done-ov.show{display:flex;}
+#err-bar{display:none;padding:9px 13px;font-size:11px;color:var(--rd);border:1px solid var(--rd);background:#ff3d5a0c;flex-shrink:0;}
+#err-bar.show{display:block;}
+#scan-row{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--sur);border:1px solid var(--bdr);flex-shrink:0;}
+#scan-in{flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 11px;font-size:13px;font-family:inherit;outline:none;letter-spacing:1px;}
+#scan-in:focus{border-color:var(--cy);}
+#scan-fb{font-size:10px;color:var(--td);text-align:right;min-width:180px;}
+
+/* Queue */
+#queue{overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
+.qc{background:var(--sur);border:1px solid var(--bdr);padding:10px 12px;cursor:pointer;flex-shrink:0;}
+.qc:hover{border-color:var(--dim);}
+.qc.act{border-color:var(--cy);background:#00e5ff08;}
+.qc.fin{opacity:.28;pointer-events:none;}
+.qt{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;}
+.qtrk{font-size:10px;color:var(--cy);font-weight:600;}
+.qdst{font-size:10px;color:var(--td);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qpacker{font-size:9px;margin-bottom:3px;}
+.qskus{display:flex;gap:3px;flex-wrap:wrap;}
+.qsk{font-size:9px;padding:2px 5px;border:1px solid var(--bdr);color:var(--td);}
+.qsk.qd{border-color:var(--gn);color:var(--gn);}
+
+/* ── DASHBOARD ── */
+#dash-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;overflow-y:auto;}
+.kgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;grid-column:1/-1;}
+.kpi{background:var(--sur);border:1px solid var(--bdr);padding:12px;}
+.kval{font-family:'Barlow',sans-serif;font-size:28px;font-weight:900;margin-top:3px;}
+.packer-stat-card{background:var(--bg);border:1px solid var(--bdr);padding:12px;display:flex;align-items:center;gap:12px;}
+.psc-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow',sans-serif;font-weight:900;font-size:14px;flex-shrink:0;}
+.psc-info{flex:1;min-width:0;}
+.psc-name{font-size:12px;font-weight:600;letter-spacing:1px;margin-bottom:4px;}
+.psc-row{display:flex;gap:16px;font-size:9px;color:var(--td);flex-wrap:wrap;}
+.psc-row b{color:var(--tx);}
+
+/* ── FLOOR ── */
+#floor{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
+#fnum{font-family:'Barlow',sans-serif;font-size:100px;font-weight:900;line-height:1;transition:color .5s;}
+#fsub{font-size:9px;letter-spacing:6px;color:var(--td);}
+#fbar{width:min(680px,90vw);background:var(--bdr);height:20px;}
+#fbarf{height:100%;background:linear-gradient(90deg,var(--cy),var(--gn));transition:width 1.2s;width:0%;}
+.frow{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;}
+.fc{background:var(--sur);padding:9px 15px;min-width:95px;text-align:center;border:1px solid var(--bdr);}
+.fp-card{background:var(--sur);padding:10px 16px;min-width:130px;text-align:center;border:1px solid;}
+.fp-name{font-size:9px;letter-spacing:2px;margin-bottom:3px;}
+.fp-done{font-family:'Barlow',sans-serif;font-size:28px;font-weight:900;}
+.fp-detail{font-size:8px;color:var(--td);margin-top:2px;}
+
+@keyframes shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div style="display:flex;align-items:center;">
+    <div id="dot"></div>
+    <div style="display:flex;flex-direction:column;line-height:1.1;">
+      <span id="logo">WAREHUB</span>
+      <span style="font-size:8px;letter-spacing:3px;color:var(--td);font-family:'Share Tech Mono',monospace;">DOUBLE SIDED ISCM LLC</span>
+    </div>
+    <span id="badge">NO DATA</span>
+  </div>
+  <div class="tabs">
+    <button class="tab on"  data-view="import">Import</button>
+    <button class="tab"     data-view="manager">Packers</button>
+    <button class="tab"     data-view="pack">Pack Station</button>
+    <button class="tab"     data-view="dash">Dashboard</button>
+    <button class="tab"     data-view="payroll">Payroll</button>
+    <button class="tab"     data-view="floor">Floor Display</button>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ══ IMPORT ══ -->
+  <div id="view-import" class="view on" style="overflow-y:auto;">
+    <div style="max-width:520px;margin:20px auto;width:100%;">
+      <div class="lbl" style="font-size:12px;color:var(--cy);margin-bottom:14px;">IMPORT TODAY'S LABEL BATCH</div>
+      <div id="dz">
+        <div style="font-size:30px;margin-bottom:9px;">📦</div>
+        <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
+        <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX</div>
+        <div id="pmsg"></div>
+      </div>
+      <input id="fi" type="file" accept="application/pdf" style="display:none"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div class="card" style="font-size:10px;color:var(--td);line-height:2.1;">
+          <div class="lbl">WORKFLOW</div>
+          1. Import PDF batch here<br/>
+          2. Go to <b style="color:var(--cy)">Packers</b> tab → add packers + assign orders<br/>
+          3. Each packer scans their ID barcode at Pack Station<br/>
+          4. Then scans SKU barcodes to fulfil orders
+        </div>
+        <div class="card" style="font-size:10px;color:var(--td);line-height:2.1;">
+          <div class="lbl">PACKER TRACKING</div>
+          Orders completed per packer<br/>
+          SKUs scanned per packer<br/>
+          Time per order<br/>
+          Total shift packing time<br/>
+          Live leaderboard on floor display
+        </div>
+      </div>
+      <div style="text-align:center;margin-bottom:12px;">
+        <button class="btn btn-c" id="demo-btn">▶ LOAD DEMO (3 orders + 2 packers)</button>
+      </div>
+      <div id="debug-box" class="card">
+        <div class="lbl">DEBUG LOG</div>
+        <pre id="debug-log" style="font-size:10px;color:var(--am);white-space:pre-wrap;max-height:220px;overflow-y:auto;line-height:1.5;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MANAGER / PACKERS ══ -->
+  <div id="view-manager" class="view" style="gap:10px;overflow:hidden;">
+    <!-- Top toolbar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;flex-wrap:wrap;">
+      <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">STAFF MANAGEMENT</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <!-- Add Manager -->
+        <input class="inp" id="new-mgr-name" placeholder="Manager name…" style="width:130px;"/>
+        <input class="inp" id="new-mgr-id"   placeholder="Manager barcode ID…" style="width:150px;"/>
+        <button class="btn" id="add-mgr-btn" style="border-color:var(--am);background:#ffb30010;color:var(--am);">+ ADD MANAGER</button>
+        <div style="width:1px;height:24px;background:var(--bdr);margin:0 4px;"></div>
+        <!-- Add Packer -->
+        <input class="inp" id="new-packer-name" placeholder="Packer name…" style="width:120px;"/>
+        <input class="inp" id="new-packer-id"   placeholder="Packer barcode ID…" style="width:140px;"/>
+        <button class="btn btn-c" id="add-packer-btn">+ ADD PACKER</button>
+        <div style="width:1px;height:24px;background:var(--bdr);margin:0 4px;"></div>
+        <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);">🪪 PRINT ALL CARDS</button>
+      </div>
+    </div>
+    <!-- Main grid: managers left, packers middle, orders right -->
+    <div style="display:grid;grid-template-columns:220px 260px 1fr;gap:10px;flex:1;min-height:0;overflow:hidden;">
+      <!-- MANAGERS -->
+      <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
+        <div class="lbl" style="color:var(--am);">MANAGERS</div>
+        <div id="manager-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+      <!-- PACKERS -->
+      <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
+        <div class="lbl" style="color:var(--cy);">PACKERS ON SHIFT</div>
+        <div id="packer-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+      <!-- ORDER ASSIGNMENT -->
+      <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="lbl" style="margin:0;">ASSIGN ORDERS TO PACKERS</div>
+          <button class="btn btn-g" id="auto-assign-btn" style="font-size:8px;">⚡ AUTO-ASSIGN</button>
+        </div>
+        <div id="assign-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:5px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PACK STATION ══ -->
+  <div id="view-pack" class="view" style="gap:8px;position:relative;">
+    <!-- Login overlay -->
+    <div id="packer-login">
+      <div style="font-size:10px;letter-spacing:4px;color:var(--td);margin-bottom:8px;">PACK STATION</div>
+      <div style="font-family:'Barlow',sans-serif;font-size:22px;font-weight:700;color:var(--cy);margin-bottom:16px;">SCAN YOUR PACKER BARCODE</div>
+      <input id="login-scan-in" placeholder="Scan packer ID barcode…" autocomplete="off"/>
+      <div id="login-msg">Scan to clock in · Scan again at end of shift to clock out</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;" id="quick-login-btns"></div>
+    </div>
+    <!-- Active packer bar -->
+    <div id="current-packer-bar" style="display:none;flex-shrink:0;">
+      <div id="cp-avatar"></div>
+      <div id="cp-name"></div>
+      <div id="cp-stats"></div>
+      <button id="cp-switch">SWITCH PACKER</button>
+    </div>
+    <!-- Pack layout -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PACK STATION — BT SCAN MODE</div>
+      <span id="pp" style="font-size:10px;color:var(--td);"></span>
+    </div>
+    <div id="pack-wrap">
+      <div id="left-col">
+        <div id="active-card">
+          <div id="ac-top"></div>
+          <div id="ac-track">← SELECT AN ORDER</div>
+          <div id="ac-dest"></div>
+          <div id="checklist"></div>
+          <div id="done-ov">
+            <div style="font-size:48px;">✓</div>
+            <div style="font-size:10px;letter-spacing:3px;color:var(--gn);">ORDER COMPLETE</div>
+          </div>
+        </div>
+        <div id="err-bar"></div>
+        <div id="scan-row">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;">BT GUN →</div>
+          <input id="scan-in" placeholder="Scan SKU barcode or type + Enter…"/>
+          <div id="scan-fb">ready…</div>
+        </div>
+      </div>
+      <div id="queue"></div>
+    </div>
+  </div>
+
+  <!-- ══ DASHBOARD ══ -->
+  <div id="view-dash" class="view" style="overflow-y:auto;">
+    <div id="dash-wrap">
+      <div class="kgrid">
+        <div class="kpi"><div class="lbl">TOTAL</div><div class="kval" id="d-tot" style="color:var(--cy)">0</div></div>
+        <div class="kpi"><div class="lbl">DONE</div><div class="kval" id="d-don" style="color:var(--gn)">0</div></div>
+        <div class="kpi"><div class="lbl">LEFT</div><div class="kval" id="d-rem" style="color:var(--am)">0</div></div>
+        <div class="kpi"><div class="lbl">PACKERS</div><div class="kval" id="d-pac" style="color:var(--pu)">0</div></div>
+      </div>
+      <div class="card" style="grid-column:1/-1;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span class="lbl" style="margin:0;">DAILY PROGRESS</span>
+          <span id="d-ptx" style="font-size:10px;color:var(--td);"></span>
+        </div>
+        <div class="bar" style="height:14px;"><div class="barf" id="d-bar" style="background:linear-gradient(90deg,var(--cy),var(--gn));width:0%;"></div></div>
+      </div>
+      <!-- Packer leaderboard -->
+      <div class="card" style="grid-column:1/-1;">
+        <div class="lbl">PACKER LEADERBOARD</div>
+        <div id="d-packers" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+      </div>
+      <div class="card"><div class="lbl">CARRIER BREAKDOWN</div><div id="d-car"></div></div>
+      <div class="card"><div class="lbl">SKU TOTALS</div><div id="d-sku" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div></div>
+      <div class="card" style="grid-column:1/-1;">
+        <div class="lbl">ORDER LIST</div>
+        <div id="d-ord" style="overflow:auto;max-height:260px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAYROLL ══ -->
+  <div id="view-payroll" class="view" style="overflow-y:auto;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div>
+        <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PAYROLL — TIME SHEET</div>
+        <div style="font-size:9px;color:var(--td);margin-top:3px;">Double Sided ISCM LLC &nbsp;·&nbsp; <span id="pr-date"></span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="pr-status" style="font-size:9px;color:var(--td);"></span>
+        <button class="btn btn-g" id="export-csv-btn">⬇ EXPORT CSV</button>
+      </div>
+    </div>
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex-shrink:0;">
+      <div class="kpi"><div class="lbl">PACKERS TODAY</div><div class="kval" id="pr-packers" style="color:var(--cy);">0</div></div>
+      <div class="kpi"><div class="lbl">TOTAL MAN-HRS</div><div class="kval" id="pr-hrs" style="color:var(--gn);">0.00</div></div>
+      <div class="kpi"><div class="lbl">ORDERS PACKED</div><div class="kval" id="pr-orders" style="color:var(--am);">0</div></div>
+      <div class="kpi"><div class="lbl">ACTIVE NOW</div><div class="kval" id="pr-active" style="color:var(--pu);">0</div></div>
+    </div>
+    <!-- Per-packer time sheet -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="lbl">TIME SHEET</div>
+      <div id="pr-sheet" style="overflow-x:auto;"></div>
+    </div>
+    <!-- Session log -->
+    <div class="card" style="flex-shrink:0;">
+      <div class="lbl">SESSION LOG</div>
+      <div id="pr-log" style="overflow-x:auto;max-height:280px;overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <!-- ══ FLOOR DISPLAY ══ -->
+  <div id="view-floor" class="view">
+    <div id="floor">
+      <div id="fnum" style="color:var(--cy);">–</div>
+      <div id="fsub">ORDERS REMAINING TODAY</div>
+      <div id="fbar"><div id="fbarf"></div></div>
+      <div class="frow" id="f-cars" style="margin-bottom:4px;"></div>
+      <!-- Packer live board -->
+      <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-top:4px;">PACKER BOARD</div>
+      <div class="frow" id="f-packers"></div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+var orders   = [];
+var packers  = [];   // {id, name, color, online, loginTime, ordersCompleted, skusScanned, orderTimes:[ms,...], totalPackTime:ms, shiftSessions:[{clockIn,clockOut,hoursWorked},...]}
+var managers = [];   // {id, name, color, shiftSessions:[...]}
+var currentPacker = null;
+var ai = 0;
+var shiftDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'2-digit',day:'2-digit'});
+
+// Packer colors cycle
+var PCOLORS = ['#00e5ff','#00ff88','#c77dff','#ffb300','#ff3d5a','#eab308','#4ade80','#f472b6'];
+
+// ══════════════════════════════════════════
+// AUDIO
+// ══════════════════════════════════════════
+var _actx = null;
+function getAC(){ if(!_actx) _actx=new(window.AudioContext||window.webkitAudioContext)(); return _actx; }
+function bp(f,d,t,v){ try{ var a=getAC(),o=a.createOscillator(),g=a.createGain(); o.connect(g); g.connect(a.destination); o.type=t||'sine'; o.frequency.value=f; g.gain.setValueAtTime(v||.22,a.currentTime); g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d); o.start(); o.stop(a.currentTime+d); }catch(e){} }
+function bpOk()  { bp(880,.07,'sine',.2); setTimeout(function(){ bp(1100,.1,'sine',.18); },80); }
+function bpDone(){ [523,659,784,1047].forEach(function(f,i){ setTimeout(function(){ bp(f,.12,'sine',.25); },i*75); }); }
+function bpErr() { bp(180,.28,'sawtooth',.3); }
+function bpLogin(){ bp(660,.05,'sine',.2); setTimeout(function(){ bp(990,.08,'sine',.22); },60); }
+
+// ══════════════════════════════════════════
+// CARRIERS
+// ══════════════════════════════════════════
+var CR = {
+  GOFO:  {c:'#00e5ff',t:function(s){return /^GFUS/i.test(s);}},
+  FedEx: {c:'#c77dff',t:function(s){return /^(7[245]\d{17}|96\d{20}|61\d{18})$/.test(s);}},
+  UPS:   {c:'#ffb300',t:function(s){return /^1Z/i.test(s);}},
+  USPS:  {c:'#00ff88',t:function(s){return /^9[1234]\d{18,20}$/.test(s)||/^\d{20,22}$/.test(s);}},
+  SWIFT: {c:'#eab308',t:function(s){return /^SW/i.test(s);}},
+  SpeedX:{c:'#ff3d5a',t:function(s){return /^SPX/i.test(s);}}
+};
+function dc(s){ for(var n in CR) if(CR[n].t(s)) return n; return 'Unknown'; }
+function cc(c){ return (CR[c]&&CR[c].c)||'#4a6080'; }
+
+// ══════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════
+function gv(name){
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
+  var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
+  document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
+  if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
+  if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); }
+  if(name==='dash')   renderDash();
+  if(name==='payroll') renderPayroll();
+  if(name==='floor')  renderFloor();
+}
+
+// ══════════════════════════════════════════
+// PDF PARSE
+// ══════════════════════════════════════════
+var TPATS=[
+  /^(GFUS\d{10,22})$/i,/^(1Z[A-Z0-9]{16})$/i,/^(SPX[A-Z0-9]{6,18})$/i,
+  /^(SWF?[A-Z0-9]{6,18})$/i,/^(7[245]\d{17})$/,/^(96\d{20})$/,
+  /^(61\d{18})$/,/^(9[1234]\d{18,20})$/,/^(\d{20,22})$/
+];
+
+async function parsePdf(file){
+  pm('⟳ Reading PDF…');
+  try{
+    var ab=await file.arrayBuffer();
+    var pdf=await pdfjsLib.getDocument({data:ab}).promise;
+    pm('⟳ Parsing '+pdf.numPages+' page(s)…');
+    dbg('Pages: '+pdf.numPages);
+    var out=[];
+    for(var p=1;p<=pdf.numPages;p++){
+      var page=await pdf.getPage(p);
+      var vp=page.getViewport({scale:1});
+      var H=vp.height;
+      var ct=await page.getTextContent();
+      var words=ct.items.filter(function(it){return it.str&&it.str.trim();}).map(function(it){
+        return{text:it.str.trim(),x:it.transform[4],top:H-it.transform[5]};
+      });
+      dbg('\nPage '+p+' H='+H.toFixed(0));
+      words.forEach(function(w){dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"');});
+      var o=extractOrder(words);
+      if(o){out.push(o);dbg('OK: '+o.tracking);}
+      else dbg('SKIP');
+    }
+    if(!out.length){pm('⚠ No orders found — see debug log');showDebug();return;}
+    initOrders(out);
+    pm('✓ '+out.length+' order(s) loaded. Now go to Packers tab to assign.');
+    setTimeout(function(){gv('manager');},800);
+  }catch(err){
+    pm('✗ '+err.message); dbg('ERROR: '+err.message); showDebug();
+  }
+}
+
+function extractOrder(words){
+  function near(target,tol){
+    tol=tol||5;
+    return words.filter(function(w){return Math.abs(w.top-target)<tol;}).sort(function(a,b){return a.x-b.x;});
+  }
+  function joinNear(target,tol){return near(target,tol).map(function(w){return w.text;}).join(' ');}
+
+  var tracking=null;
+  var zone=words.filter(function(w){return w.top>=155&&w.top<=175;});
+  var search=zone.length?zone:words;
+  loop:for(var i=0;i<search.length;i++){
+    for(var j=0;j<TPATS.length;j++){var m=search[i].text.match(TPATS[j]);if(m){tracking=m[1];break loop;}}
+  }
+  if(!tracking)return null;
+
+  var skuW=words.filter(function(w){return w.top>=375&&w.top<=400&&w.x<130&&/\*\d/.test(w.text);});
+  if(!skuW.length) skuW=words.filter(function(w){return /^[A-Z0-9][A-Z0-9\-]{1,15}\*\d+$/i.test(w.text);});
+  var skus=skuW.map(function(w){var p=w.text.split('*');return{sku:p[0].toUpperCase(),qty:parseInt(p[1])||1,scanned:0};});
+  if(!skus.length)skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
+
+  var recipient=joinNear(49,6);
+  var city=joinNear(93,6);
+  var dest=recipient+(city?' · '+city:'');
+  var routeRow=near(189,6);
+  var hubW=null;for(var i=0;i<routeRow.length;i++){if(/^[A-Z]{2,5}\d{2,3}$/.test(routeRow[i].text)){hubW=routeRow[i];break;}}
+  var weight=near(280,5).filter(function(w){return w.text!=='Weight:';}).map(function(w){return w.text;}).join(' ');
+  var ref=near(291,5).filter(function(w){return w.text!=='Reference:';}).map(function(w){return w.text;}).join(' ');
+  var shelf=words.filter(function(w){return w.top>=375&&w.top<=400&&w.x>150;}).map(function(w){return w.text;}).join(' ');
+
+  return{tracking:tracking,carrier:dc(tracking),hub:hubW?hubW.text:'',
+    dest:dest,recipient:recipient,city:city,weight:weight,ref:ref,shelf:shelf,
+    skus:skus,status:'pending',completedAt:null,
+    assignedTo:null,   // packer id
+    packedBy:null,     // packer id (set on completion)
+    orderStartTime:null, orderEndTime:null};
+}
+
+function initOrders(parsed){
+  orders=parsed; ai=0;
+  document.getElementById('dot').classList.add('live');
+  var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
+  document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
+  renderQueue();renderActive();renderDash();renderFloor();
+}
+
+// ══════════════════════════════════════════
+// DEMO
+// ══════════════════════════════════════════
+function loadDemo(){
+  getAC();
+  // Add demo packers if none exist
+  if(!packers.length){
+    packers=[
+      {id:'PKR-001',name:'Alex',color:PCOLORS[0],online:false,loginTime:null,ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]},
+      {id:'PKR-002',name:'Sam', color:PCOLORS[1],online:false,loginTime:null,ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]}
+    ];
+  }
+  var o=[
+    {tracking:'GFUS01039037326016',carrier:'GOFO',hub:'CLE01',dest:'Goma Rai · Cuyahoga Falls OH 44221',
+     weight:'3.52 oz',ref:'GU2603073091349508',shelf:'LP-1-2',
+     skus:[{sku:'LJT-02',qty:1,scanned:0}],status:'pending',completedAt:null,
+     assignedTo:'PKR-001',packedBy:null,orderStartTime:null,orderEndTime:null},
+    {tracking:'GFUS01039037329987',carrier:'GOFO',hub:'MCO01',dest:'Guerline Telisma · Orlando FL 32808',
+     weight:'1.764 lb',ref:'GU2603062214936582',shelf:'B-1-18',
+     skus:[{sku:'X004P74LY1',qty:1,scanned:0}],status:'pending',completedAt:null,
+     assignedTo:'PKR-001',packedBy:null,orderStartTime:null,orderEndTime:null},
+    {tracking:'GFUS01039037332225',carrier:'GOFO',hub:'IAH01',dest:'Kelli Davis · Willis TX 77318',
+     weight:'7.056 oz',ref:'GU2603072356184066',shelf:'A-1-18',
+     skus:[{sku:'BO001-S',qty:2,scanned:0}],status:'pending',completedAt:null,
+     assignedTo:'PKR-002',packedBy:null,orderStartTime:null,orderEndTime:null}
+  ];
+  initOrders(o);
+  renderManagerPanel(); renderPackerPanel(); renderAssignPanel();
+  pm('✓ Demo loaded. Go to Packers tab, then Pack Station.');
+  setTimeout(function(){gv('manager');},600);
+}
+
+// ══════════════════════════════════════════
+// MANAGER MANAGEMENT
+// ══════════════════════════════════════════
+function addManager(){
+  var nameEl=document.getElementById('new-mgr-name');
+  var idEl  =document.getElementById('new-mgr-id');
+  var name=nameEl.value.trim();
+  var id  =idEl.value.trim().toUpperCase();
+  if(!name||!id){alert('Enter both a name and a barcode ID for the manager.');return;}
+  var allIds=packers.map(function(p){return p.id;}).concat(managers.map(function(m){return m.id;}));
+  if(allIds.indexOf(id)>=0){alert('Barcode ID already in use.');return;}
+  managers.push({
+    id:id, name:name,
+    color:PCOLORS[(managers.length+4)%PCOLORS.length],
+    shiftSessions:[]
+  });
+  nameEl.value=''; idEl.value='';
+  renderManagerPanel();
+}
+
+function removeManager(id){
+  managers=managers.filter(function(m){return m.id!==id;});
+  renderManagerPanel();
+}
+
+function renderManagerPanel(){
+  var el=document.getElementById('manager-panel');
+  if(!el) return;
+  if(!managers.length){
+    el.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">No managers added yet.</div>';
+    return;
+  }
+  el.innerHTML=managers.map(function(m){
+    var col=m.color||PCOLORS[4];
+    return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid '+col+'44;">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:'+col+'22;border:2px solid '+col+';display:flex;align-items:center;justify-content:center;font-family:Barlow,sans-serif;font-weight:900;font-size:13px;color:'+col+';flex-shrink:0;">'+m.name[0].toUpperCase()+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12px;font-weight:600;color:'+col+';">'+m.name+'</div>'
+        +'<div style="font-size:9px;color:var(--td);margin-top:1px;">ID: '+m.id+'</div>'
+        +'<div style="font-size:9px;color:var(--am);margin-top:1px;">MANAGER</div>'
+      +'</div>'
+      +'<button class="btn btn-r" style="font-size:8px;padding:3px 7px;" data-remove-mgr="'+m.id+'">✕</button>'
+      +'</div>';
+  }).join('');
+  el.querySelectorAll('[data-remove-mgr]').forEach(function(btn){
+    btn.addEventListener('click',function(){ removeManager(btn.dataset.removeMgr); });
+  });
+}
+
+// ══════════════════════════════════════════
+// PACKER MANAGEMENT
+// ══════════════════════════════════════════
+function packerColor(p){ return p.color||PCOLORS[0]; }
+function packerInitial(p){ return p.name?p.name[0].toUpperCase():'?'; }
+function avatarHtml(p,size){
+  size=size||32;
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+packerColor(p)+'22;border:2px solid '+packerColor(p)+';display:flex;align-items:center;justify-content:center;font-family:Barlow,sans-serif;font-weight:900;font-size:'+(size*0.4)+'px;color:'+packerColor(p)+';flex-shrink:0;">'+packerInitial(p)+'</div>';
+}
+
+function addPacker(){
+  var nameEl=document.getElementById('new-packer-name');
+  var idEl  =document.getElementById('new-packer-id');
+  var name=nameEl.value.trim();
+  var id  =idEl.value.trim().toUpperCase();
+  if(!name||!id){alert('Enter both a name and a barcode ID.');return;}
+  if(packers.find(function(p){return p.id===id;})){alert('Barcode ID already exists.');return;}
+  packers.push({
+    id:id,name:name,
+    color:PCOLORS[packers.length%PCOLORS.length],
+    online:false,loginTime:null,
+    ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,
+    shiftSessions:[]  // [{clockIn:Date, clockOut:Date, hoursWorked:number}]
+  });
+  nameEl.value=''; idEl.value='';
+  renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+}
+
+function removePacker(id){
+  packers=packers.filter(function(p){return p.id!==id;});
+  orders.forEach(function(o){if(o.assignedTo===id) o.assignedTo=null;});
+  renderPackerPanel(); renderAssignPanel();
+}
+
+function renderPackerPanel(){
+  var el=document.getElementById('packer-panel');
+  if(!packers.length){
+    el.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">No packers added yet. Add packers above.</div>';
+    return;
+  }
+  el.innerHTML=packers.map(function(p){
+    var col=packerColor(p);
+    var avgTime=p.orderTimes.length?Math.round(p.orderTimes.reduce(function(a,b){return a+b;},0)/p.orderTimes.length/1000):0;
+    var totalMin=Math.round(p.totalPackTime/60000);
+    return '<div class="packer-row'+(p.online?' online':'')+'" data-packer-id="'+p.id+'">'
+      +avatarHtml(p,32)
+      +'<div class="packer-info">'
+        +'<div class="packer-name" style="color:'+col+'">'+p.name+(p.online?' <span style="color:var(--gn);font-size:9px;">● ONLINE</span>':'')+'</div>'
+        +'<div class="packer-id">ID: '+p.id+'</div>'
+        +'<div class="packer-stats-mini">'+p.ordersCompleted+' done · '+p.skusScanned+' items'+(avgTime?' · avg '+avgTime+'s/order':'')+(totalMin?' · '+totalMin+'min total':'')+'</div>'
+      +'</div>'
+      +'<button class="btn btn-r" style="font-size:8px;padding:3px 7px;" data-remove-packer="'+p.id+'">✕</button>'
+      +'</div>';
+  }).join('');
+  // Wire remove buttons
+  el.querySelectorAll('[data-remove-packer]').forEach(function(btn){
+    btn.addEventListener('click',function(){ removePacker(btn.dataset.removePacker); });
+  });
+}
+
+function renderAssignPanel(){
+  var el=document.getElementById('assign-panel');
+  if(!orders.length){
+    el.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">Import a PDF first.</div>';
+    return;
+  }
+  el.innerHTML='';
+  orders.forEach(function(o,i){
+    var col=cc(o.carrier);
+    var row=document.createElement('div');
+    row.className='order-assign-row';
+    var assignedPacker=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
+    var packerBadge=assignedPacker
+      ?'<span style="font-size:9px;color:'+packerColor(assignedPacker)+';background:'+packerColor(assignedPacker)+'18;padding:2px 6px;border:1px solid '+packerColor(assignedPacker)+'44;">'+assignedPacker.name+'</span>'
+      :'<span style="font-size:9px;color:var(--td);">unassigned</span>';
+
+    row.innerHTML=
+      '<span class="bdg" style="color:'+col+';border-color:'+col+';font-size:8px;flex-shrink:0;">'+o.carrier+'</span>'
+      +'<div class="oar-track">'+o.tracking.slice(-12)+'</div>'
+      +'<div class="oar-dest">'+o.dest+'</div>'
+      +'<div class="oar-skus">'+o.skus.map(function(s){return s.sku+'×'+s.qty;}).join(', ')+'</div>'
+      +(o.status==='done'?'<span style="font-size:9px;color:var(--gn);">✓ DONE</span>':packerBadge)
+      +(o.status!=='done'?'<select class="packer-select" data-order-idx="'+i+'"></select>':'');
+
+    if(o.status!=='done'){
+      var sel=row.querySelector('select');
+      var opt0=document.createElement('option');
+      opt0.value=''; opt0.textContent='-- assign --';
+      sel.appendChild(opt0);
+      packers.forEach(function(p){
+        var opt=document.createElement('option');
+        opt.value=p.id; opt.textContent=p.name;
+        if(o.assignedTo===p.id) opt.selected=true;
+        sel.appendChild(opt);
+      });
+      (function(idx,selectEl){
+        selectEl.addEventListener('change',function(){
+          orders[idx].assignedTo=selectEl.value||null;
+          renderAssignPanel();
+          renderQueue();
+        });
+      })(i,sel);
+    }
+    el.appendChild(row);
+  });
+}
+
+// Auto-assign: round-robin across packers
+function autoAssign(){
+  if(!packers.length){alert('Add packers first.');return;}
+  var pending=orders.filter(function(o){return o.status==='pending';});
+  pending.forEach(function(o,i){ o.assignedTo=packers[i%packers.length].id; });
+  renderAssignPanel(); renderQueue();
+}
+
+// ══════════════════════════════════════════
+// PACKER LOGIN AT PACK STATION
+// ══════════════════════════════════════════
+function showLoginOrPack(){
+  if(currentPacker){
+    document.getElementById('packer-login').classList.add('hide');
+    document.getElementById('current-packer-bar').style.display='flex';
+    updatePackerBar();
+    focusScan();
+  } else {
+    document.getElementById('packer-login').classList.remove('hide');
+    document.getElementById('current-packer-bar').style.display='none';
+    renderQuickLoginBtns();
+    setTimeout(function(){ document.getElementById('login-scan-in').focus(); },100);
+  }
+}
+
+function renderQuickLoginBtns(){
+  var el=document.getElementById('quick-login-btns');
+  el.innerHTML=packers.map(function(p){
+    var col=packerColor(p);
+    return '<button style="padding:6px 12px;font-size:9px;letter-spacing:2px;border:1px solid '+col+'44;background:'+col+'0d;color:'+col+';cursor:pointer;font-family:inherit;" data-quick-login="'+p.id+'">'+p.name+'</button>';
+  }).join('');
+  el.querySelectorAll('[data-quick-login]').forEach(function(btn){
+    btn.addEventListener('click',function(){ loginPacker(btn.dataset.quickLogin); });
+  });
+}
+
+function loginPacker(id){
+  var p=packers.find(function(p){return p.id===id;});
+  if(!p){ setLoginMsg('⚠ ID "'+id+'" not found. Ask manager to register you.','var(--rd)'); bpErr(); return; }
+
+  // ── CLOCK OUT: same packer scanning again while currently logged in ──
+  if(currentPacker && currentPacker.id===id){
+    var now=new Date();
+    var elapsed=now-p.loginTime;
+    var hrs=Math.round(elapsed/36000)/100; // round to 2dp hours
+    p.shiftSessions.push({
+      clockIn: new Date(p.loginTime),
+      clockOut: now,
+      hoursWorked: hrs
+    });
+    p.online=false;
+    p.loginTime=null;
+    currentPacker=null;
+    bp(440,.12,'sine',.25); setTimeout(function(){ bp(330,.15,'sine',.2); },120);
+    setLoginMsg('👋 '+p.name+' clocked out. '+hrs+' hrs recorded.','var(--gn)');
+    document.getElementById('login-scan-in').value='';
+    renderPackerPanel(); renderQuickLoginBtns();
+    if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
+    return;
+  }
+
+  // ── CLOCK IN ──
+  // If a different packer was active, clock them out first
+  if(currentPacker && currentPacker.id!==id){
+    var prev=currentPacker;
+    var now2=new Date();
+    var el2=now2-prev.loginTime;
+    var hrs2=Math.round(el2/36000)/100;
+    prev.shiftSessions.push({clockIn:new Date(prev.loginTime),clockOut:now2,hoursWorked:hrs2});
+    prev.online=false; prev.loginTime=null;
+  }
+
+  currentPacker=p;
+  if(!p.online){
+    p.online=true;
+    p.loginTime=Date.now();
+  }
+  bpLogin();
+  setLoginMsg('','');
+  document.getElementById('login-scan-in').value='';
+  var fi=orders.findIndex(function(o){return o.status==='pending'&&o.assignedTo===p.id;});
+  if(fi>=0) ai=fi;
+  showLoginOrPack();
+  renderQueue(); renderActive(); renderPackerPanel();
+}
+
+function updatePackerBar(){
+  if(!currentPacker) return;
+  var p=currentPacker;
+  var col=packerColor(p);
+  document.getElementById('cp-avatar').innerHTML=''; 
+  document.getElementById('cp-avatar').style.cssText='width:26px;height:26px;border-radius:50%;background:'+col+'22;border:2px solid '+col+';display:flex;align-items:center;justify-content:center;font-family:Barlow,sans-serif;font-weight:900;font-size:11px;color:'+col+';flex-shrink:0;';
+  document.getElementById('cp-avatar').textContent=packerInitial(p);
+  document.getElementById('cp-name').textContent=p.name;
+  document.getElementById('cp-name').style.color=col;
+  var myDone=orders.filter(function(o){return o.packedBy===p.id;}).length;
+  var myLeft=orders.filter(function(o){return o.status==='pending'&&o.assignedTo===p.id;}).length;
+  var totalMin=Math.round(p.totalPackTime/60000);
+  document.getElementById('cp-stats').textContent=myDone+' done · '+myLeft+' left · '+p.skusScanned+' items · '+totalMin+'min total';
+}
+
+function setLoginMsg(msg,col){
+  var el=document.getElementById('login-msg');
+  el.textContent=msg||'Point scanner at your packer ID card and scan';
+  el.style.color=col||'var(--td)';
+}
+
+// ══════════════════════════════════════════
+// SCAN
+// ══════════════════════════════════════════
+function focusScan(){ var f=document.getElementById('scan-in'); if(f) f.focus(); }
+
+function doScan(raw){
+  getAC();
+  var sku=raw.toUpperCase().trim(); if(!sku) return;
+  document.getElementById('scan-in').value='';
+
+  // Find active pending order for current packer
+  var order=null;
+  // Try current ai first
+  if(orders[ai]&&orders[ai].status==='pending') order=orders[ai];
+  else{
+    var fi=orders.findIndex(function(o){return o.status==='pending'&&(!currentPacker||o.assignedTo===currentPacker.id);});
+    if(fi>=0){ai=fi;order=orders[fi];}
+  }
+
+  if(!order){ bpErr(); setErr('⚠ No active order assigned to you.'); setFb('✗ '+sku+' — NO ORDER','var(--rd)'); focusScan(); return; }
+
+  // Start timer on first scan
+  if(!order.orderStartTime) order.orderStartTime=Date.now();
+
+  var item=null;
+  for(var i=0;i<order.skus.length;i++){
+    if(order.skus[i].sku===sku&&order.skus[i].scanned<order.skus[i].qty){item=order.skus[i];break;}
+  }
+
+  if(item){
+    item.scanned++;
+    if(currentPacker) currentPacker.skusScanned++;
+    clearErr(); bpOk(); flash('ok');
+    setFb('✓  '+sku+'  ·  '+new Date().toLocaleTimeString(),'var(--gn)');
+    renderActive(); renderQueue();
+
+    if(order.skus.every(function(s){return s.scanned>=s.qty;})){
+      order.status='done';
+      order.completedAt=new Date().toLocaleTimeString();
+      order.orderEndTime=Date.now();
+      order.packedBy=currentPacker?currentPacker.id:null;
+      if(currentPacker){
+        var elapsed=order.orderEndTime-order.orderStartTime;
+        currentPacker.ordersCompleted++;
+        currentPacker.orderTimes.push(elapsed);
+        currentPacker.totalPackTime+=elapsed;
+      }
+      bpDone();
+      document.getElementById('done-ov').classList.add('show');
+      renderQueue(); renderDash(); renderFloor(); renderPackerPanel(); updatePackerBar();
+      setTimeout(function(){
+        document.getElementById('done-ov').classList.remove('show');
+        // Advance to next order assigned to current packer
+        var ni=-1;
+        if(currentPacker){
+          for(var i=ai+1;i<orders.length;i++){if(orders[i].status==='pending'&&orders[i].assignedTo===currentPacker.id){ni=i;break;}}
+          if(ni<0){for(var i=0;i<orders.length;i++){if(orders[i].status==='pending'&&orders[i].assignedTo===currentPacker.id){ni=i;break;}}}
+        } else {
+          for(var i=ai+1;i<orders.length;i++){if(orders[i].status==='pending'){ni=i;break;}}
+        }
+        if(ni>=0) ai=ni;
+        renderActive(); renderQueue(); focusScan();
+      },1500);
+    }
+  } else {
+    bpErr(); flash('err');
+    setErr('✗  "'+sku+'"  not in this order — check your items!');
+    setFb('✗  '+sku+'  WRONG ITEM','var(--rd)');
+    document.querySelectorAll('.ski:not(.done)').forEach(function(el){
+      el.classList.add('bad'); setTimeout(function(){el.classList.remove('bad');},500);
+    });
+  }
+  focusScan();
+  document.getElementById('pp').textContent=
+    orders.filter(function(o){return o.status==='done';}).length+' / '+orders.length+' done';
+}
+
+function flash(t){ var el=document.getElementById('active-card'); el.classList.add(t); setTimeout(function(){el.classList.remove(t);},320); }
+function setErr(m){ var b=document.getElementById('err-bar'); b.textContent=m; b.classList.add('show'); }
+function clearErr(){ document.getElementById('err-bar').classList.remove('show'); }
+function setFb(t,c){ var el=document.getElementById('scan-fb'); el.textContent=t; el.style.color=c; }
+function pm(m){ document.getElementById('pmsg').textContent=m; }
+function dbg(m){ var el=document.getElementById('debug-log'); if(el) el.textContent+=m+'\n'; }
+function showDebug(){ document.getElementById('debug-box').style.display='block'; }
+function fmtMs(ms){
+  var s=Math.round(ms/1000);
+  return s<60?s+'s':Math.floor(s/60)+'m '+(s%60)+'s';
+}
+
+// ══════════════════════════════════════════
+// RENDER ACTIVE
+// ══════════════════════════════════════════
+function renderActive(){
+  var o=orders[ai];
+  if(!o){
+    document.getElementById('ac-track').textContent='← SELECT AN ORDER';
+    document.getElementById('ac-top').innerHTML='';
+    document.getElementById('ac-dest').textContent='';
+    document.getElementById('checklist').innerHTML='<div style="color:var(--td);font-size:11px;padding:6px 0;">No orders loaded or all complete.</div>';
+    document.getElementById('pp').textContent='';
+    return;
+  }
+  var col=cc(o.carrier);
+  var assignedP=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
+  document.getElementById('ac-top').innerHTML=
+    '<span class="bdg" style="color:'+col+';border-color:'+col+';">'+o.carrier+'</span>'
+    +(o.hub?' <span style="color:var(--dim);font-size:9px;margin-left:6px;">HUB '+o.hub+'</span>':'')
+    +(o.ref?' <span style="color:var(--dim);font-size:9px;margin-left:6px;">REF '+o.ref.slice(-8)+'</span>':'')
+    +(assignedP?' <span style="color:'+packerColor(assignedP)+';font-size:9px;margin-left:8px;border:1px solid '+packerColor(assignedP)+'44;padding:1px 6px;">'+assignedP.name+'</span>':'');
+  document.getElementById('ac-track').textContent=o.tracking;
+  document.getElementById('ac-dest').textContent=o.dest+(o.weight?'  ·  '+o.weight:'')+(o.shelf?'  ·  '+o.shelf:'');
+  document.getElementById('checklist').innerHTML=o.skus.map(function(s){
+    var done=s.scanned>=s.qty;
+    var qh=done?'<span style="color:var(--gn)">'+s.qty+'/'+s.qty+'</span>'
+               :s.scanned>0?'<span style="color:var(--am)">'+s.scanned+'</span>/'+s.qty:'0/'+s.qty;
+    return '<div class="ski'+(done?' done':'')+'">'
+      +'<div class="skbox">'+(done?'✓':'')+'</div>'
+      +'<div class="sknm">'+s.sku+'</div>'
+      +'<div class="skqt">'+qh+'</div></div>';
+  }).join('');
+  document.getElementById('pp').textContent=
+    orders.filter(function(o){return o.status==='done';}).length+' / '+orders.length+' done';
+}
+
+// ══════════════════════════════════════════
+// RENDER QUEUE
+// ══════════════════════════════════════════
+function renderQueue(){
+  var qEl=document.getElementById('queue');
+  qEl.innerHTML='';
+  if(!orders.length){
+    qEl.innerHTML='<div style="color:var(--td);font-size:11px;padding:6px;">No orders loaded.</div>';
+    return;
+  }
+  // Filter: if packer logged in, show only their orders (+ show others dimmed)
+  orders.forEach(function(o,i){
+    var col=cc(o.carrier);
+    var done=o.status==='done';
+    var act=i===ai&&!done;
+    var assignedP=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
+    var isMyOrder=!currentPacker||!o.assignedTo||(o.assignedTo===currentPacker.id);
+    var tq=o.skus.reduce(function(a,s){return a+s.qty;},0);
+    var sc=o.skus.reduce(function(a,s){return a+s.scanned;},0);
+    var pct=tq?Math.round((sc/tq)*100):0;
+
+    var div=document.createElement('div');
+    div.className='qc'+(act?' act':'')+(done?' fin':'');
+    if(!isMyOrder&&!done) div.style.opacity='0.4';
+    div.innerHTML=
+      '<div class="qt">'
+        +'<div class="qtrk">'+o.tracking.slice(-12)+'</div>'
+        +'<span class="bdg" style="color:'+col+';border-color:'+col+';font-size:8px;">'+o.carrier+'</span>'
+      +'</div>'
+      +(assignedP?'<div class="qpacker" style="color:'+packerColor(assignedP)+';">'+assignedP.name+'</div>':'<div class="qpacker" style="color:var(--td);">unassigned</div>')
+      +'<div class="qdst">'+o.dest+'</div>'
+      +'<div class="qskus">'+o.skus.map(function(s){return '<span class="qsk'+(s.scanned>=s.qty?' qd':'')+'">'+s.sku+'×'+s.qty+'</span>';}).join('')+'</div>'
+      +(done
+        ?'<div style="font-size:9px;color:var(--gn);margin-top:4px;">✓ '+o.completedAt+'</div>'
+        :'<div class="bar" style="margin-top:5px;"><div class="barf" style="width:'+pct+'%;background:'+(act?'var(--cy)':'var(--dim)')+'"></div></div>');
+
+    (function(idx){ div.addEventListener('click',function(){ getAC(); ai=idx; renderActive(); renderQueue(); focusScan(); }); })(i);
+    qEl.appendChild(div);
+  });
+}
+
+// ══════════════════════════════════════════
+// RENDER DASHBOARD
+// ══════════════════════════════════════════
+function renderDash(){
+  var tot=orders.length, don=orders.filter(function(o){return o.status==='done';}).length;
+  var rem=tot-don, pct=tot?Math.round((don/tot)*100):0;
+  document.getElementById('d-tot').textContent=tot;
+  document.getElementById('d-don').textContent=don;
+  document.getElementById('d-rem').textContent=rem;
+  document.getElementById('d-pac').textContent=packers.filter(function(p){return p.online;}).length+'/'+packers.length;
+  document.getElementById('d-ptx').textContent=don+'/'+tot;
+  document.getElementById('d-bar').style.width=pct+'%';
+
+  // Packer leaderboard
+  var lbEl=document.getElementById('d-packers');
+  if(!packers.length){
+    lbEl.innerHTML='<div style="color:var(--td);font-size:11px;">No packers added yet.</div>';
+  } else {
+    var sorted=[].concat(packers).sort(function(a,b){return b.ordersCompleted-a.ordersCompleted;});
+    lbEl.innerHTML=sorted.map(function(p,rank){
+      var col=packerColor(p);
+      var myOrders=orders.filter(function(o){return o.assignedTo===p.id;});
+      var myDone=myOrders.filter(function(o){return o.status==='done';});
+      var myLeft=myOrders.filter(function(o){return o.status==='pending';}).length;
+      var avgTime=p.orderTimes.length?fmtMs(p.orderTimes.reduce(function(a,b){return a+b;},0)/p.orderTimes.length):'—';
+      var totalMin=p.totalPackTime?fmtMs(p.totalPackTime):'—';
+      var pct2=myOrders.length?Math.round((myDone.length/myOrders.length)*100):0;
+      return '<div class="packer-stat-card">'
+        +'<div style="font-family:Barlow,sans-serif;font-size:20px;font-weight:900;color:var(--dim);width:24px;text-align:center;flex-shrink:0;">'+(rank+1)+'</div>'
+        +avatarHtml(p,36)
+        +'<div class="psc-info">'
+          +'<div class="psc-name" style="color:'+col+'">'+(p.online?'<span style="color:var(--gn);margin-right:4px;">●</span>':'')+p.name+'</div>'
+          +'<div class="psc-row">'
+            +'<span>Orders: <b>'+myDone.length+'/'+myOrders.length+'</b></span>'
+            +'<span>Items: <b>'+p.skusScanned+'</b></span>'
+            +'<span>Avg/order: <b>'+avgTime+'</b></span>'
+            +'<span>Total time: <b>'+totalMin+'</b></span>'
+            +'<span>Remaining: <b>'+myLeft+'</b></span>'
+          +'</div>'
+          +'<div class="bar" style="margin-top:6px;height:3px;"><div class="barf" style="width:'+pct2+'%;background:'+col+'"></div></div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Carriers
+  var cars=[...new Set(orders.map(function(o){return o.carrier;}))].sort();
+  document.getElementById('d-car').innerHTML=cars.map(function(c){
+    var t=orders.filter(function(o){return o.carrier===c;}).length;
+    var d=orders.filter(function(o){return o.carrier===c&&o.status==='done';}).length;
+    var col=cc(c);
+    return '<div style="margin-bottom:9px;">'
+      +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px;">'
+      +'<span style="color:'+col+'">'+c+'</span><span style="color:var(--td)">'+d+'/'+t+'</span></div>'
+      +'<div class="bar"><div class="barf" style="width:'+(t?(d/t*100):0)+'%;background:'+col+'"></div></div>'
+      +'</div>';
+  }).join('')||'<div style="color:var(--td);font-size:10px;">No data.</div>';
+
+  // SKUs
+  var sm={};
+  orders.forEach(function(o){ o.skus.forEach(function(s){
+    if(!sm[s.sku]) sm[s.sku]={qty:0,sc:0};
+    sm[s.sku].qty+=s.qty; sm[s.sku].sc+=s.scanned;
+  }); });
+  document.getElementById('d-sku').innerHTML=Object.keys(sm).sort().map(function(k){
+    var v=sm[k],p=Math.round((v.sc/v.qty)*100);
+    return '<div style="background:var(--bg);border:1px solid var(--bdr);padding:7px 11px;min-width:110px;">'
+      +'<div style="font-size:11px;font-weight:600;margin-bottom:2px;">'+k+'</div>'
+      +'<div style="font-size:9px;color:var(--td);margin-bottom:4px;">'+v.sc+'/'+v.qty+'</div>'
+      +'<div class="bar"><div class="barf" style="width:'+p+'%;background:'+(p===100?'var(--gn)':'var(--cy)')+'"></div></div>'
+      +'</div>';
+  }).join('');
+
+  // Orders table
+  var ordEl=document.getElementById('d-ord');
+  var tbl=document.createElement('table');
+  tbl.style.cssText='width:100%;border-collapse:collapse;font-size:10px;';
+  tbl.innerHTML='<thead><tr style="border-bottom:1px solid var(--bdr);">'
+    +['TRACKING','CARRIER','PACKER','DEST','SKUs','STATUS','TIME'].map(function(h){
+      return '<th style="padding:5px 9px;text-align:left;color:var(--td);font-weight:400;letter-spacing:2px;white-space:nowrap;">'+h+'</th>';
+    }).join('')+'</tr></thead>';
+  var tbody=document.createElement('tbody');
+  orders.forEach(function(o,i){
+    var col=cc(o.carrier);
+    var assignedP=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
+    var tr=document.createElement('tr');
+    tr.style.cssText='border-bottom:1px solid #1a2f4e;cursor:pointer;'+(i%2===0?'background:var(--bg)':'');
+    tr.innerHTML='<td style="padding:5px 9px;color:var(--cy);font-weight:600;">'+o.tracking+'</td>'
+      +'<td style="padding:5px 9px;"><span class="bdg" style="color:'+col+';border-color:'+col+';">'+o.carrier+'</span></td>'
+      +'<td style="padding:5px 9px;">'+(assignedP?'<span style="color:'+packerColor(assignedP)+';">'+assignedP.name+'</span>':'<span style="color:var(--td);">—</span>')+'</td>'
+      +'<td style="padding:5px 9px;color:var(--td);max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+o.dest+'</td>'
+      +'<td style="padding:5px 9px;">'+o.skus.map(function(s){return s.sku+'×'+s.qty;}).join(', ')+'</td>'
+      +'<td style="padding:5px 9px;">'+(o.status==='done'?'<span style="color:var(--gn)">✓ DONE</span>':'<span style="color:var(--am)">PENDING</span>')+'</td>'
+      +'<td style="padding:5px 9px;color:var(--td);">'+(o.completedAt||'—')+'</td>';
+    (function(idx){ tr.addEventListener('click',function(){ gv('pack'); ai=idx; renderActive(); renderQueue(); focusScan(); }); })(i);
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody); ordEl.innerHTML=''; ordEl.appendChild(tbl);
+}
+
+// ══════════════════════════════════════════
+// RENDER FLOOR
+// ══════════════════════════════════════════
+function renderFloor(){
+  var tot=orders.length, don=orders.filter(function(o){return o.status==='done';}).length;
+  var rem=tot-don, pct=tot?Math.round((don/tot)*100):0;
+  var el=document.getElementById('fnum');
+  el.textContent=tot?rem:'–';
+  el.style.color=rem===0?'var(--gn)':rem<10?'var(--gn)':rem<30?'var(--am)':'var(--cy)';
+  el.style.textShadow='0 0 80px '+(rem<10?'#00ff8844':'#00e5ff33');
+  document.getElementById('fbarf').style.width=pct+'%';
+
+  var cars=[...new Set(orders.map(function(o){return o.carrier;}))].sort();
+  document.getElementById('f-cars').innerHTML=cars.map(function(c){
+    var t=orders.filter(function(o){return o.carrier===c;}).length;
+    var d=orders.filter(function(o){return o.carrier===c&&o.status==='done';}).length;
+    var r=t-d,col=cc(c);
+    return '<div class="fc" style="border-color:'+col+'44;">'
+      +'<div style="font-size:9px;color:'+col+';letter-spacing:2px;margin-bottom:3px;">'+c+'</div>'
+      +'<div style="font-family:Barlow,sans-serif;font-size:22px;font-weight:700;color:'+(r===0&&t>0?'var(--gn)':'var(--tx)')+'">'+r+'</div>'
+      +'<div style="font-size:8px;color:var(--td);">left</div></div>';
+  }).join('')||'<div style="color:var(--td);font-size:11px;">Import labels to begin.</div>';
+
+  // Packer board
+  var sorted=[].concat(packers).sort(function(a,b){return b.ordersCompleted-a.ordersCompleted;});
+  document.getElementById('f-packers').innerHTML=sorted.map(function(p){
+    var col=packerColor(p);
+    var myDone=orders.filter(function(o){return o.packedBy===p.id;}).length;
+    var myLeft=orders.filter(function(o){return o.status==='pending'&&o.assignedTo===p.id;}).length;
+    var avgTime=p.orderTimes.length?fmtMs(p.orderTimes.reduce(function(a,b){return a+b;},0)/p.orderTimes.length):'—';
+    return '<div class="fp-card" style="border-color:'+col+(p.online?';box-shadow:0 0 10px '+col+'33':'')+';">'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px;">'
+        +(p.online?'<span style="color:var(--gn);font-size:8px;">●</span>':'')
+        +'<div class="fp-name" style="color:'+col+'">'+p.name+'</div>'
+      +'</div>'
+      +'<div class="fp-done" style="color:'+col+'">'+myDone+'</div>'
+      +'<div class="fp-detail">'+myLeft+' left · avg '+avgTime+'</div>'
+      +'</div>';
+  }).join('')||'<div style="color:var(--td);font-size:11px;">No packers added.</div>';
+}
+
+// ══════════════════════════════════════════
+// PAYROLL / TIME TRACKING
+// ══════════════════════════════════════════
+function fmtTime(d){ // format Date to HH:MM:SS
+  if(!d) return '—';
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+}
+function fmtHrs(ms){ return ms?(Math.round(ms/36000)/100).toFixed(2):'0.00'; }
+
+function renderPayroll(){
+  var dateEl=document.getElementById('pr-date');
+  if(dateEl) dateEl.textContent=shiftDate;
+
+  // Compute live hours for anyone still clocked in
+  var now=Date.now();
+
+  var totalHrs=0, totalOrders=0, activeNow=0;
+  packers.forEach(function(p){
+    // sum completed sessions
+    var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
+    // add live session if still clocked in
+    if(p.online&&p.loginTime) sessHrs+=((now-p.loginTime)/3600000);
+    totalHrs+=sessHrs;
+    totalOrders+=p.ordersCompleted;
+    if(p.online) activeNow++;
+  });
+
+  document.getElementById('pr-packers').textContent=packers.filter(function(p){return p.shiftSessions.length>0||p.online;}).length;
+  document.getElementById('pr-hrs').textContent=totalHrs.toFixed(2);
+  document.getElementById('pr-orders').textContent=totalOrders;
+  document.getElementById('pr-active').textContent=activeNow;
+
+  var hasSessions=packers.some(function(p){return p.shiftSessions.length>0||p.online;});
+  document.getElementById('pr-status').textContent=hasSessions?'':'No sessions yet — packers must scan their ID to clock in';
+
+  // ── TIME SHEET TABLE (one row per packer, totals) ──
+  var sheetEl=document.getElementById('pr-sheet');
+  var sheetRows=packers.map(function(p){
+    var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
+    var liveMs=(p.online&&p.loginTime)?(now-p.loginTime):0;
+    var liveHrs=liveMs/3600000;
+    var totalH=(sessHrs+liveHrs).toFixed(2);
+    var sessions=p.shiftSessions.length+(p.online?1:0);
+    var col=packerColor(p);
+    return '<tr style="border-bottom:1px solid #1a2f4e;">'
+      +'<td style="padding:7px 10px;"><span style="color:'+col+';font-weight:600;">'+p.name+'</span></td>'
+      +'<td style="padding:7px 10px;color:var(--td);">'+p.id+'</td>'
+      +'<td style="padding:7px 10px;font-family:Barlow,sans-serif;font-size:16px;font-weight:700;color:var(--gn);">'+totalH+'</td>'
+      +'<td style="padding:7px 10px;color:var(--td);">'+sessions+' session'+(sessions!==1?'s':'')+'</td>'
+      +'<td style="padding:7px 10px;color:var(--am);">'+p.ordersCompleted+'</td>'
+      +'<td style="padding:7px 10px;color:var(--td);">'+p.skusScanned+'</td>'
+      +'<td style="padding:7px 10px;">'+(p.online?'<span style="color:var(--gn);">● CLOCKED IN</span>':'<span style="color:var(--td);">clocked out</span>')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  sheetEl.innerHTML=
+    '<table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">'
+    +'<thead><tr style="border-bottom:1px solid var(--bdr);">'
+    +['PACKER','ID','TOTAL HRS','SESSIONS','ORDERS','ITEMS','STATUS'].map(function(h){
+      return '<th style="padding:6px 10px;text-align:left;color:var(--td);font-weight:400;letter-spacing:2px;font-size:9px;">'+h+'</th>';
+    }).join('')
+    +'</tr></thead><tbody>'+sheetRows+'</tbody></table>';
+
+  // ── SESSION LOG (every individual clock-in/out) ──
+  var logEl=document.getElementById('pr-log');
+  var allSessions=[];
+  packers.forEach(function(p){
+    p.shiftSessions.forEach(function(s){
+      allSessions.push({name:p.name,id:p.id,col:packerColor(p),
+        clockIn:s.clockIn,clockOut:s.clockOut,hrs:s.hoursWorked,live:false});
+    });
+    if(p.online&&p.loginTime){
+      allSessions.push({name:p.name,id:p.id,col:packerColor(p),
+        clockIn:new Date(p.loginTime),clockOut:null,
+        hrs:(now-p.loginTime)/3600000,live:true});
+    }
+  });
+  allSessions.sort(function(a,b){return a.clockIn-b.clockIn;});
+
+  if(!allSessions.length){
+    logEl.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">No sessions recorded yet. Packers clock in by scanning their ID barcode at Pack Station.</div>';
+  } else {
+    var logRows=allSessions.map(function(s,i){
+      return '<tr style="border-bottom:1px solid #1a2f4e;'+(i%2===0?'background:#ffffff08':'')+';">'
+        +'<td style="padding:6px 10px;"><span style="color:'+s.col+';font-weight:600;">'+s.name+'</span></td>'
+        +'<td style="padding:6px 10px;color:var(--td);font-size:10px;">'+s.id+'</td>'
+        +'<td style="padding:6px 10px;color:var(--gn);">'+fmtTime(s.clockIn)+'</td>'
+        +'<td style="padding:6px 10px;color:'+(s.live?'var(--am)':'var(--rd)')+';">'+(s.live?'● ACTIVE NOW':fmtTime(s.clockOut))+'</td>'
+        +'<td style="padding:6px 10px;color:var(--tx);font-weight:600;">'+s.hrs.toFixed(2)+' hrs'+(s.live?' <span style="color:var(--am);font-size:9px;">(running)</span>':'')+'</td>'
+        +'</tr>';
+    }).join('');
+    logEl.innerHTML=
+      '<table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">'
+      +'<thead><tr style="border-bottom:1px solid var(--bdr);">'
+      +['PACKER','ID','CLOCK IN','CLOCK OUT','HOURS'].map(function(h){
+        return '<th style="padding:6px 10px;text-align:left;color:var(--td);font-weight:400;letter-spacing:2px;font-size:9px;">'+h+'</th>';
+      }).join('')
+      +'</tr></thead><tbody>'+logRows+'</tbody></table>';
+  }
+}
+
+function exportPayrollCSV(){
+  if(!packers.length){alert('No packer data to export.');return;}
+  var now=Date.now();
+  var lines=[
+    '"Double Sided ISCM LLC — Payroll Export"',
+    '"Date: '+shiftDate+'"',
+    '"Generated: '+new Date().toLocaleString()+'"',
+    '""',
+    '"PACKER","PACKER ID","CLOCK IN","CLOCK OUT","HOURS WORKED","STATUS"'
+  ];
+  packers.forEach(function(p){
+    p.shiftSessions.forEach(function(s){
+      lines.push([
+        '"'+p.name+'"',
+        '"'+p.id+'"',
+        '"'+s.clockIn.toLocaleTimeString()+'"',
+        '"'+s.clockOut.toLocaleTimeString()+'"',
+        s.hoursWorked.toFixed(2),
+        '"completed"'
+      ].join(','));
+    });
+    if(p.online&&p.loginTime){
+      lines.push([
+        '"'+p.name+'"',
+        '"'+p.id+'"',
+        '"'+new Date(p.loginTime).toLocaleTimeString()+'"',
+        '"still clocked in"',
+        ((now-p.loginTime)/3600000).toFixed(2),
+        '"active"'
+      ].join(','));
+    }
+  });
+  // Summary section
+  lines.push('""');
+  lines.push('"SUMMARY"');
+  lines.push('"PACKER","PACKER ID","TOTAL HOURS","SESSIONS","ORDERS PACKED","ITEMS SCANNED"');
+  packers.forEach(function(p){
+    var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
+    if(p.online&&p.loginTime) sessHrs+=((now-p.loginTime)/3600000);
+    lines.push([
+      '"'+p.name+'"',
+      '"'+p.id+'"',
+      sessHrs.toFixed(2),
+      p.shiftSessions.length+(p.online?1:0),
+      p.ordersCompleted,
+      p.skusScanned
+    ].join(','));
+  });
+
+  var csv=lines.join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='DoubleSidedISCM_Payroll_'+shiftDate.replace(/\//g,'-')+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════
+// CODE 128B BARCODE GENERATOR (no dependencies)
+// ══════════════════════════════════════════
+var C128={
+  bars:['11011001100','11001101100','11001100110','10010011000','10010001100','10001001100','10011001000','10011000100','10001100100','11001001000','11001000100','11000100100','10110011100','10011011100','10011001110','10111001100','10011101100','10011100110','11001110010','11001011100','11001001110','11011100100','11001110100','11101101110','11101001100','11100101100','11100100110','11101100100','11100110100','11100110010','11011011000','11011000110','11000110110','10100011000','10001011000','10001000110','10110001000','10001101000','10001100010','11010001000','11000101000','11000100010','10110111000','10110001110','10001101110','10111011000','10111000110','10001110110','11101110110','11010001110','11000101110','11011101000','11011100010','11011101110','11101011000','11101000110','11100010110','11101101000','11101100010','11100011010','11101111010','11001000010','11110001010','10100110000','10100001100','10010110000','10010000110','10000101100','10000100110','10110010000','10110000100','10011010000','10011000010','10000110100','10000110010','11000010010','11001010000','11110111010','11000010100','10001111010','10100111100','10010111100','10010011110','10111100100','10011110100','10011110010','11110100100','11110010100','11110010010','11011011110','11011110110','11110110110','10101111000','10100011110','10001011110','10111101000','10111100010','11110101000','11110100010','10111011110','10111101110','11101011110','11110101110','11010000100','11010010000','11010011100'],
+  stop:'1100011101011',
+  encode:function(text){
+    var codes=[104],cs=104; // start B
+    for(var i=0;i<text.length;i++){
+      var v=text.charCodeAt(i)-32;
+      if(v<0||v>95)v=0;
+      codes.push(v); cs+=(i+1)*v;
+    }
+    codes.push(cs%103);
+    var b='';
+    for(var i=0;i<codes.length;i++) b+=this.bars[codes[i]];
+    b+=this.stop+'11';
+    return b;
+  },
+  svg:function(text,bw,bh){
+    bw=bw||2; bh=bh||56;
+    var b=this.encode(text), w=b.length*bw;
+    var s='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+bh+'">';
+    for(var i=0;i<b.length;i++){
+      if(b[i]==='1') s+='<rect x="'+(i*bw)+'" y="0" width="'+bw+'" height="'+bh+'" fill="#000"/>';
+    }
+    return s+'</svg>';
+  }
+};
+
+// ══════════════════════════════════════════
+// PRINT PACKER ID CARDS  (credit card size)
+// ══════════════════════════════════════════
+function printPackerCards(){
+  if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
+  var allCards='';
+  managers.forEach(function(m){
+    var col=m.color||PCOLORS[4];
+    var svg=C128.svg(m.id,2,48);
+    allCards+='<div class="ic">'
+      +'<div class="ic-top" style="background:'+col+';">'
+        +'<span class="ic-logo">DOUBLE SIDED ISCM LLC</span>'
+        +'<span class="ic-rolebadge">MANAGER</span>'
+      +'</div>'
+      +'<div class="ic-name">'+m.name+'</div>'
+      +'<div class="ic-pos" style="color:'+col+';">MANAGER</div>'
+      +'<div class="ic-bar">'+svg+'</div>'
+      +'</div>';
+  });
+  packers.forEach(function(p){
+    var col=packerColor(p);
+    var svg=C128.svg(p.id,2,48);
+    allCards+='<div class="ic">'
+      +'<div class="ic-top" style="background:'+col+';">'
+        +'<span class="ic-logo">DOUBLE SIDED ISCM LLC</span>'
+        +'<span class="ic-rolebadge">PACKER</span>'
+      +'</div>'
+      +'<div class="ic-name">'+p.name+'</div>'
+      +'<div class="ic-pos" style="color:'+col+';">WAREHOUSE PACKER</div>'
+      +'<div class="ic-bar">'+svg+'</div>'
+      +'</div>';
+  });
+  var existing=document.getElementById('card-overlay');
+  if(existing) existing.remove();
+  var ov=document.createElement('div');
+  ov.id='card-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
+  ov.innerHTML=
+    '<div style="width:100%;max-width:840px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+        +'<div>'
+          +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">STAFF ID CARDS — DOUBLE SIDED ISCM LLC</div>'
+          +'<div style="font-size:9px;color:#666;margin-top:3px;">'+managers.length+' manager · '+packers.length+' packer</div>'
+        +'</div>'
+        +'<div style="display:flex;gap:8px;">'
+          +'<button id="ov-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'
+          +'<button id="ov-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'
+        +'</div>'
+      +'</div>'
+      +'<p style="font-size:10px;color:#888;margin-bottom:16px;">✂ Cut out · Laminate or badge holder · Scan at Pack Station to clock in/out</p>'
+      +'<div id="card-print-area" style="display:flex;flex-wrap:wrap;gap:14px;">'+allCards+'</div>'
+    +'</div>';
+  var style=document.createElement('style');
+  style.id='card-print-style';
+  style.textContent=
+    '.ic{width:323px;height:204px;background:#fff;border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;}'
+    +'.ic-top{height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;flex-shrink:0;}'
+    +'.ic-logo{font-weight:900;font-size:9px;letter-spacing:2px;color:#fff;font-family:Arial,sans-serif;}'
+    +'.ic-rolebadge{font-size:8px;letter-spacing:2px;color:rgba(255,255,255,.85);background:rgba(0,0,0,.2);padding:2px 7px;border-radius:2px;font-family:Arial,sans-serif;}'
+    +'.ic-name{flex:1;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:26px;letter-spacing:2px;color:#111;font-family:Arial,sans-serif;padding-top:2px;}'
+    +'.ic-pos{font-family:Arial,sans-serif;font-size:9px;letter-spacing:3px;text-align:center;margin-bottom:2px;font-weight:600;}'
+    +'.ic-bar{display:flex;justify-content:center;align-items:center;padding:3px 12px 7px;}'
+    +'.ic-bar svg{max-width:285px;}'
+    +'@media print{'
+      +'body>*{display:none!important;}'
+      +'#card-overlay{display:block!important;position:static!important;background:#fff!important;padding:0!important;overflow:visible!important;}'
+      +'#ov-print,#ov-close,#card-overlay>div>div:first-child,#card-overlay p{display:none!important;}'
+      +'#card-print-area{display:flex!important;flex-wrap:wrap;gap:10px;padding:8px;background:#fff;}'
+      +'.ic{box-shadow:none!important;border:1px solid #ccc!important;page-break-inside:avoid;}'
+    +'}';
+  document.head.appendChild(style);
+  document.body.appendChild(ov);
+  document.getElementById('ov-close').addEventListener('click',function(){
+    ov.remove(); var s=document.getElementById('card-print-style'); if(s) s.remove();
+  });
+  document.getElementById('ov-print').addEventListener('click',function(){ window.print(); });
+}
+
+// ══════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function(){
+
+  document.querySelectorAll('.tab').forEach(function(btn){
+    btn.addEventListener('click', function(){ gv(btn.dataset.view); });
+  });
+
+  // Dropzone
+  var dz=document.getElementById('dz');
+  dz.addEventListener('click',function(){ document.getElementById('fi').click(); });
+  dz.addEventListener('dragover',function(e){ e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave',function(){ dz.classList.remove('over'); });
+  dz.addEventListener('drop',function(e){
+    e.preventDefault(); dz.classList.remove('over');
+    var f=e.dataTransfer.files[0];
+    if(f&&f.type==='application/pdf') parsePdf(f);
+    else pm('⚠ Please drop a PDF file.');
+  });
+  document.getElementById('fi').addEventListener('change',function(e){ if(e.target.files[0]) parsePdf(e.target.files[0]); });
+  document.getElementById('demo-btn').addEventListener('click', loadDemo);
+
+  // Manager
+  document.getElementById('add-mgr-btn').addEventListener('click', addManager);
+  document.getElementById('add-packer-btn').addEventListener('click', addPacker);
+  document.getElementById('auto-assign-btn').addEventListener('click', autoAssign);
+  document.getElementById('export-csv-btn').addEventListener('click', exportPayrollCSV);
+  // Enter key on all staff fields
+  ['new-mgr-name','new-mgr-id'].forEach(function(id){
+    document.getElementById(id).addEventListener('keydown',function(e){ if(e.key==='Enter') addManager(); });
+  });
+  // Enter key on packer fields
+  ['new-packer-name','new-packer-id'].forEach(function(id){
+    document.getElementById(id).addEventListener('keydown',function(e){ if(e.key==='Enter') addPacker(); });
+  });
+
+  // Login scan
+  document.getElementById('login-scan-in').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){
+      var v=this.value.trim().toUpperCase();
+      if(v) loginPacker(v);
+    }
+  });
+
+  // Switch packer button
+  document.getElementById('cp-switch').addEventListener('click',function(){
+    currentPacker=null;
+    showLoginOrPack();
+  });
+
+  // SKU scan
+  document.getElementById('scan-in').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){ var v=this.value.trim(); if(v) doScan(v); }
+  });
+
+  // Keep scan focused on pack view
+  document.addEventListener('click',function(e){
+    var packView=document.getElementById('view-pack');
+    var loginOverlay=document.getElementById('packer-login');
+    if(packView.classList.contains('on')&&!loginOverlay.classList.contains('hide')){
+      if(e.target.id!=='login-scan-in'&&!e.target.dataset.quickLogin)
+        document.getElementById('login-scan-in').focus();
+    } else if(packView.classList.contains('on')&&e.target.id!=='scan-in'){
+      focusScan();
+    }
+  });
+
+  // Floor auto-refresh
+  setInterval(function(){
+    if(document.getElementById('view-floor').classList.contains('on')) renderFloor();
+    if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
+    if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
+  }, 10000);
+
+  document.getElementById('print-cards-btn').addEventListener('click', printPackerCards);
+});
+</script>
+</body>
+</html>
