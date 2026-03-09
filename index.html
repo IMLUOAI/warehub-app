@@ -179,10 +179,14 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <div id="dz">
         <div style="font-size:30px;margin-bottom:9px;">📦</div>
         <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
-        <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX</div>
+        <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX · Uniuni</div>
         <div id="pmsg"></div>
       </div>
       <input id="fi" type="file" accept="application/pdf" style="display:none"/>
+      <div style="display:flex;gap:8px;margin-bottom:10px;justify-content:center;">
+        <button class="btn btn-r" id="clear-btn" style="font-size:9px;">✕ CLEAR ALL ORDERS</button>
+        <button class="btn" id="copy-debug-btn" style="font-size:9px;border-color:var(--am);color:var(--am);">📋 COPY DEBUG LOG</button>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
         <div class="card" style="font-size:10px;color:var(--td);line-height:2.1;">
           <div class="lbl">WORKFLOW</div>
@@ -200,11 +204,9 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
           Live leaderboard on floor display
         </div>
       </div>
-      <div style="text-align:center;margin-bottom:12px;">
-        <button class="btn btn-c" id="demo-btn">▶ LOAD DEMO (3 orders + 2 packers)</button>
-      </div>
-      <div id="debug-box" class="card">
-        <div class="lbl">DEBUG LOG</div>
+
+      <div id="debug-box" class="card" style="display:block;">
+        <div style="display:flex;align-items:center;justify-content:space-between;"><div class="lbl">DEBUG LOG</div><button class="btn" id="demo-btn" style="font-size:8px;opacity:0.5;border-color:#444;color:#555;padding:2px 8px;">▶ DEMO</button></div>
         <pre id="debug-log" style="font-size:10px;color:var(--am);white-space:pre-wrap;max-height:220px;overflow-y:auto;line-height:1.5;"></pre>
       </div>
     </div>
@@ -405,12 +407,13 @@ function bpLogin(){ bp(660,.05,'sine',.2); setTimeout(function(){ bp(990,.08,'si
 // CARRIERS
 // ══════════════════════════════════════════
 var CR = {
-  GOFO:  {c:'#00e5ff',t:function(s){return /^GFUS/i.test(s);}},
-  FedEx: {c:'#c77dff',t:function(s){return /^(7[245]\d{17}|96\d{20}|61\d{18})$/.test(s);}},
-  UPS:   {c:'#ffb300',t:function(s){return /^1Z/i.test(s);}},
-  USPS:  {c:'#00ff88',t:function(s){return /^9[1234]\d{18,20}$/.test(s)||/^\d{20,22}$/.test(s);}},
-  SWIFT: {c:'#eab308',t:function(s){return /^SW/i.test(s);}},
-  SpeedX:{c:'#ff3d5a',t:function(s){return /^SPX/i.test(s);}}
+  GOFO:   {c:'#00e5ff', t:function(s){return /^GFUS/i.test(s);}},
+  FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|FX-|FEDEX-)/.test(s);}},
+  UPS:    {c:'#ffb300', t:function(s){return /^1Z/i.test(s);}},
+  USPS:   {c:'#00ff88', t:function(s){return /^9[1-8]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s);}},
+  SWIFT:  {c:'#eab308', t:function(s){return /^SW/i.test(s);}},
+  SpeedX: {c:'#ff3d5a', t:function(s){return /^SPX/i.test(s);}},
+  Uniuni: {c:'#4ade80', t:function(s){return /^UUS/i.test(s);}}
 };
 function dc(s){ for(var n in CR) if(CR[n].t(s)) return n; return 'Unknown'; }
 function cc(c){ return (CR[c]&&CR[c].c)||'#4a6080'; }
@@ -433,13 +436,194 @@ function gv(name){
 // ══════════════════════════════════════════
 // PDF PARSE
 // ══════════════════════════════════════════
+
+// Tracking patterns — specific first to avoid false matches
+// Spaces stripped before matching (some labels print spaced digits)
 var TPATS=[
-  /^(GFUS\d{10,22})$/i,/^(1Z[A-Z0-9]{16})$/i,/^(SPX[A-Z0-9]{6,18})$/i,
-  /^(SWF?[A-Z0-9]{6,18})$/i,/^(7[245]\d{17})$/,/^(96\d{20})$/,
-  /^(61\d{18})$/,/^(9[1234]\d{18,20})$/,/^(\d{20,22})$/
+  {r:/^(GFUS\d{10,22})$/i},
+  {r:/^(1Z[A-Z0-9]{14,18})$/i},
+  {r:/^(SPX[A-Z0-9]{6,22})$/i},
+  {r:/^(SWF?[A-Z0-9]{6,20})$/i},
+  {r:/^(UUS[A-Z0-9]{10,22})$/i},
+  {r:/^(96\d{18,22})$/},
+  {r:/^(61\d{17,20})$/},
+  {r:/^(7[245]\d{14,18})$/},
+  {r:/^(9[1-8]\d{18,22})$/},
+  {r:/^(\d{20,22})$/}
 ];
 
+// Try to match any single word OR concatenated adjacent words (for spaced tracking numbers)
+function matchTracking(words){
+  function clean(s){ return s.replace(/[^A-Z0-9]/gi,''); }
+
+  // Collect all text on page for carrier hint detection
+  var allText = words.map(function(w){return w.text;}).join(' ');
+
+  // Detect carrier logo/brand hints from label text
+  var hintFedEx  = /FedEx|fedex/i.test(allText);
+  var hintUPS    = /UPS/i.test(allText) || /1Z[A-Z0-9]{4,}/i.test(allText);
+  var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POSTAGE/i.test(allText);
+  var hintSpeedX = /SpeedX|SPXMIA|SDX/i.test(allText);
+  var hintUniuni = /uniuni|UUS/i.test(allText);
+
+  // ── PASS 1: each word individually ──
+  for(var i=0;i<words.length;i++){
+    var s=clean(words[i].text);
+    if(!s||s.length<8) continue;
+    for(var j=0;j<TPATS.length;j++){
+      var m=s.match(TPATS[j].r);
+      if(m) return m[1];
+    }
+  }
+
+  // ── PASS 2: per-row concatenation (handles spaced digit strings) ──
+  var rows={};
+  words.forEach(function(w){
+    var row=Math.round(w.top/4)*4;
+    if(!rows[row]) rows[row]=[];
+    rows[row].push(w);
+  });
+  var rowKeys=Object.keys(rows).map(Number).sort(function(a,b){return a-b;});
+  for(var ri=0;ri<rowKeys.length;ri++){
+    var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+    var concat=sorted.map(function(w){return clean(w.text);}).join('');
+    if(concat.length<8) continue;
+    for(var j=0;j<TPATS.length;j++){
+      var m=concat.match(TPATS[j].r);
+      if(m) return m[1];
+    }
+  }
+
+  // ── PASS 2.5: FedEx combo label — target the barcode number row directly ──
+  // These labels print "9632 0895 5 (000 000 0000) 0 00 8894 0615 7740" at ~top 290-310
+  // Also "FedEx Tracking ID# 3994 1311 4118" at ~top 154 with short display number
+  if(/FedEx/i.test(allText)){
+    // Find the row with the long barcode number (contains many digit groups)
+    var fedexRows = Object.keys(rows).map(Number).filter(function(r){
+      var txt = rows[r].map(function(w){return w.text;}).join(' ');
+      return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
+    });
+    for(var fi=0;fi<fedexRows.length;fi++){
+      var fRow = rows[fedexRows[fi]].sort(function(a,b){return a.x-b.x;});
+      var fConcat = fRow.map(function(w){return clean(w.text);}).join('');
+      // Try all substrings from length 22 down to 20
+      var fDigits = fConcat.replace(/[^0-9]/g,'');
+      for(var flen=Math.min(fDigits.length,34);flen>=20;flen--){
+        for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
+          var fsub = fDigits.substr(fstart,flen);
+          if(/^(96|61|74|75)/.test(fsub)){
+            for(var j=0;j<TPATS.length;j++){var m=fsub.match(TPATS[j].r);if(m){dbg('  FedEx barcode-row match: '+m[1]);return m[1];}}
+          }
+        }
+      }
+    }
+  }
+
+  // ── PASS 3: FedEx fallback — if FedEx logo detected, look for any long digit string ──
+  // FedEx labels print numbers in many formats; grab longest digit-only sequence on page
+  if(hintFedEx){
+    // Concatenate everything on page, strip non-digits, look for FedEx-length numbers
+    var allDigits = words.map(function(w){return clean(w.text);}).join('');
+    // Try all substrings of length 12-34 from the full page digit soup
+    var digitOnly = allDigits.replace(/[^0-9]/g,'');
+    // Slide window to find valid FedEx tracking
+    var fedexPats = [
+      /^(96[0-9]{18,22})$/,
+      /^(61[0-9]{17,20})$/,
+      /^(7[245][0-9]{14,18})$/
+    ];
+    for(var len=34;len>=20;len--){
+      for(var start=0;start+len<=digitOnly.length;start++){
+        var sub=digitOnly.substr(start,len);
+        for(var fp=0;fp<fedexPats.length;fp++){
+          var m=sub.match(fedexPats[fp]);
+          if(m) return m[1];
+        }
+      }
+    }
+    // Last resort: use CUST REF as pseudo-tracking with FedEx prefix
+    var custRef=words.filter(function(w){return /CUST\s*REF/i.test(w.text);});
+    if(!custRef.length) custRef=words.filter(function(w){return /^PK-/.test(w.text);});
+    if(custRef.length){
+      // Find the ref value (token after "CUST REF:" on same row)
+      var refTop=custRef[0].top;
+      var refRow=words.filter(function(w){return Math.abs(w.top-refTop)<8;})
+                      .sort(function(a,b){return a.x-b.x;});
+      var refVal=refRow.filter(function(w){return /^PK-/.test(w.text)||/[A-Z0-9]{10,}/.test(clean(w.text));});
+      if(refVal.length){
+        dbg('  FedEx fallback: using CUST REF as ID: '+refVal[refVal.length-1].text);
+        return 'FX-'+clean(refVal[refVal.length-1].text).slice(0,20);
+      }
+    }
+    // Absolute last resort: synthesize from "Tracking ID#" short number
+    var tidRow=words.filter(function(w){return /Tracking/i.test(w.text)&&/ID/i.test(w.text);});
+    if(tidRow.length){
+      var tidTop=tidRow[0].top;
+      var tidNums=words.filter(function(w){return Math.abs(w.top-tidTop)<8;})
+                       .map(function(w){return clean(w.text);}).join('');
+      var digits=tidNums.replace(/[^0-9]/g,'');
+      if(digits.length>=8){
+        dbg('  FedEx fallback: using Tracking ID# digits: '+digits);
+        return 'FEDEX-'+digits;
+      }
+    }
+  }
+
+  // ── PASS 4: UPS fallback ──
+  // UPS tracking "1Z V57 J62 YW 9412 5061" is space-separated tokens
+  // Try joining ALL page tokens and scan for 1Z pattern
+  if(hintUPS || /1Z/i.test(allText)){
+    // Try every row concatenated (spaces removed)
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      // With spaces preserved
+      var txtSpaced=sorted.map(function(w){return w.text;}).join(' ');
+      var txtClean=clean(txtSpaced);
+      var m2=txtClean.match(/^(1Z[A-Z0-9]{14,18})$/i);
+      if(m2){ dbg('  UPS row match: '+m2[1]); return m2[1].toUpperCase(); }
+      // Partial match within row
+      var m3=txtClean.match(/(1Z[A-Z0-9]{14,18})/i);
+      if(m3){ dbg('  UPS partial match: '+m3[1]); return m3[1].toUpperCase(); }
+    }
+    // Whole page concatenated
+    var pageClean=words.map(function(w){return clean(w.text);}).join('');
+    var m4=pageClean.match(/(1Z[A-Z0-9]{14,18})/i);
+    if(m4){ dbg('  UPS full-page match: '+m4[1]); return m4[1].toUpperCase(); }
+    // Try "TRACKING #:" row — grab value after it
+    var trkLabel=words.filter(function(w){return /TRACKING/i.test(w.text)&&/[#:]/i.test(w.text);});
+    if(trkLabel.length){
+      var tTop=trkLabel[0].top;
+      var tRow=words.filter(function(w){return Math.abs(w.top-tTop)<8;})
+                    .sort(function(a,b){return a.x-b.x;});
+      var tConcat=tRow.map(function(w){return clean(w.text);}).join('');
+      var m5=tConcat.match(/(1Z[A-Z0-9]{14,18})/i);
+      if(m5){ dbg('  UPS label-row match: '+m5[1]); return m5[1].toUpperCase(); }
+    }
+  }
+
+  // ── PASS 5: Uniuni fallback ──
+  // Tracking "UUS6391780256479406" — should match pass 1, but may be split or prefixed
+  if(hintUniuni || /UUS/i.test(allText)){
+    // Try full page clean concat
+    var pageAll=words.map(function(w){return clean(w.text);}).join('');
+    var uuM=pageAll.match(/(UUS[A-Z0-9]{10,22})/i);
+    if(uuM){ dbg('  Uniuni full-page match: '+uuM[1]); return uuM[1].toUpperCase(); }
+    // Try per-row
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var uuM2=rowConcat.match(/(UUS[A-Z0-9]{10,22})/i);
+      if(uuM2){ dbg('  Uniuni row match: '+uuM2[1]); return uuM2[1].toUpperCase(); }
+    }
+  }
+
+  return null;
+}
+
 async function parsePdf(file){
+  // Clear previous state
+  document.getElementById('debug-log').textContent='';
+  orders=[]; ai=0;
   pm('⟳ Reading PDF…');
   try{
     var ab=await file.arrayBuffer();
@@ -457,54 +641,158 @@ async function parsePdf(file){
       });
       dbg('\nPage '+p+' H='+H.toFixed(0));
       words.forEach(function(w){dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"');});
-      var o=extractOrder(words);
-      if(o){out.push(o);dbg('OK: '+o.tracking);}
-      else dbg('SKIP');
+      var o=extractOrder(words,H);
+      if(o){
+        out.push(o);
+        dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf+' sku='+o.skus.map(function(s){return s.sku+'*'+s.qty;}).join(','));
+      } else {
+        dbg('✗ SKIP p'+p+' — ALL tokens:');
+        words.forEach(function(w){ dbg('    top='+w.top.toFixed(0)+' x='+w.x.toFixed(0)+' ['+w.text+']'); });
+      }
+      showDebug();
     }
-    if(!out.length){pm('⚠ No orders found — see debug log');showDebug();return;}
+    if(!out.length){pm('⚠ No orders found — check debug log below');return;}
     initOrders(out);
     pm('✓ '+out.length+' order(s) loaded. Now go to Packers tab to assign.');
     setTimeout(function(){gv('manager');},800);
   }catch(err){
-    pm('✗ '+err.message); dbg('ERROR: '+err.message); showDebug();
+    pm('✗ '+err.message); dbg('ERROR: '+err.message+' '+err.stack);
   }
 }
 
-function extractOrder(words){
+function extractOrder(words, pageH){
   function near(target,tol){
-    tol=tol||5;
+    tol=tol||8;
     return words.filter(function(w){return Math.abs(w.top-target)<tol;}).sort(function(a,b){return a.x-b.x;});
   }
   function joinNear(target,tol){return near(target,tol).map(function(w){return w.text;}).join(' ');}
 
-  var tracking=null;
-  var zone=words.filter(function(w){return w.top>=155&&w.top<=175;});
-  var search=zone.length?zone:words;
-  loop:for(var i=0;i<search.length;i++){
-    for(var j=0;j<TPATS.length;j++){var m=search[i].text.match(TPATS[j]);if(m){tracking=m[1];break loop;}}
+  // ── TRACKING: search all words (spaced concatenation handled in matchTracking) ──
+  var tracking = matchTracking(words);
+  var carrier = tracking ? dc(tracking) : null;
+
+  // ── UNIUNI SPECIAL CASE: H≈1400, tracking is image-only (no text layer) ──
+  // Detect by tall page height + SKU pattern at extreme bottom
+  if(!tracking && pageH >= 900){
+    // Look for SKU token anywhere on this tall page
+    var uuSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
+    if(uuSkuW.length){
+      // Build a unique ID from the SKU + shelf text
+      var uuShelfW = words.filter(function(w){ return w.x > pageH*0.3 && /[A-Z]\d/.test(w.text); });
+      var uuShelf  = uuShelfW.length ? uuShelfW[0].text : '';
+      var uuSku    = uuSkuW[0].text.split('*')[0];
+      tracking = 'UUS-' + uuSku + (uuShelf ? '-' + uuShelf : '') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+      carrier  = 'Uniuni';
+      dbg('  Uniuni tall-page detected, synthetic ID: ' + tracking);
+    }
   }
-  if(!tracking)return null;
 
-  var skuW=words.filter(function(w){return w.top>=375&&w.top<=400&&w.x<130&&/\*\d/.test(w.text);});
-  if(!skuW.length) skuW=words.filter(function(w){return /^[A-Z0-9][A-Z0-9\-]{1,15}\*\d+$/i.test(w.text);});
-  var skus=skuW.map(function(w){var p=w.text.split('*');return{sku:p[0].toUpperCase(),qty:parseInt(p[1])||1,scanned:0};});
-  if(!skus.length)skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
+  if(!tracking) return null;
 
-  var recipient=joinNear(49,6);
-  var city=joinNear(93,6);
+  // ── SKU: always bottom-left corner across all carrier label types ──
+  var H = pageH || 400;
+  // For tall Uniuni pages (H~1400), SKU is in the last ~200pt; for normal pages, bottom 18%
+  var skuTopMin = H >= 900 ? H - 200 : H * 0.82;
+  var bottomZone = words.filter(function(w){return w.top >= skuTopMin && w.x < Math.max(H*0.55, 150);});
+  var skuW = bottomZone.filter(function(w){return /\*\d/.test(w.text);});
+  // Fallback: scan entire page for SKU pattern
+  if(!skuW.length) skuW = words.filter(function(w){return /^[A-Z0-9][A-Z0-9\-]{1,18}\*\d+$/i.test(w.text);});
+  // Some labels have SKU split: "D1YP03B-T" and "*2" separately — join adjacent bottom-left tokens
+  if(!skuW.length){
+    var cands=bottomZone.filter(function(w){return /^[A-Z][A-Z0-9\-]{2,18}$/i.test(w.text);});
+    cands.forEach(function(c){
+      var nextW=bottomZone.filter(function(w){return w.x>c.x&&w.x<c.x+80&&Math.abs(w.top-c.top)<8;});
+      nextW.forEach(function(n){
+        if(/^\*\d+$/.test(n.text)) skuW.push({text:c.text+n.text,x:c.x,top:c.top});
+      });
+    });
+  }
+  var skus=skuW.map(function(w){
+    // Handle "SKU*QTY*extra" — only take first two parts
+    var parts=w.text.split('*');
+    return{sku:parts[0].toUpperCase(),qty:parseInt(parts[1])||1,scanned:0};
+  });
+  if(!skus.length) skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
+
+  // ── SHELF: bottom-right corner ──
+  var shelfTopMin = H >= 900 ? H - 200 : H * 0.82;
+  var shelfW = words.filter(function(w){return w.top >= shelfTopMin && w.x > Math.max(H*0.45, 120);});
+  // Exclude tracking number and pure numeric strings
+  shelfW = shelfW.filter(function(w){return !/^\d{10,}$/.test(w.text) && w.text!==tracking;});
+  // Prefer tokens matching shelf pattern: letter-digit-digit (e.g. A-1-2, LP-1-2, R-1-14, B-1-10)
+  var shelfPat=shelfW.filter(function(w){return /^[A-Z]{1,3}[-.]\d{1,2}[-.]\d{1,3}$/i.test(w.text);});
+  var shelf=(shelfPat.length?shelfPat:shelfW).map(function(w){return w.text;}).join(' ');
+
+  // ── RECIPIENT / DEST: varies by carrier — scan for address-like rows ──
+  // For GOFO labels: fixed coords. For others: find "SHIP TO:" or largest-font address block
+  var recipient='', city='';
+  // Try fixed GOFO coords first
+  var r49=joinNear(49,8); var c93=joinNear(93,8);
+  if(r49 && !/^(FROM|TO|SHIP|Samuel|Deliver|Contact)/i.test(r49)){
+    recipient=r49; city=c93;
+  } else {
+    // Find "SHIP TO:" or "Deliver to:" label, take lines below it
+    var shipToW=words.filter(function(w){return /^(SHIP\s*TO|Deliver\s*to|TO:)$/i.test(w.text.replace(':',''));});
+    if(shipToW.length){
+      var stTop=shipToW[0].top;
+      var addrWords=words.filter(function(w){return w.top>stTop+2&&w.top<stTop+80;})
+                         .sort(function(a,b){return a.top-b.top||a.x-b.x;});
+      // Group into lines
+      var lines=[]; var lastTop=-999; var curLine=[];
+      addrWords.forEach(function(w){
+        if(Math.abs(w.top-lastTop)>8){if(curLine.length) lines.push(curLine); curLine=[w]; lastTop=w.top;}
+        else{curLine.push(w);}
+      });
+      if(curLine.length) lines.push(curLine);
+      // Filter out lines that look like labels or tracking
+      lines=lines.filter(function(l){
+        var t=l.map(function(w){return w.text;}).join(' ');
+        return !/^(Contact|Weight|Customer|Reference|SKU|Tracking|USPS|UPS|FedEx|HAZMAT|Parcel|Forward)/i.test(t);
+      });
+      if(lines.length>=1) recipient=lines[0].map(function(w){return w.text;}).join(' ');
+      if(lines.length>=2) city=lines[lines.length-1].map(function(w){return w.text;}).join(' ');
+    } else {
+      // Last resort: look for "TO:" header and grab next lines
+      var toW=words.filter(function(w){return w.text==='TO:'||w.text==='TO';}); 
+      if(toW.length){
+        var toTop=toW[toW.length-1].top;
+        var toLines=words.filter(function(w){return w.top>toTop&&w.top<toTop+60&&w.x>toW[toW.length-1].x-5;})
+                        .sort(function(a,b){return a.top-b.top;});
+        if(toLines.length) recipient=toLines[0].text;
+        if(toLines.length>1) city=toLines[toLines.length-1].text;
+      }
+    }
+  }
   var dest=recipient+(city?' · '+city:'');
-  var routeRow=near(189,6);
-  var hubW=null;for(var i=0;i<routeRow.length;i++){if(/^[A-Z]{2,5}\d{2,3}$/.test(routeRow[i].text)){hubW=routeRow[i];break;}}
-  var weight=near(280,5).filter(function(w){return w.text!=='Weight:';}).map(function(w){return w.text;}).join(' ');
-  var ref=near(291,5).filter(function(w){return w.text!=='Reference:';}).map(function(w){return w.text;}).join(' ');
-  var shelf=words.filter(function(w){return w.top>=375&&w.top<=400&&w.x>150;}).map(function(w){return w.text;}).join(' ');
 
-  return{tracking:tracking,carrier:dc(tracking),hub:hubW?hubW.text:'',
-    dest:dest,recipient:recipient,city:city,weight:weight,ref:ref,shelf:shelf,
-    skus:skus,status:'pending',completedAt:null,
-    assignedTo:null,   // packer id
-    packedBy:null,     // packer id (set on completion)
-    orderStartTime:null, orderEndTime:null};
+  // ── WEIGHT ──
+  var weightW=words.filter(function(w){return /^\d+(\.\d+)?\s*(lb|oz|lbs|KGS|kg)$/i.test(w.text);});
+  // Also catch "X.X lb" split across two words
+  var weight='';
+  if(weightW.length){
+    weight=weightW[0].text;
+  } else {
+    // try near GOFO coord
+    var wn=near(280,8).filter(function(w){return w.text!=='Weight:';});
+    if(wn.length) weight=wn.map(function(w){return w.text;}).join(' ');
+    // try "Weight:" label then adjacent value
+    var wlabel=words.filter(function(w){return /^Weight:?$/i.test(w.text);});
+    if(!weight&&wlabel.length){
+      var wl=wlabel[0];
+      var wval=words.filter(function(w){return w.top>wl.top-5&&w.top<wl.top+12&&w.x>wl.x+20;});
+      if(wval.length) weight=wval[0].text;
+    }
+  }
+
+  // ── REFERENCE / HUB (GOFO-specific, optional) ──
+  var ref=near(291,8).filter(function(w){return w.text!=='Reference:'&&w.text!=='Reference#:'&&w.text!=='Reference';}).map(function(w){return w.text;}).join(' ');
+  var routeRow=near(189,8);
+  var hubW=null;for(var i=0;i<routeRow.length;i++){if(/^[A-Z]{2,5}\d{2,3}$/.test(routeRow[i].text)){hubW=routeRow[i];break;}}
+
+  return{tracking:tracking, carrier:carrier, hub:hubW?hubW.text:'',
+    dest:dest, recipient:recipient, city:city, weight:weight, ref:ref, shelf:shelf,
+    skus:skus, status:'pending', completedAt:null,
+    assignedTo:null, packedBy:null, orderStartTime:null, orderEndTime:null};
 }
 
 function initOrders(parsed){
@@ -1406,6 +1694,33 @@ document.addEventListener('DOMContentLoaded', function(){
   });
   document.getElementById('fi').addEventListener('change',function(e){ if(e.target.files[0]) parsePdf(e.target.files[0]); });
   document.getElementById('demo-btn').addEventListener('click', loadDemo);
+  document.getElementById('clear-btn').addEventListener('click', function(){
+    if(!orders.length){pm('Nothing to clear.');return;}
+    if(!confirm('Clear all '+orders.length+' orders? Packers and time tracking will be kept.')) return;
+    orders=[]; ai=0;
+    document.getElementById('debug-log').textContent='';
+    document.getElementById('dot').classList.remove('live');
+    document.getElementById('badge').textContent='NO DATA';
+    pm('✓ Orders cleared. Import a new PDF to begin.');
+    renderQueue(); renderActive(); renderDash(); renderFloor(); renderAssignPanel();
+  });
+  document.getElementById('copy-debug-btn').addEventListener('click', function(){
+    var txt=document.getElementById('debug-log').textContent;
+    if(!txt){pm('Debug log is empty — import a PDF first.');return;}
+    // Use textarea fallback (works without HTTPS)
+    var ta=document.createElement('textarea');
+    ta.value=txt;
+    ta.style.cssText='position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0,999999);
+    try{
+      document.execCommand('copy');
+      pm('✓ Debug log copied! Paste it into the chat.');
+    }catch(e){
+      pm('⚠ Auto-copy failed — click inside the debug log, Ctrl+A, Ctrl+C to copy manually.');
+    }
+    document.body.removeChild(ta);
+  });
 
   // Manager
   document.getElementById('add-mgr-btn').addEventListener('click', addManager);
