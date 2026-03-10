@@ -147,6 +147,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 .fp-detail{font-size:8px;color:var(--td);margin-top:2px;}
 
 @keyframes shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
+
 </style>
 </head>
 <body>
@@ -214,51 +215,60 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
   </div>
 
   <!-- ══ MANAGER / PACKERS ══ -->
-  <div id="view-manager" class="view" style="gap:10px;overflow:hidden;">
-    <!-- Top toolbar -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;flex-wrap:wrap;">
-      <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">STAFF MANAGEMENT</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <!-- Add Manager -->
-        <input class="inp" id="new-mgr-name" placeholder="Manager name…" style="width:130px;"/>
-        <input class="inp" id="new-mgr-id"   placeholder="Manager barcode ID…" style="width:150px;"/>
-        <button class="btn" id="add-mgr-btn" style="border-color:var(--am);background:#ffb30010;color:var(--am);">+ ADD MANAGER</button>
-        <div style="width:1px;height:24px;background:var(--bdr);margin:0 4px;"></div>
-        <!-- Add Packer -->
-        <input class="inp" id="new-packer-name" placeholder="Packer name…" style="width:120px;"/>
-        <input class="inp" id="new-packer-id"   placeholder="Packer barcode ID…" style="width:140px;"/>
-        <button class="btn btn-c" id="add-packer-btn">+ ADD PACKER</button>
-        <div style="width:1px;height:24px;background:var(--bdr);margin:0 4px;"></div>
-        <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);">🪪 PRINT ALL CARDS</button>
+  <div id="view-manager" class="view" style="gap:12px;overflow:hidden;">
+
+    <!-- ── Section: Add Staff ── -->
+    <div class="card" style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+
+      <!-- Manager (single slot) -->
+      <div>
+        <div class="lbl" style="color:var(--am);margin-bottom:8px;">MANAGER</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <input class="inp" id="new-mgr-name" placeholder="Manager name…"/>
+          <input class="inp" id="new-mgr-id"   placeholder="Barcode ID (e.g. MGR-001)…"/>
+          <button class="btn" id="add-mgr-btn" style="border-color:var(--am);background:#ffb30010;color:var(--am);">💾 SAVE MANAGER</button>
+        </div>
+        <div id="manager-panel" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Add Packer -->
+      <div>
+        <div class="lbl" style="color:var(--cy);margin-bottom:8px;">ADD PACKER</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <input class="inp" id="new-packer-name" placeholder="Packer name…"/>
+          <input class="inp" id="new-packer-id"   placeholder="Barcode ID (e.g. PKR-001)…"/>
+          <button class="btn btn-c" id="add-packer-btn">+ ADD PACKER</button>
+        </div>
       </div>
     </div>
-    <!-- Main grid: managers left, packers middle, orders right -->
-    <div style="display:grid;grid-template-columns:220px 260px 1fr;gap:10px;flex:1;min-height:0;overflow:hidden;">
-      <!-- MANAGERS -->
-      <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
-        <div class="lbl" style="color:var(--am);">MANAGERS</div>
-        <div id="manager-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
-      </div>
+
+    <!-- ── Action Buttons ── -->
+    <div style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);">🪪 PRINT ALL ID CARDS</button>
+      <div style="flex:1;"></div>
+      <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;">⚡ SKU AUTO-ASSIGN</button>
+      <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT PICK LISTS</button>
+    </div>
+
+    <!-- ── Main Grid: Managers | Packers | Orders ── -->
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:10px;flex:1;min-height:0;overflow:hidden;">
+
       <!-- PACKERS -->
       <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
         <div class="lbl" style="color:var(--cy);">PACKERS ON SHIFT</div>
         <div id="packer-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
       </div>
+
       <!-- ORDER ASSIGNMENT -->
       <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div class="lbl" style="margin:0;">ASSIGN ORDERS TO PACKERS</div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-g" id="auto-assign-btn" style="font-size:8px;">⚡ SKU AUTO-ASSIGN</button>
-            <button class="btn" id="print-picklist-btn" style="font-size:8px;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT PICK LISTS</button>
-          </div>
-        </div>
+        <div class="lbl">ASSIGN ORDERS TO PACKERS</div>
         <div id="assign-panel" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:5px;"></div>
       </div>
+
     </div>
   </div>
 
-  <!-- ══ PACK STATION ══ -->
+  <!-- ══ PACK STATIO<!-- ══ PACK STATION ══ -->
   <div id="view-pack" class="view" style="gap:8px;position:relative;">
     <!-- Login overlay -->
     <div id="packer-login">
@@ -300,36 +310,6 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
         </div>
       </div>
       <div id="queue"></div>
-    </div>
-  </div>
-
-  <!-- ══ DASHBOARD ══ -->
-  <div id="view-dash" class="view" style="overflow-y:auto;">
-    <div id="dash-wrap">
-      <div class="kgrid">
-        <div class="kpi"><div class="lbl">TOTAL</div><div class="kval" id="d-tot" style="color:var(--cy)">0</div></div>
-        <div class="kpi"><div class="lbl">DONE</div><div class="kval" id="d-don" style="color:var(--gn)">0</div></div>
-        <div class="kpi"><div class="lbl">LEFT</div><div class="kval" id="d-rem" style="color:var(--am)">0</div></div>
-        <div class="kpi"><div class="lbl">PACKERS</div><div class="kval" id="d-pac" style="color:var(--pu)">0</div></div>
-      </div>
-      <div class="card" style="grid-column:1/-1;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-          <span class="lbl" style="margin:0;">DAILY PROGRESS</span>
-          <span id="d-ptx" style="font-size:10px;color:var(--td);"></span>
-        </div>
-        <div class="bar" style="height:14px;"><div class="barf" id="d-bar" style="background:linear-gradient(90deg,var(--cy),var(--gn));width:0%;"></div></div>
-      </div>
-      <!-- Packer leaderboard -->
-      <div class="card" style="grid-column:1/-1;">
-        <div class="lbl">PACKER LEADERBOARD</div>
-        <div id="d-packers" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
-      </div>
-      <div class="card"><div class="lbl">CARRIER BREAKDOWN</div><div id="d-car"></div></div>
-      <div class="card"><div class="lbl">SKU TOTALS</div><div id="d-sku" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div></div>
-      <div class="card" style="grid-column:1/-1;">
-        <div class="lbl">ORDER LIST</div>
-        <div id="d-ord" style="overflow:auto;max-height:260px;"></div>
-      </div>
     </div>
   </div>
 
@@ -858,20 +838,22 @@ function loadDemo(){
 // ══════════════════════════════════════════
 function addManager(){
   var nameEl=document.getElementById('new-mgr-name');
-  var idEl  =document.getElementById('new-mgr-id');
+  var idEl=document.getElementById('new-mgr-id');
   var name=nameEl.value.trim();
-  var id  =idEl.value.trim().toUpperCase();
+  var id=idEl.value.trim().toUpperCase();
   if(!name||!id){alert('Enter both a name and a barcode ID for the manager.');return;}
-  var allIds=packers.map(function(p){return p.id;}).concat(managers.map(function(m){return m.id;}));
-  if(allIds.indexOf(id)>=0){alert('Barcode ID already in use.');return;}
-  managers.push({
+  // Replace existing manager (only one allowed)
+  managers=[{
     id:id, name:name,
-    color:PCOLORS[(managers.length+4)%PCOLORS.length],
+    color:PCOLORS[(packers.length+4)%PCOLORS.length],
+    active:true,
     shiftSessions:[]
-  });
+  }];
   nameEl.value=''; idEl.value='';
+  saveStaff();
   renderManagerPanel();
 }
+
 
 function removeManager(id){
   managers=managers.filter(function(m){return m.id!==id;});
@@ -882,25 +864,22 @@ function renderManagerPanel(){
   var el=document.getElementById('manager-panel');
   if(!el) return;
   if(!managers.length){
-    el.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">No managers added yet.</div>';
+    el.innerHTML='';
     return;
   }
-  el.innerHTML=managers.map(function(m){
-    var col=m.color||PCOLORS[4];
-    return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid '+col+'44;">'
-      +'<div style="width:32px;height:32px;border-radius:50%;background:'+col+'22;border:2px solid '+col+';display:flex;align-items:center;justify-content:center;font-family:Barlow,sans-serif;font-weight:900;font-size:13px;color:'+col+';flex-shrink:0;">'+m.name[0].toUpperCase()+'</div>'
-      +'<div style="flex:1;min-width:0;">'
-        +'<div style="font-size:12px;font-weight:600;color:'+col+';">'+m.name+'</div>'
-        +'<div style="font-size:9px;color:var(--td);margin-top:1px;">ID: '+m.id+'</div>'
-        +'<div style="font-size:9px;color:var(--am);margin-top:1px;">MANAGER</div>'
-      +'</div>'
-      +'<button class="btn btn-r" style="font-size:8px;padding:3px 7px;" data-remove-mgr="'+m.id+'">✕</button>'
-      +'</div>';
-  }).join('');
-  el.querySelectorAll('[data-remove-mgr]').forEach(function(btn){
-    btn.addEventListener('click',function(){ removeManager(btn.dataset.removeMgr); });
-  });
+  var m=managers[0];
+  var col=m.color||PCOLORS[4];
+  el.innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid '+col+'44;border-radius:4px;">'
+    +'<div style="width:32px;height:32px;border-radius:50%;background:'+col+'22;border:2px solid '+col+';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:'+col+';flex-shrink:0;">'+m.name[0].toUpperCase()+'</div>'
+    +'<div style="flex:1;">'
+      +'<div style="font-size:12px;font-weight:600;color:'+col+';">'+m.name+'</div>'
+      +'<div style="font-size:9px;color:var(--td);">ID: '+m.id+'</div>'
+      +'<div style="font-size:9px;color:var(--am);letter-spacing:1px;">MANAGER</div>'
+    +'</div>'
+    +'<button class="btn btn-r" style="font-size:8px;padding:3px 7px;" onclick="managers=[];saveStaff();renderManagerPanel();">✕</button>'
+    +'</div>';
 }
+
 
 // ══════════════════════════════════════════
 // PACKER MANAGEMENT
@@ -922,11 +901,13 @@ function addPacker(){
   packers.push({
     id:id,name:name,
     color:PCOLORS[packers.length%PCOLORS.length],
+    active:true,
     online:false,loginTime:null,
     ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,
-    shiftSessions:[]  // [{clockIn:Date, clockOut:Date, hoursWorked:number}]
+    shiftSessions:[]
   });
   nameEl.value=''; idEl.value='';
+  saveStaff();
   renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
 }
 
@@ -946,17 +927,26 @@ function renderPackerPanel(){
     var col=packerColor(p);
     var avgTime=p.orderTimes.length?Math.round(p.orderTimes.reduce(function(a,b){return a+b;},0)/p.orderTimes.length/1000):0;
     var totalMin=Math.round(p.totalPackTime/60000);
-    return '<div class="packer-row'+(p.online?' online':'')+'" data-packer-id="'+p.id+'">'
+    return '<div class="packer-row'+(p.online?' online':'')+(isOnShift(p)?'':' inactive')+'" data-packer-id="'+p.id+'" style="opacity:'+(isOnShift(p)?'1':'0.4')+';transition:opacity .3s;">'
       +avatarHtml(p,32)
       +'<div class="packer-info">'
-        +'<div class="packer-name" style="color:'+col+'">'+p.name+(p.online?' <span style="color:var(--gn);font-size:9px;">● ONLINE</span>':'')+'</div>'
+        +'<div class="packer-name" style="color:'+col+'">'+p.name+(p.online?' <span style="color:var(--gn);font-size:9px;">● ONLINE</span>':'')+' </div>'
         +'<div class="packer-id">ID: '+p.id+'</div>'
-        +'<div class="packer-stats-mini">'+p.ordersCompleted+' done · '+p.skusScanned+' items'+(avgTime?' · avg '+avgTime+'s/order':'')+(totalMin?' · '+totalMin+'min total':'')+'</div>'
+        +'<div class="packer-stats-mini">'+p.ordersCompleted+' done · '+p.skusScanned+' items'+(avgTime?' · avg '+avgTime+'s/order':'')+(totalMin?' · '+totalMin+'min total':'')+' </div>'
       +'</div>'
-      +'<button class="btn btn-r" style="font-size:8px;padding:3px 7px;" data-remove-packer="'+p.id+'">✕</button>'
+      +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">'
+        +'<button class="btn" style="font-size:8px;padding:3px 9px;border-color:'+(isOnShift(p)?'var(--gn)':'#444')+';color:'+(isOnShift(p)?'var(--gn)':'#555')+';background:'+(isOnShift(p)?'#00ff8815':'transparent')+'" data-toggle-packer="'+p.id+'">'+(isOnShift(p)?'● ON SHIFT':'○ OFF SHIFT')+'</button>'
+        +'<button class="btn btn-r" style="font-size:8px;padding:2px 6px;" data-remove-packer="'+p.id+'">✕</button>'
+      +'</div>'
       +'</div>';
   }).join('');
-  // Wire remove buttons
+  // Wire toggle + remove buttons
+  el.querySelectorAll('[data-toggle-packer]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var p=packers.find(function(p){return p.id===btn.dataset.togglePacker;});
+      if(p){ p.active=!(p.active===true||p.active===undefined||p.active==="true"); saveStaff(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns(); }
+    });
+  });
   el.querySelectorAll('[data-remove-packer]').forEach(function(btn){
     btn.addEventListener('click',function(){ removePacker(btn.dataset.removePacker); });
   });
@@ -1011,7 +1001,8 @@ function renderAssignPanel(){
 
 // Auto-assign: round-robin across packers
 function autoAssign(){
-  if(!packers.length){alert('Add packers first.');return;}
+  var activePkrs=packers.filter(isOnShift);
+  if(!activePkrs.length){alert('No active packers on shift. Toggle packers to ON SHIFT first.');return;}
   var pending=orders.filter(function(o){return o.status==='pending';});
   if(!pending.length){alert('No pending orders to assign.');return;}
 
@@ -1030,13 +1021,13 @@ function autoAssign(){
 
   // Step 3: Load-balance — assign each group to packer with fewest orders so far
   var loads={};
-  packers.forEach(function(p){ loads[p.id]=0; });
+  activePkrs.forEach(function(p){ loads[p.id]=0; });
 
   groupList.forEach(function(g){
     // Find packer with lowest current load
-    var minPacker=packers.reduce(function(best,p){
+    var minPacker=activePkrs.reduce(function(best,p){
       return loads[p.id]<loads[best.id]?p:best;
-    },packers[0]);
+    },activePkrs[0]);
     // Assign all orders in this group to that packer
     g.orders.forEach(function(o){ o.assignedTo=minPacker.id; });
     loads[minPacker.id]+=g.orders.length;
@@ -1044,33 +1035,23 @@ function autoAssign(){
 
   renderAssignPanel(); renderQueue();
   // Show summary
-  var summary=packers.map(function(p){
+  var summary=activePkrs.map(function(p){
     return p.name+': '+loads[p.id]+' orders';
   }).join(' · ');
   pm('✓ SKU-grouped assignment: '+summary);
 }
 
 function printSkuSort(){
-  // Diagnose why it might think orders are empty
+  if(!orders.length){pm('Nothing to print — import a PDF batch first.');return;}
   var withImg=orders.filter(function(o){return o.pageImg;});
-  var noImg=orders.filter(function(o){return !o.pageImg;});
-
-  if(!orders.length){
-    pm('Nothing to print — import a PDF batch first.');
-    return;
-  }
   if(!withImg.length){
-    // Orders exist but no images — PDF was imported before image-capture was added
-    pm('Re-importing to capture label images… ('+orders.length+' orders found but no images)');
-    alert('Labels found but no images captured.\nThis happens if the PDF was imported before the last update.\nPlease re-import the PDF to capture images.');
+    pm('No label images — please re-import the PDF first.');
     return;
-  }
-  if(noImg.length){
-    pm(noImg.length+' orders missing images — they will be skipped.');
   }
 
   pm('Building sorted labels... '+withImg.length+' labels');
 
+  // Group by primary SKU, sort groups by SKU name
   var groups={};
   orders.forEach(function(o){
     if(!o.pageImg) return;
@@ -1079,65 +1060,30 @@ function printSkuSort(){
     groups[sku].push(o);
   });
   var skuKeys=Object.keys(groups).sort();
-  pm(''+skuKeys.length+' SKU groups — opening print window...');
 
-  var css='*{margin:0;padding:0;box-sizing:border-box;}'+'html,body{margin:0;padding:0;background:#fff;}'+'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'+'.group-strip{width:100%;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:#fff;page-break-after:always;border-bottom:none;box-sizing:border-box;padding:20mm;}'+'.group-strip-company{font-family:Arial,sans-serif;font-size:14px;letter-spacing:4px;color:#999;margin-bottom:20px;}'+'.group-strip-sku{font-family:Arial,sans-serif;font-size:48px;font-weight:900;color:#000;letter-spacing:6px;margin-bottom:16px;border-bottom:3px solid #000;padding-bottom:14px;}'+'.group-strip-shelf{font-family:Arial,sans-serif;font-size:22px;color:#333;letter-spacing:2px;margin-bottom:12px;}'+'.group-strip-meta{font-family:Arial,sans-serif;font-size:16px;color:#666;letter-spacing:2px;}'+'@media print{'+'@page{margin:0;padding:0;size:auto;}'+'html,body{margin:0;padding:0;}'+'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'+'.label-page:last-child{page-break-after:avoid;}'+'.label-img{width:100%;height:auto;display:block;vertical-align:top;}'+'.group-strip{background:#fff!important;page-break-after:always;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+'}';
+  // Build HTML — sorted labels only, no divider pages
+  var css='*{margin:0;padding:0;box-sizing:border-box;}'
+    +'html,body{margin:0;padding:0;background:#fff;}'
+    +'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'
+    +'.label-page:last-child{page-break-after:avoid;}'
+    +'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
+    +'@media print{'
+      +'@page{margin:0;padding:0;size:auto;}'
+      +'html,body{margin:0;padding:0;}'
+      +'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
+      +'.label-page:last-child{page-break-after:avoid;}'
+    +'}';
 
-
-  var win=window.open('','_blank');
-  if(!win){ pm('Pop-up blocked — allow pop-ups for this site then try again.'); return; }
-
-  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Labels by SKU</title>'
-    +'<style>'+css+'</style>'
-    +'</head><body id="pb"><div style="padding:30px;font-family:Arial;color:#333;">Loading...</div></body></html>');
-  win.document.close();
-
-  setTimeout(function(){
-    var body=win.document.getElementById('pb');
-    if(!body){ pm('Could not access print window — try again.'); return; }
-    body.innerHTML='';
-
-    skuKeys.forEach(function(sku){
-      var grp=groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
-      var totalQty=grp.reduce(function(s,o){return s+(o.skus&&o.skus[0]?o.skus[0].qty:1);},0);
-
-      grp.forEach(function(o, idx){
-        var pg=win.document.createElement('div');
-        pg.className='label-page';
-
-        // First label in group: insert standalone summary page BEFORE the label
-        if(idx===0){
-          var strip=win.document.createElement('div');
-          strip.className='group-strip';
-          strip.innerHTML='<div class="group-strip-company">DOUBLE SIDED ISCM LLC</div>'
-            +'<div class="group-strip-sku">'+sku+'</div>'
-            +(o.shelf?'<div class="group-strip-shelf">Shelf: '+o.shelf+'</div>':'')
-            +'<div class="group-strip-meta">'+grp.length+' label'+(grp.length!==1?'s':'')+' &nbsp;&middot;&nbsp; '+totalQty+' unit'+(totalQty!==1?'s':'')+' total</div>';
-          body.appendChild(strip);
-        }
-
-        var img=win.document.createElement('img');
-        img.className='label-img';
-        img.src=o.pageImg;
-        pg.appendChild(img);
-        body.appendChild(pg);
-      });
+  // Build body HTML with images as base64 data URIs — no server needed
+  var bodyHtml='';
+  skuKeys.forEach(function(sku){
+    var grp=groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
+    grp.forEach(function(o){
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+o.pageImg+'"/></div>';
     });
+  });
 
-    pm(''+withImg.length+' labels ready — waiting for images to load...');
-
-    var imgs=Array.from(body.querySelectorAll('img'));
-    var done=0;
-    function tryPrint(){
-      done++;
-      if(done>=imgs.length){
-        pm('Print dialog opening...');
-        setTimeout(function(){ win.focus(); win.print(); },300);
-      }
-    }
-    if(!imgs.length){ win.focus(); win.print(); }
-    else{ imgs.forEach(function(img){ if(img.complete){tryPrint();}else{img.onload=tryPrint;img.onerror=tryPrint;} }); }
-  },600);
+  printViaIframe(css, bodyHtml);
 }
 
 
@@ -1236,16 +1182,25 @@ function printPickLists(){
   });
   document.getElementById('pl-print').addEventListener('click',function(){
     var area=document.getElementById('pl-area');
-    if(!area){alert('Nothing to print.');return;}
-    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
-    var win=window.open('','_blank','width=900,height=700');
-    if(!win){alert('Please allow pop-ups for this page, then try again.');return;}
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pick Lists — Double Sided ISCM</title>'
-      +'<style>'+styles+'</style>'
-      +'<style>body{margin:12mm;font-family:Arial,sans-serif;background:#fff;}</style>'
-      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
-      +'</body></html>');
-    win.document.close();
+    if(!area||!area.innerHTML.trim()){alert('Nothing to print.');return;}
+    var css=`
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{background:#fff;font-family:Arial,sans-serif;}
+      .pl-card{page-break-after:always;overflow:hidden;}
+      .pl-card:last-child{page-break-after:auto;}
+      .pl-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
+      .pl-name{font-weight:900;font-size:20px;color:#fff;letter-spacing:2px;}
+      .pl-meta{font-size:10px;color:rgba(255,255,255,.85);letter-spacing:1px;}
+      .pl-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;}
+      .pl-table th{background:#f0f0f0;padding:7px 12px;font-size:9px;
+          letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;}
+      .pl-table td{padding:8px 12px;font-size:11px;border-bottom:1px solid #eee;}
+      .pl-table tr:nth-child(even) td{background:#fafafa;}
+      .pl-footer{padding:6px 12px;font-size:8px;color:#999;
+          letter-spacing:1px;border-top:1px solid #eee;text-align:right;}
+      @page{margin:8mm;size:A4;}
+    `;
+    printViaIframe(css, area.innerHTML);
   });
 }
 
@@ -1277,9 +1232,24 @@ function renderQuickLoginBtns(){
   });
 }
 
-function loginPacker(id){
-  var p=packers.find(function(p){return p.id===id;});
-  if(!p){ setLoginMsg('⚠ ID "'+id+'" not found. Ask manager to register you.','var(--rd)'); bpErr(); return; }
+function loginPacker(rawId){
+  var id=rawId.trim().toUpperCase();
+  // Also check managers — they can clock in too
+  var isMgr=managers.find(function(m){return m.id.trim().toUpperCase()===id;});
+  var p=packers.find(function(p){return p.id.trim().toUpperCase()===id;});
+  if(!p&&!isMgr){
+    // Show registered IDs to help manager debug
+    var allIds=packers.map(function(p){return p.id;}).concat(managers.map(function(m){return m.id;})).join(', ');
+    setLoginMsg('⚠ ID "'+id+'" not found. Registered: '+allIds,'var(--rd)');
+    bpErr();
+    return;
+  }
+  // If manager scanned — just acknowledge, no pack station session needed
+  if(!p&&isMgr){
+    setLoginMsg('✓ Manager '+isMgr.name+' — use Packers tab to manage.','var(--am)');
+    bpLogin();
+    return;
+  }
 
   // ── CLOCK OUT: same packer scanning again while currently logged in ──
   if(currentPacker && currentPacker.id===id){
@@ -1667,11 +1637,14 @@ function renderPayroll(){
   var dateEl=document.getElementById('pr-date');
   if(dateEl) dateEl.textContent=shiftDate;
 
+  // Only show ON SHIFT packers in payroll
+  var shiftPackers=packers.filter(isOnShift);
+
   // Compute live hours for anyone still clocked in
   var now=Date.now();
 
   var totalHrs=0, totalOrders=0, activeNow=0;
-  packers.forEach(function(p){
+  shiftPackers.forEach(function(p){
     // sum completed sessions
     var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
     // add live session if still clocked in
@@ -1681,17 +1654,17 @@ function renderPayroll(){
     if(p.online) activeNow++;
   });
 
-  document.getElementById('pr-packers').textContent=packers.filter(function(p){return p.shiftSessions.length>0||p.online;}).length;
+  document.getElementById('pr-packers').textContent=shiftPackers.filter(function(p){return p.shiftSessions.length>0||p.online;}).length;
   document.getElementById('pr-hrs').textContent=totalHrs.toFixed(2);
   document.getElementById('pr-orders').textContent=totalOrders;
   document.getElementById('pr-active').textContent=activeNow;
 
-  var hasSessions=packers.some(function(p){return p.shiftSessions.length>0||p.online;});
+  var hasSessions=shiftPackers.some(function(p){return p.shiftSessions.length>0||p.online;});
   document.getElementById('pr-status').textContent=hasSessions?'':'No sessions yet — packers must scan their ID to clock in';
 
   // ── TIME SHEET TABLE (one row per packer, totals) ──
   var sheetEl=document.getElementById('pr-sheet');
-  var sheetRows=packers.map(function(p){
+  var sheetRows=shiftPackers.map(function(p){
     var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
     var liveMs=(p.online&&p.loginTime)?(now-p.loginTime):0;
     var liveHrs=liveMs/3600000;
@@ -1720,7 +1693,7 @@ function renderPayroll(){
   // ── SESSION LOG (every individual clock-in/out) ──
   var logEl=document.getElementById('pr-log');
   var allSessions=[];
-  packers.forEach(function(p){
+  shiftPackers.forEach(function(p){
     p.shiftSessions.forEach(function(s){
       allSessions.push({name:p.name,id:p.id,col:packerColor(p),
         clockIn:s.clockIn,clockOut:s.clockOut,hrs:s.hoursWorked,live:false});
@@ -1765,7 +1738,8 @@ function exportPayrollCSV(){
     '""',
     '"PACKER","PACKER ID","CLOCK IN","CLOCK OUT","HOURS WORKED","STATUS"'
   ];
-  packers.forEach(function(p){
+  var shiftPackers=packers.filter(isOnShift);
+  shiftPackers.forEach(function(p){
     p.shiftSessions.forEach(function(s){
       lines.push([
         '"'+p.name+'"',
@@ -1791,7 +1765,8 @@ function exportPayrollCSV(){
   lines.push('""');
   lines.push('"SUMMARY"');
   lines.push('"PACKER","PACKER ID","TOTAL HOURS","SESSIONS","ORDERS PACKED","ITEMS SCANNED"');
-  packers.forEach(function(p){
+  var shiftPackers=packers.filter(isOnShift);
+  shiftPackers.forEach(function(p){
     var sessHrs=p.shiftSessions.reduce(function(a,s){return a+s.hoursWorked;},0);
     if(p.online&&p.loginTime) sessHrs+=((now-p.loginTime)/3600000);
     lines.push([
@@ -1847,6 +1822,30 @@ var C128={
 // ══════════════════════════════════════════
 // PRINT PACKER ID CARDS  (credit card size)
 // ══════════════════════════════════════════
+function printViaIframe(css, bodyHtml){
+  // Remove any previous print iframe
+  var old=document.getElementById('_pf'); if(old) old.remove();
+  var iframe=document.createElement('iframe');
+  iframe.id='_pf';
+  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+  document.body.appendChild(iframe);
+  var doc=iframe.contentDocument||iframe.contentWindow.document;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<style>'+css+'</style>'
+    +'</head><body>'+bodyHtml+'</body></html>');
+  doc.close();
+  // Wait for images to load before printing
+  iframe.onload=function(){
+    setTimeout(function(){
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    },400);
+  };
+}
+// Keep for compatibility
+function downloadAndPrint(filename,css,bodyHtml){ printViaIframe(css,bodyHtml); }
+
 function printPackerCards(){
   if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
   var allCards='';
@@ -1921,23 +1920,80 @@ function printPackerCards(){
   });
   document.getElementById('ov-print').addEventListener('click',function(){
     var area=document.getElementById('card-print-area');
-    if(!area){alert('Nothing to print.');return;}
-    var styles=Array.from(document.querySelectorAll('style')).map(function(s){return s.textContent;}).join('\n');
-    var win=window.open('','_blank','width=900,height=700');
-    if(!win){alert('Please allow pop-ups for this page, then try again.');return;}
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>ID Cards — Double Sided ISCM</title>'
-      +'<style>'+styles+'</style>'
-      +'<style>body{margin:12mm;font-family:Arial,sans-serif;background:#fff;}</style>'
-      +'</head><body>'+area.innerHTML+'<scr'+'ipt>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};</scr'+'ipt>'
-      +'</body></html>');
-    win.document.close();
+    if(!area||!area.innerHTML.trim()){alert('Nothing to print.');return;}
+    var css=`
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{background:#fff;font-family:Arial,sans-serif;padding:8mm;}
+      .ic{width:85mm;height:54mm;border:1px solid #ccc;border-radius:4px;overflow:hidden;
+          display:inline-flex;flex-direction:column;page-break-inside:avoid;margin:3px;vertical-align:top;}
+      .ic-top{height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
+      .ic-logo{font-weight:900;font-size:8px;letter-spacing:2px;color:#fff;font-family:Arial,sans-serif;}
+      .ic-rolebadge{font-size:7px;letter-spacing:2px;color:rgba(255,255,255,.85);
+          background:rgba(0,0,0,.2);padding:2px 6px;border-radius:2px;font-family:Arial,sans-serif;}
+      .ic-name{flex:1;display:flex;align-items:center;justify-content:center;
+          font-weight:700;font-size:22px;letter-spacing:2px;color:#111;font-family:Arial,sans-serif;}
+      .ic-pos{font-family:Arial,sans-serif;font-size:8px;letter-spacing:3px;
+          text-align:center;margin-bottom:2px;font-weight:600;}
+      .ic-bar{display:flex;justify-content:center;align-items:center;padding:2px 10px 6px;}
+      .ic-bar svg{max-width:260px;display:block;}
+      @page{margin:5mm;size:A4;}
+    `;
+    printViaIframe(css, '<div style="display:flex;flex-wrap:wrap;gap:4px;">'+area.innerHTML+'</div>');
   });
 }
 
 // ══════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════
+
+// ══════════════════════════════════════════
+// STAFF PERSISTENCE (localStorage)
+// ══════════════════════════════════════════
+
+function isOnShift(p){
+  // Returns true only if explicitly active (handles undefined, string "true"/"false", boolean)
+  return p.active===true || p.active===undefined || p.active==='true';
+}
+function isOffShift(p){ return !isOnShift(p); }
+
+function saveStaff(){
+  try{
+    localStorage.setItem('warehub_packers', JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+  }catch(e){ console.warn('Could not save staff:', e); }
+}
+
+function loadStaff(){
+  try{
+    var sp=localStorage.getItem('warehub_packers');
+    var sm=localStorage.getItem('warehub_managers');
+    if(sp) packers=JSON.parse(sp);
+    if(sm) managers=JSON.parse(sm);
+    // Ensure all packers have required fields (backwards compat)
+    packers.forEach(function(p){
+      // Normalise active to strict boolean
+      if(p.active===undefined||p.active==='true') p.active=true;
+      else if(p.active===false||p.active==='false') p.active=false;
+      else p.active=true;
+      if(!p.orderTimes) p.orderTimes=[];
+      if(!p.shiftSessions) p.shiftSessions=[];
+      if(p.ordersCompleted===undefined) p.ordersCompleted=0;
+      if(p.skusScanned===undefined) p.skusScanned=0;
+      if(p.totalPackTime===undefined) p.totalPackTime=0;
+      p.online=false; // always start clocked out
+      p.loginTime=null;
+    });
+    managers.forEach(function(m){
+      if(m.active===undefined) m.active=true;
+      if(!m.shiftSessions) m.shiftSessions=[];
+    });
+  }catch(e){ console.warn('Could not load staff:', e); }
+}
+
 document.addEventListener('DOMContentLoaded', function(){
+
+  // Load persisted staff on startup
+  loadStaff();
 
   document.querySelectorAll('.tab').forEach(function(btn){
     btn.addEventListener('click', function(){ gv(btn.dataset.view); });
@@ -2001,12 +2057,28 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   // Login scan
-  document.getElementById('login-scan-in').addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
-      var v=this.value.trim().toUpperCase();
-      if(v) loginPacker(v);
-    }
-  });
+  (function(){
+    var loginTimer=null;
+    var loginEl=document.getElementById('login-scan-in');
+    loginEl.addEventListener('keydown',function(e){
+      // Handle Enter or carriage return from scan gun
+      if(e.key==='Enter'||e.keyCode===13){
+        clearTimeout(loginTimer);
+        var v=this.value.trim().toUpperCase();
+        if(v){ loginPacker(v); }
+        e.preventDefault();
+        return;
+      }
+      // Timing fallback: scan guns type fast, submit after 100ms silence
+      clearTimeout(loginTimer);
+      var self=this;
+      loginTimer=setTimeout(function(){
+        var v=self.value.trim().toUpperCase();
+        // Only auto-submit if value looks like a barcode (≥4 chars, no spaces)
+        if(v&&v.length>=4&&!/\s/.test(v)){ loginPacker(v); }
+      },150);
+    });
+  })();
 
   // Switch packer button
   document.getElementById('cp-switch').addEventListener('click',function(){
@@ -2015,9 +2087,25 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   // SKU scan
-  document.getElementById('scan-in').addEventListener('keydown',function(e){
-    if(e.key==='Enter'){ var v=this.value.trim(); if(v) doScan(v); }
-  });
+  (function(){
+    var scanTimer=null;
+    var scanEl=document.getElementById('scan-in');
+    scanEl.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.keyCode===13){
+        clearTimeout(scanTimer);
+        var v=this.value.trim();
+        if(v){ doScan(v); }
+        e.preventDefault();
+        return;
+      }
+      clearTimeout(scanTimer);
+      var self=this;
+      scanTimer=setTimeout(function(){
+        var v=self.value.trim();
+        if(v&&v.length>=4&&!/\s/.test(v)){ doScan(v); }
+      },150);
+    });
+  })();
 
   // Keep scan focused on pack view
   document.addEventListener('click',function(e){
@@ -2040,6 +2128,62 @@ document.addEventListener('DOMContentLoaded', function(){
 
   document.getElementById('print-cards-btn').addEventListener('click', printPackerCards);
 });
+
+
+
+
+function fmPlay(v){
+  v=(v||'').trim(); if(!v)return;
+  var f=document.getElementById('fm-frame');
+  var m=v.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  var pl=v.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  if(m){ var s='https://www.youtube.com/embed/'+m[1]+'?autoplay=1&rel=0'; if(pl)s+='&list='+pl[1]; f.src=s; }
+  else { f.src='https://www.youtube.com/embed?listType=search&list='+encodeURIComponent(v)+'&autoplay=1'; }
+}
+function fmQ(q){ document.getElementById('fm-inp').value=q; fmPlay(q); }
 </script>
+
+
+  </div>
+  
+</div>
+
+
+<!-- ══ FLOATING MUSIC ══ -->
+<style>
+#fm-btn{position:fixed;bottom:24px;right:24px;z-index:9999;width:48px;height:48px;border-radius:50%;background:#00e5ff;color:#000;border:none;font-size:22px;cursor:pointer;box-shadow:0 4px 20px rgba(0,229,255,.5);display:flex;align-items:center;justify-content:center;transition:transform .15s;}
+#fm-btn:hover{transform:scale(1.1);}
+#fm-panel{position:fixed;bottom:84px;right:24px;z-index:9998;width:320px;background:#0a0f1e;border:1px solid #1a2f4e;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.8);display:none;flex-direction:column;overflow:hidden;}
+#fm-panel.open{display:flex;}
+#fm-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;background:#0d1528;border-bottom:1px solid #1a2f4e;}
+#fm-inp{flex:1;background:#05080f;border:1px solid #1a2f4e;color:#fff;padding:5px 8px;font-size:10px;font-family:inherit;border-radius:4px;outline:none;}
+#fm-inp:focus{border-color:#00e5ff;}
+#fm-play{background:#00e5ff;color:#000;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-weight:900;font-size:12px;}
+#fm-close{background:none;border:none;color:#555;cursor:pointer;font-size:14px;padding:0 4px;}
+#fm-close:hover{color:#fff;}
+#fm-frame{width:100%;aspect-ratio:16/9;background:#000;border:none;display:block;}
+#fm-presets{display:flex;gap:4px;padding:6px 10px;flex-wrap:wrap;}
+.fmp{background:transparent;border:1px solid #1a2f4e;color:#666;font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:1px;}
+.fmp:hover{border-color:#00e5ff;color:#00e5ff;}
+</style>
+
+<button id="fm-btn" onclick="document.getElementById('fm-panel').classList.toggle('open')">♪</button>
+<div id="fm-panel">
+  <div id="fm-bar">
+    <input id="fm-inp" placeholder="YouTube URL or search…" onkeydown="if(event.key==='Enter')fmPlay(this.value)"/>
+    <button id="fm-play" onclick="fmPlay(document.getElementById('fm-inp').value)">▶</button>
+    <button id="fm-close" onclick="document.getElementById('fm-panel').classList.remove('open');document.getElementById('fm-frame').src=''">✕</button>
+  </div>
+  <iframe id="fm-frame" allow="autoplay;encrypted-media;fullscreen" allowfullscreen></iframe>
+  <div id="fm-presets">
+    <button class="fmp" onclick="fmQ('lofi hip hop beats to work study')">Lo-Fi</button>
+    <button class="fmp" onclick="fmQ('upbeat pop hits playlist')">Pop</button>
+    <button class="fmp" onclick="fmQ('edm electronic dance music mix')">EDM</button>
+    <button class="fmp" onclick="fmQ('classic rock greatest hits')">Rock</button>
+    <button class="fmp" onclick="fmQ('chinese mandarin pop hits')">C-Pop</button>
+  </div>
+</div>
+
+
 </body>
 </html>
