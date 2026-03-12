@@ -432,7 +432,15 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="pr-status" style="font-size:9px;color:var(--td);"></span>
+        <button class="btn" id="reset-hours-btn" style="border-color:var(--rd);color:var(--rd);" onclick="
+          if(!confirm('Clear ALL shift sessions and hours for every packer? This cannot be undone.\n\nTip: export CSV first if you need a record.')) return;
+          packers.forEach(function(p){ p.shiftSessions=[]; p.loginTime=null; p.online=false; p.ordersCompleted=0; p.skusScanned=0; p.orderTimes=[]; p.totalPackTime=0; });
+          currentPacker=null; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); showLoginOrPack();
+          pm('✓ Hours reset. Ready for a new shift.');
+        ">↺ RESET HOURS</button>
         <button class="btn btn-g" id="export-csv-btn">⬇ EXPORT CSV</button>
+        <button class="btn" id="excel-connect-btn" style="border-color:#1D6F42;color:#1D6F42;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
+        <button class="btn" id="excel-save-btn" style="border-color:#1D6F42;color:#1D6F42;display:none;" onclick="excelSavePayroll()">📊 SAVE TO EXCEL</button>
       </div>
     </div>
     <!-- Summary cards -->
@@ -1560,24 +1568,41 @@ function doScan(raw){
   if(!scanned) return;
   document.getElementById('scan-in').value='';
 
+  // Normalize: strip spaces, dashes, parentheses for comparison
+  function norm(s){ return s.replace(/[\s\-().]/g,'').toUpperCase(); }
+  var scannedNorm=norm(scanned);
+
   // ── STATE: idle or scan-label ── look for a tracking number
   if(packState==='idle' || packState==='scan-label'){
 
-    // Find order by tracking
+    // Find order by tracking — try exact first, then normalized
     var order=null;
     for(var i=0;i<orders.length;i++){
-      if(orders[i].tracking.toUpperCase()===scanned){order=orders[i];break;}
+      if(norm(orders[i].tracking)===scannedNorm){order=orders[i];break;}
+    }
+
+    // Still not found — try substring match (gun may read full barcode, stored may be shorter or vice versa)
+    if(!order){
+      for(var i=0;i<orders.length;i++){
+        var t=norm(orders[i].tracking);
+        if(t.length>=10 && scannedNorm.length>=10){
+          if(scannedNorm.indexOf(t)>=0 || t.indexOf(scannedNorm)>=0){
+            order=orders[i]; break;
+          }
+        }
+      }
     }
 
     if(!order){
-      // Maybe they scanned an FNSKU when they should scan a label
       if(packState==='scan-label'){
         bpErr(); flash('err');
         setErr('✗ Scan the SHIPPING LABEL (tracking barcode), not the item');
         setFb('✗ WRONG SCAN','var(--rd)');
       } else {
         bpErr(); flash('err');
-        setErr('✗ "'+scanned+'" — label not found. Re-import PDF or check barcode.');
+        // Show what was scanned to help diagnose mismatches
+        var stored=orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
+        setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
         setFb('✗ NOT FOUND','var(--rd)');
       }
       focusScan(); return;
@@ -1617,9 +1642,11 @@ function doScan(raw){
   if(packState==='verify-items'){
 
     // Check if they accidentally scanned a tracking number (shipping label)
-    var isLabel=orders.some(function(o){return o.tracking.toUpperCase()===scanned;});
+    var isLabel=orders.some(function(o){return norm(o.tracking)===scannedNorm;});
+    if(!isLabel) isLabel=orders.some(function(o){var t=norm(o.tracking);return t.length>=10&&scannedNorm.length>=10&&(scannedNorm.indexOf(t)>=0||t.indexOf(scannedNorm)>=0);});
     if(isLabel){
-      if(scanned===activeOrder.tracking){
+      var isThisLabel=(norm(activeOrder.tracking)===scannedNorm)||(scannedNorm.indexOf(norm(activeOrder.tracking))>=0||norm(activeOrder.tracking).indexOf(scannedNorm)>=0);
+      if(isThisLabel){
         // Tried to scan label before verifying items
         bpErr(); flash('err');
         var remaining=verifySkus.filter(function(v){return !v.scanned;});
@@ -1999,7 +2026,8 @@ function renderPayroll(){
     +'<th style="text-align:center;padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">PACKAGES</th>'
     +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">FIRST IN</th>'
     +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">LAST OUT</th>'
-    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">TOTAL HRS</th></tr>'
+    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">TOTAL HRS</th>'
+    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">ACTIONS</th></tr>'
     +rows.map(function(r){
       var col=packerColor(r.p);
       var sessions=r.p.shiftSessions||[];
@@ -2013,13 +2041,22 @@ function renderPayroll(){
       if(earliestMs) firstIn=new Date(earliestMs).toLocaleTimeString();
       var lastOut=r.p.online?'<span style="color:var(--gn);">● ACTIVE</span>':'—';
       if(!r.p.online&&sessions.length){ var last=sessions[sessions.length-1]; var t2=last.clockOut?new Date(last.clockOut):null; if(t2) lastOut=t2.toLocaleTimeString(); }
-      return '<tr style="border-bottom:1px solid var(--bdr);">'
+            return '<tr style="border-bottom:1px solid var(--bdr);">'
         +'<td style="padding:9px 10px;"><span style="color:'+col+';font-weight:700;">'+r.p.name+'</span>'
-        +(isOffShift(r.p)?'<span style="font-size:8px;color:var(--td);margin-left:6px;">OFF SHIFT</span>':'')+'</td>'
+        +(isOffShift(r.p)?'<span style="font-size:8px;color:var(--td);margin-left:6px;">OFF SHIFT</span>':'')
+        +'</td>'
         +'<td style="text-align:center;font-size:15px;font-weight:700;color:var(--cy);padding:9px 10px;">'+r.done+'</td>'
         +'<td style="font-size:10px;padding:9px 10px;">'+firstIn+'</td>'
         +'<td style="font-size:10px;padding:9px 10px;">'+lastOut+'</td>'
         +'<td style="font-size:11px;color:var(--am);padding:9px 10px;">'+(r.hrs>0?r.hrs.toFixed(2)+' hrs':'—')+'</td>'
+        +'<td style="padding:6px 10px;white-space:nowrap;">'
+        +(r.p.online
+          ? '<button data-pr-clockout="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--am);background:transparent;color:var(--am);cursor:pointer;font-family:inherit;margin-right:4px;">⏹ CLOCK OUT</button>'
+          : '')
+        +(isOnShift(r.p)
+          ? '<button data-pr-deactivate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--bdr);background:transparent;color:var(--td);cursor:pointer;font-family:inherit;">○ OFF SHIFT</button>'
+          : '<button data-pr-activate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--gn)44;background:transparent;color:var(--gn);cursor:pointer;font-family:inherit;">● ON SHIFT</button>')
+        +'</td>'
         +'</tr>';
     }).join('')
     +'<tr style="border-top:2px solid var(--bdr);font-weight:700;">'
@@ -2028,6 +2065,28 @@ function renderPayroll(){
       +'<td></td><td></td>'
       +'<td style="color:var(--am);padding:9px 10px;">'+totalHrs.toFixed(2)+' hrs</td>'
     +'</tr></table>';
+
+
+  // Wire payroll action buttons
+  sheet.querySelectorAll('[data-pr-clockout]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var p=packers.find(function(pk){return pk.id===btn.dataset.prClockout;});
+      if(p) loginPacker(p.id); // loginPacker handles clock-out when p.online
+      renderPayroll();
+    });
+  });
+  sheet.querySelectorAll('[data-pr-deactivate]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var p=packers.find(function(pk){return pk.id===btn.dataset.prDeactivate;});
+      if(p){ p.active=false; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); }
+    });
+  });
+  sheet.querySelectorAll('[data-pr-activate]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var p=packers.find(function(pk){return pk.id===btn.dataset.prActivate;});
+      if(p){ p.active=true; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); }
+    });
+  });
 
   // Session log → pr-log (every individual clock-in/out)
   var log=document.getElementById('pr-log');
@@ -2132,86 +2191,185 @@ function renderFloor(){
 // ══════════════════════════════════════════
 function printPackerCards(){
   if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
-  var allCards='';
-  managers.forEach(function(m){
-    var col=m.color||PCOLORS[4];
-    var svg=C128.svg(m.id,2,48);
-    allCards+='<div class="ic">'
-      +'<div class="ic-top" style="background:'+col+';">'
-        +'<div class="ic-init">'+packerInitial(m)+'</div>'
-        +'<div class="ic-name">'+m.name+'</div>'
-        +'<div class="ic-role">MANAGER</div>'
-      +'</div>'
-      +'<div class="ic-bot">'
-        +'<div class="ic-svg">'+svg+'</div>'
-        +'<div class="ic-id">'+m.id+'</div>'
-      +'</div>'
+
+  // One card per page, 4"×6" thermal label
+  // All text BLACK on WHITE — no grays, no colors (thermal paper ignores white ink)
+  function makeCard(person, role){
+    var svg=C128.svg(person.id, 3, 80);
+    return '<div class="ic">'
+      +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+      +'<div class="ic-divider"></div>'
+      +'<div class="ic-init">'+packerInitial(person)+'</div>'
+      +'<div class="ic-name">'+person.name+'</div>'
+      +'<div class="ic-role">'+role+'</div>'
+      +'<div class="ic-divider"></div>'
+      +'<div class="ic-svg">'+svg+'</div>'
+      +'<div class="ic-id">'+person.id+'</div>'
       +'</div>';
-  });
-  packers.forEach(function(p){
-    var col=packerColor(p);
-    var svg=C128.svg(p.id,2,48);
-    allCards+='<div class="ic">'
-      +'<div class="ic-top" style="background:'+col+';">'
-        +'<div class="ic-init">'+packerInitial(p)+'</div>'
-        +'<div class="ic-name">'+p.name+'</div>'
-        +'<div class="ic-role">PACKER</div>'
-      +'</div>'
-      +'<div class="ic-bot">'
-        +'<div class="ic-svg">'+svg+'</div>'
-        +'<div class="ic-id">'+p.id+'</div>'
-      +'</div>'
-      +'</div>';
-  });
-  // Build overlay dynamically (same pattern as printPickLists)
+  }
+
+  // Print CSS: 4×6 inch per card, one per page, solid black text only
+  var printCss=
+    '*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{background:#fff;font-family:Arial,Helvetica,sans-serif;}'
+    +'.ic{'
+      +'width:4in;height:6in;'
+      +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      +'padding:0.3in;'
+      +'page-break-after:always;'
+      +'background:#fff;'
+      +'border:3px solid #000;'  // visible border for cutting guide
+    +'}'
+    +'.ic:last-child{page-break-after:auto;}'
+    +'.ic-company{font-size:9pt;font-weight:700;color:#000;letter-spacing:3px;text-align:center;margin-bottom:6pt;}'
+    +'.ic-divider{width:80%;border-top:2px solid #000;margin:8pt auto;}'
+    +'.ic-init{font-size:72pt;font-weight:900;color:#000;line-height:1;text-align:center;}'
+    +'.ic-name{font-size:28pt;font-weight:900;color:#000;text-align:center;margin-top:6pt;letter-spacing:1px;}'
+    +'.ic-role{font-size:10pt;font-weight:700;color:#000;letter-spacing:4px;text-align:center;margin-top:4pt;}'
+    +'.ic-svg{width:100%;text-align:center;margin-top:4pt;}'
+    +'.ic-svg svg{width:90%;height:auto;}'
+    +'.ic-id{font-size:10pt;color:#000;margin-top:4pt;letter-spacing:3px;font-family:monospace;font-weight:700;text-align:center;}'
+    +'@page{size:4in 6in;margin:0;}'
+    +'@media print{html,body{width:4in;height:6in;margin:0;padding:0;}}';
+
+  // Preview CSS — shows white card on dark overlay
+    // Preview CSS — colorful screen display, print stays black-only
+  var previewCss=
+    '.ic-prev{'
+      +'width:240px;height:360px;border-radius:12px;display:flex;flex-direction:column;'
+      +'overflow:hidden;cursor:pointer;position:relative;'
+      +'box-shadow:0 8px 32px #0008;transition:transform .15s,box-shadow .15s;'
+    +'}'
+    +'.ic-prev:hover{transform:translateY(-4px);box-shadow:0 14px 40px #000a;}'
+    +'.ic-prev .ic-header{'
+      +'flex:0 0 52%;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      +'padding:16px 12px 10px;position:relative;overflow:hidden;'
+    +'}'
+    +'.ic-prev .ic-company{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:3px;text-align:center;margin-bottom:6px;}'
+    +'.ic-prev .ic-init{font-size:56px;font-weight:900;color:#fff;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.4);}'
+    +'.ic-prev .ic-name{font-size:14px;font-weight:900;color:#fff;text-align:center;margin-top:6px;letter-spacing:.5px;text-shadow:0 1px 4px rgba(0,0,0,.4);}'
+    +'.ic-prev .ic-body{'
+      +'flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;'
+      +'justify-content:center;padding:10px 12px;gap:4px;'
+    +'}'
+    +'.ic-prev .ic-role{font-size:7px;font-weight:700;letter-spacing:4px;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);margin-bottom:4px;}'
+    +'.ic-prev .ic-divider{width:60%;border-top:1px solid rgba(255,255,255,.15);margin:4px auto;}'
+    +'.ic-prev .ic-svg{width:100%;text-align:center;background:#fff;border-radius:4px;padding:4px;}'
+    +'.ic-prev .ic-svg svg{width:90%;height:auto;}'
+    +'.ic-prev .ic-id{font-size:7px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}';
+
   var existing=document.getElementById('card-print-overlay');
   if(existing) existing.remove();
+  var styleTag=document.getElementById('ic-style');
+  if(styleTag) styleTag.remove();
 
-  var ov=document.createElement('div');
+  var previewStyle=document.createElement('style');
+  previewStyle.id='ic-style';
+  previewStyle.textContent=previewCss;
+  document.head.appendChild(previewStyle);
+
+  // Build preview cards with per-packer gradient colors
+  var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+  var cardPreviews='';
+  allPeople.forEach(function(item,i){
+    var svg=C128.svg(item.person.id, 2, 50);
+    var baseCol=item.person.color||defaultColors[i%defaultColors.length];
+    var isManager=item.role==='MANAGER';
+    var headerBg=isManager?'linear-gradient(145deg,#b8860b,#8b6914)':'linear-gradient(145deg,'+baseCol+','+baseCol+'99)';
+    cardPreviews+=
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">'
+      +'<div class="ic-prev" data-pid="'+item.person.id+'" data-role="'+item.role+'" style="cursor:pointer;box-shadow:0 8px 32px '+baseCol+'44;">'
+        +'<div class="ic-header" style="background:'+headerBg+'">'
+          +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+          +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
+          +'<div class="ic-name">'+item.person.name+'</div>'
+        +'</div>'
+        +'<div class="ic-body">'
+          +'<div class="ic-role" style="border-color:'+baseCol+'66;color:'+baseCol+';">'+item.role+'</div>'
+          +'<div class="ic-divider"></div>'
+          +'<div class="ic-svg">'+svg+'</div>'
+          +'<div class="ic-id">'+item.person.id+'</div>'
+        +'</div>'
+      +'</div>'
+      +'<button data-pid="'+item.person.id+'" data-role="'+item.role+'" '
+        +'style="padding:5px 16px;font-size:9px;letter-spacing:2px;background:'+baseCol+';color:#fff;border:none;cursor:pointer;font-family:inherit;border-radius:4px;">🖨 PRINT</button>'
+      +'</div>';
+  });
+
+var ov=document.createElement('div');
   ov.id='card-print-overlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
   ov.innerHTML=
-    '<div style="width:100%;max-width:760px;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'+
-      '<div style="font-size:10px;letter-spacing:3px;color:#aaa;">ID CARDS — DOUBLE SIDED ISCM LLC</div>'+
-      '<div style="display:flex;gap:8px;">'+
-        '<button id="ic-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'+
-        '<button id="ic-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'+
-      '</div>'+
-    '</div>'+
-    '<div id="card-print-area" style="display:flex;flex-wrap:wrap;gap:12px;">'+allCards+'</div>'+
-    '</div>';
+    '<div style="width:100%;max-width:900px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      +'<div>'
+        +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">ID CARDS — DOUBLE SIDED ISCM LLC</div>'
+        +'<div style="font-size:9px;color:#666;margin-top:3px;">4″ × 6″ thermal · black ink · click card or PRINT button to print individually</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;">'
+        +'<button onclick="printAllCards()" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
+        +'<button id="ic-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;">✕ CLOSE</button>'
+      +'</div>'
+    +'</div>'
+    +'<div style="font-size:8px;color:#555;margin-bottom:20px;">Tip: set paper size to 4×6 in printer dialog · disable headers/footers · scale = 100%</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:20px;">'+cardPreviews+'</div>'
+    +'</div>';
 
-  var style=document.createElement('style');
-  style.id='ic-style';
-  style.textContent=
-    '.ic{width:220px;background:#fff;border-radius:8px;overflow:hidden;page-break-inside:avoid;}'+
-    '.ic-top{padding:16px;text-align:center;}'+
-    '.ic-init{font-size:40px;font-weight:900;color:#fff;line-height:1;}'+
-    '.ic-name{font-size:13px;font-weight:700;color:#fff;margin-top:6px;letter-spacing:1px;}'+
-    '.ic-role{font-size:9px;color:rgba(255,255,255,.8);letter-spacing:3px;margin-top:2px;}'+
-    '.ic-bot{padding:10px;text-align:center;background:#fff;}'+
-    '.ic-svg svg{max-width:100%;}'+
-    '.ic-id{font-size:10px;color:#666;margin-top:4px;letter-spacing:1px;}'+
-    '@media print{'+
-      'body>*{display:none!important;}'+
-      '#card-print-overlay{display:flex!important;position:static!important;background:#fff!important;padding:0!important;overflow:visible!important;flex-direction:row!important;flex-wrap:wrap!important;}'+
-      '#ic-print,#ic-close,#card-print-overlay>div>div:first-child{display:none!important;}'+
-      '.ic{margin:4mm;width:85mm;}'+
-    '}';
-  document.head.appendChild(style);
   document.body.appendChild(ov);
 
-  document.getElementById('ic-close').addEventListener('click',function(){
-    ov.remove(); var s=document.getElementById('ic-style'); if(s) s.remove();
+  // Event delegation for card clicks and print buttons
+  ov.addEventListener('click',function(e){
+    var el=e.target.closest('[data-pid]');
+    if(!el) return;
+    printSingleCard(el.dataset.pid, el.dataset.role);
   });
-  document.getElementById('ic-print').addEventListener('click',function(){
-    var area=document.getElementById('card-print-area');
-    if(!area) return;
-    var css=style.textContent+'@page{margin:5mm;}';
-    printViaIframe(css, area.innerHTML);
-  });
+
+  document.getElementById('ic-close').onclick=function(){
+    ov.remove();
+    var s=document.getElementById('ic-style'); if(s) s.remove();
+  };
+
+  // Store print data for individual prints
+  window._icPrintData={people:allPeople, css:printCss};
 }
+
+function printSingleCard(personId, role){
+  if(!window._icPrintData) return;
+  var item=window._icPrintData.people.find(function(x){return x.person.id===personId&&x.role===role;});
+  if(!item) return;
+  var svg=C128.svg(item.person.id, 3, 80);
+  var html='<div class="ic">'
+    +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+    +'<div class="ic-divider"></div>'
+    +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
+    +'<div class="ic-name">'+item.person.name+'</div>'
+    +'<div class="ic-role">'+item.role+'</div>'
+    +'<div class="ic-divider"></div>'
+    +'<div class="ic-svg">'+svg+'</div>'
+    +'<div class="ic-id">'+item.person.id+'</div>'
+    +'</div>';
+  printViaIframe(window._icPrintData.css, html);
+}
+
+function printAllCards(){
+  if(!window._icPrintData) return;
+  var html='';
+  window._icPrintData.people.forEach(function(item){
+    var svg=C128.svg(item.person.id, 3, 80);
+    html+='<div class="ic">'
+      +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+      +'<div class="ic-divider"></div>'
+      +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
+      +'<div class="ic-name">'+item.person.name+'</div>'
+      +'<div class="ic-role">'+item.role+'</div>'
+      +'<div class="ic-divider"></div>'
+      +'<div class="ic-svg">'+svg+'</div>'
+      +'<div class="ic-id">'+item.person.id+'</div>'
+      +'</div>';
+  });
+  printViaIframe(window._icPrintData.css, html);
+}
+
 
 // ══════════════════════════════════════════
 // PRINT PICK LISTS
@@ -2277,87 +2435,302 @@ function printViaIframe(css, bodyHtml){
     }
   },800);
 }
+// ══════════════════════════════════════════
+// MICROSOFT EXCEL ONLINE INTEGRATION
+// Uses MSAL implicit flow — no backend needed
+// ══════════════════════════════════════════
 
+// App registration: uses a public client ID that works for OneDrive personal + work
+// User must sign in once; token stored in sessionStorage
+var EXCEL_CLIENT_ID = '';  // filled by user via setup modal
+var EXCEL_FILE_ID   = '';  // OneDrive file ID, set after user picks file
+var EXCEL_SHEET     = 'Warehub Payroll';  // sheet tab name
+var _msalToken      = null;
+
+function excelLoadConfig(){
+  try{
+    var cfg=JSON.parse(localStorage.getItem('warehub_excel')||'{}');
+    EXCEL_CLIENT_ID = cfg.clientId||'';
+    EXCEL_FILE_ID   = cfg.fileId||'';
+    EXCEL_SHEET     = cfg.sheet||'Warehub Payroll';
+    _msalToken      = sessionStorage.getItem('warehub_msal_token')||null;
+  }catch(e){}
+  excelUpdateUI();
+}
+
+function excelSaveConfig(){
+  try{
+    localStorage.setItem('warehub_excel', JSON.stringify({
+      clientId: EXCEL_CLIENT_ID,
+      fileId:   EXCEL_FILE_ID,
+      sheet:    EXCEL_SHEET
+    }));
+  }catch(e){}
+  excelUpdateUI();
+}
+
+function excelUpdateUI(){
+  var connectBtn = document.getElementById('excel-connect-btn');
+  var saveBtn    = document.getElementById('excel-save-btn');
+  if(!connectBtn||!saveBtn) return;
+  var ready = EXCEL_FILE_ID && _msalToken;
+  connectBtn.style.display = ready ? 'none' : '';
+  saveBtn.style.display    = ready ? '' : 'none';
+  if(_msalToken && !EXCEL_FILE_ID){
+    connectBtn.textContent = '⊞ PICK EXCEL FILE';
+    connectBtn.style.borderColor='#f59e0b';
+    connectBtn.style.color='#f59e0b';
+  } else if(!_msalToken){
+    connectBtn.textContent = '⊞ CONNECT EXCEL';
+    connectBtn.style.borderColor='#1D6F42';
+    connectBtn.style.color='#1D6F42';
+  }
+}
+
+function excelConnect(){
+  // Show setup modal
+  var existing = document.getElementById('excel-setup-modal');
+  if(existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'excel-setup-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML =
+    '<div style="background:var(--sur);border:1px solid var(--bdr);padding:28px;width:480px;max-width:94vw;">' +
+    '<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">EXCEL ONLINE SETUP</div>' +
+    '<div style="font-size:11px;color:var(--td);margin-bottom:20px;">Connect once — then click Save to Excel at end of each day</div>' +
+
+    '<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">STEP 1 — AZURE APP CLIENT ID</div>' +
+    '<div style="font-size:10px;color:var(--td);margin-bottom:8px;">Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" style="color:var(--cy);">portal.azure.com → App registrations → New</a> · Set redirect URI to <code style="background:var(--bg);padding:2px 5px;">'+window.location.origin+'</code> · Copy the Application (client) ID below:</div>' +
+    '<input id="excel-client-id-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="'+EXCEL_CLIENT_ID+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:16px;outline:none;"/>' +
+
+    '<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">STEP 2 — EXCEL FILE NAME (on OneDrive)</div>' +
+    '<input id="excel-filename-input" placeholder="e.g. ISCM Payroll 2025.xlsx" value="" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:6px;outline:none;"/>' +
+    '<div style="font-size:9px;color:var(--td);margin-bottom:16px;">File must exist in your OneDrive. Sheet tab will be created automatically.</div>' +
+
+    '<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">STEP 3 — SHEET TAB NAME (optional)</div>' +
+    '<input id="excel-sheet-input" placeholder="Warehub Payroll" value="'+EXCEL_SHEET+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:20px;outline:none;"/>' +
+
+    '<div id="excel-setup-msg" style="font-size:10px;color:var(--am);min-height:16px;margin-bottom:12px;"></div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<button onclick="document.getElementById(\'excel-setup-modal\').remove();" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>' +
+    '<button onclick="excelSignIn()" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:#1D6F42;border:none;color:#fff;cursor:pointer;font-family:inherit;">SIGN IN WITH MICROSOFT →</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+}
+
+function excelSignIn(){
+  var clientId = (document.getElementById('excel-client-id-input')||{}).value||'';
+  var filename  = (document.getElementById('excel-filename-input')||{}).value||'';
+  var sheet     = (document.getElementById('excel-sheet-input')||{}).value||'Warehub Payroll';
+  var msg       = document.getElementById('excel-setup-msg');
+
+  if(!clientId){ if(msg) msg.textContent='⚠ Paste your Azure App Client ID first.'; return; }
+  if(!filename){ if(msg) msg.textContent='⚠ Enter your Excel file name.'; return; }
+
+  EXCEL_CLIENT_ID = clientId.trim();
+  EXCEL_SHEET     = sheet.trim()||'Warehub Payroll';
+
+  // Store filename for lookup after token arrives
+  sessionStorage.setItem('warehub_excel_pending_file', filename.trim());
+  excelSaveConfig();
+
+  // MSAL implicit flow — open popup
+  var authUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+    + '?client_id=' + encodeURIComponent(EXCEL_CLIENT_ID)
+    + '&response_type=token'
+    + '&redirect_uri=' + encodeURIComponent(window.location.origin + window.location.pathname)
+    + '&scope=' + encodeURIComponent('Files.ReadWrite offline_access')
+    + '&response_mode=fragment'
+    + '&prompt=select_account';
+
+  var popup = window.open(authUrl, 'ms_auth', 'width=500,height=650,left=200,top=100');
+
+  // Poll for redirect back with token in fragment
+  var poll = setInterval(function(){
+    try{
+      if(!popup||popup.closed){ clearInterval(poll); if(msg) msg.textContent='⚠ Sign-in window closed.'; return; }
+      var href = popup.location.href;
+      if(href.indexOf(window.location.origin) === 0){
+        clearInterval(poll);
+        popup.close();
+        var hash = href.split('#')[1]||'';
+        var params = {};
+        hash.split('&').forEach(function(p){ var kv=p.split('='); params[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||''); });
+        if(params.access_token){
+          _msalToken = params.access_token;
+          sessionStorage.setItem('warehub_msal_token', _msalToken);
+          if(msg) msg.textContent='✓ Signed in! Looking up your file…';
+          excelFindFile(filename.trim(), msg);
+        } else {
+          if(msg) msg.textContent='✗ Sign-in failed: '+(params.error_description||params.error||'unknown');
+        }
+      }
+    }catch(e){ /* cross-origin, keep polling */ }
+  }, 500);
+}
+
+async function excelFindFile(filename, msgEl){
+  try{
+    var resp = await fetch(
+      'https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(filename)+'\')?$select=id,name,webUrl',
+      { headers: { Authorization: 'Bearer '+_msalToken } }
+    );
+    var data = await resp.json();
+    var items = (data.value||[]).filter(function(f){ return f.name===filename; });
+    if(!items.length){
+      // Try partial match
+      items = data.value||[];
+    }
+    if(!items.length){
+      if(msgEl) msgEl.textContent='✗ File "'+filename+'" not found on OneDrive. Check the name.';
+      return;
+    }
+    EXCEL_FILE_ID = items[0].id;
+    excelSaveConfig();
+    if(msgEl) msgEl.textContent='✓ Found: '+items[0].name+' — ready!';
+    if(msgEl) msgEl.style.color='var(--gn)';
+    setTimeout(function(){
+      var modal=document.getElementById('excel-setup-modal');
+      if(modal) modal.remove();
+      pm('✓ Excel connected! Click "Save to Excel" at end of each day.');
+    }, 1500);
+  }catch(e){
+    if(msgEl) msgEl.textContent='✗ Error: '+e.message;
+  }
+}
+
+async function excelSavePayroll(){
+  if(!_msalToken){ pm('⚠ Not connected. Click Connect Excel first.'); return; }
+  if(!EXCEL_FILE_ID){ pm('⚠ No file selected. Click Connect Excel first.'); return; }
+
+  var now = Date.now();
+  var activePackers = packers.filter(function(p){
+    return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
+      orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
+  });
+
+  if(!activePackers.length){ pm('⚠ No packer data to save.'); return; }
+
+  // Build rows: [Date, Packer, Hours, Packages, Clock In, Clock Out]
+  var rows = [['Date','Packer','Hours Worked','Packages Scanned','Clock In','Clock Out']];
+  activePackers.forEach(function(p){
+    var ms=0;
+    (p.shiftSessions||[]).forEach(function(s){
+      var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
+      var outT=s.clockOut?new Date(s.clockOut).getTime():(s.out||0);
+      if(inT&&outT) ms+=(outT-inT);
+    });
+    if(p.online&&p.loginTime) ms+=(now-p.loginTime);
+    var hrs = ms>0?(ms/3600000).toFixed(2):'0.00';
+
+    var sessions = p.shiftSessions||[];
+    var firstIn='—', lastOut='—';
+    var earliestMs=null;
+    if(sessions.length&&sessions[0].clockIn) earliestMs=new Date(sessions[0].clockIn).getTime();
+    if(p.online&&p.loginTime&&(earliestMs===null||p.loginTime<earliestMs)) earliestMs=p.loginTime;
+    if(earliestMs) firstIn=new Date(earliestMs).toLocaleTimeString();
+    if(!p.online&&sessions.length){
+      var last=sessions[sessions.length-1];
+      var outT=last.clockOut?new Date(last.clockOut):null;
+      if(outT) lastOut=outT.toLocaleTimeString();
+    } else if(p.online){ lastOut='Active'; }
+
+    var myDone=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';}).length;
+    rows.push([shiftDate, p.name, hrs, myDone, firstIn, lastOut]);
+  });
+
+  pm('⟳ Saving to Excel…');
+
+  try{
+    // Ensure sheet exists, then append rows
+    var baseUrl = 'https://graph.microsoft.com/v1.0/me/drive/items/'+EXCEL_FILE_ID+'/workbook';
+
+    // Try to create sheet (fails silently if already exists)
+    await fetch(baseUrl+'/worksheets', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+_msalToken,'Content-Type':'application/json'},
+      body: JSON.stringify({name: EXCEL_SHEET})
+    });
+
+    // Ensure header row exists by checking used range
+    var rangeResp = await fetch(baseUrl+'/worksheets/'+encodeURIComponent(EXCEL_SHEET)+'/usedRange?$select=rowCount',
+      {headers:{Authorization:'Bearer '+_msalToken}});
+    var rangeData = await rangeResp.json();
+    var existingRows = (rangeData.rowCount||0);
+
+    // If sheet is empty, include header; otherwise skip header row
+    var dataRows = existingRows===0 ? rows : rows.slice(1);
+    if(!dataRows.length){ pm('✓ Nothing new to save.'); return; }
+
+    // Write to next available row
+    var startRow = existingRows+1;
+    var endRow   = startRow + dataRows.length - 1;
+    var range    = 'A'+startRow+':F'+endRow;
+
+    var writeResp = await fetch(
+      baseUrl+'/worksheets/'+encodeURIComponent(EXCEL_SHEET)+'/range(address=\''+range+'\')',
+      {
+        method:'PATCH',
+        headers:{'Authorization':'Bearer '+_msalToken,'Content-Type':'application/json'},
+        body: JSON.stringify({values: dataRows})
+      }
+    );
+
+    if(writeResp.ok){
+      pm('✓ Saved '+dataRows.length+' row(s) to Excel → "'+EXCEL_SHEET+'" tab');
+    } else {
+      var err = await writeResp.json();
+      pm('✗ Excel error: '+((err.error&&err.error.message)||writeResp.status));
+    }
+  }catch(e){
+    pm('✗ Save failed: '+e.message);
+  }
+}
+
+
+function fmPlay(url){
+  var frame=document.getElementById('fm-frame');
+  if(!frame) return;
+  var vid='';
+  var m=url.match(/[?&]v=([^&]+)/)||url.match(/youtu\.be\/([^?]+)/)||url.match(/embed\/([^?]+)/);
+  if(m){ vid=m[1]; frame.src='https://www.youtube.com/embed/'+vid+'?autoplay=1'; frame.style.display='block'; }
+}
+function fmQ(q){
+  var frame=document.getElementById('fm-frame');
+  if(!frame) return;
+  frame.src='https://www.youtube.com/results?search_query='+encodeURIComponent(q);
+  frame.style.display='block';
+}
 function downloadAndPrint(filename,css,bodyHtml){ printViaIframe(css,bodyHtml); }
 
-// ══════════════════════════════════════════
-// SKU SORT PRINT
-// ══════════════════════════════════════════
-function printSkuSort(){
-  if(!orders.length){pm('Nothing to print — import a PDF batch first.');return;}
-  var withImg=orders.filter(function(o){return o.pageImg;});
-  if(!withImg.length){pm('No label images — please re-import the PDF first.');return;}
-  pm('Printing '+withImg.length+' labels sorted by SKU…');
-  var groups={};
-  orders.forEach(function(o){
-    if(!o.pageImg) return;
-    var sku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
-    if(!groups[sku]) groups[sku]=[];
-    groups[sku].push(o);
-  });
-  var skuKeys=Object.keys(groups).sort();
-  var css='*{margin:0;padding:0;box-sizing:border-box;}'
-    +'html,body{margin:0;padding:0;background:#fff;}'
-    +'.lp{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'
-    +'.lp:last-child{page-break-after:avoid;}'
-    +'.li{width:100%;height:auto;display:block;}'
-    +'@media print{@page{margin:0;size:auto;}.lp{page-break-after:always;}}';
-  var bodyHtml='';
-  skuKeys.forEach(function(sku){
-    groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');})
-      .forEach(function(o){
-        bodyHtml+='<div class="lp"><img class="li" src="'+o.pageImg+'"/></div>';
-      });
-  });
-  printViaIframe(css, bodyHtml);
-}
-
-// ══════════════════════════════════════════
-// NAVIGATION / TAB SWITCHING
-// ══════════════════════════════════════════
-function showView(name){
-  document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on');});
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on');});
-  var v=document.getElementById('view-'+name);
-  if(v) v.classList.add('on');
-  var tab=document.querySelector('[data-view="'+name+'"]');
-  if(tab) tab.classList.add('on');
-  if(name==='dash')    renderDash();
-  if(name==='payroll') renderPayroll();
-  if(name==='floor')   renderFloor();
-}
-
-// ══════════════════════════════════════════
-// DOMCONTENTLOADED INIT
-// ══════════════════════════════════════════
 document.addEventListener('DOMContentLoaded',function(){
   loadStaff();
+  excelLoadConfig();
   renderManagerPanel();
   renderPackerPanel();
   renderAssignPanel();
   renderQuickLoginBtns();
   showLoginOrPack();
-  showView('import');
+  gv('import');
 
-  // Nav tabs
+  // Nav tabs — also wired via onclick in HTML, this is backup
   document.querySelectorAll('.tab').forEach(function(tab){
-    tab.addEventListener('click',function(){
-      gv(this.dataset.view);
-    });
+    tab.addEventListener('click',function(){ gv(this.dataset.view); });
   });
 
-  // Import / PDF
-  var dropZone=document.getElementById('dz');
-  if(dropZone){
-    dropZone.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over');});
-    dropZone.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
-    dropZone.addEventListener('drop',function(e){
+  // Drop zone
+  var dz=document.getElementById('dz');
+  if(dz){
+    dz.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over');});
+    dz.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
+    dz.addEventListener('drop',function(e){
       e.preventDefault(); this.classList.remove('drag-over');
       var file=e.dataTransfer.files[0];
       if(file&&file.type==='application/pdf') parsePdf(file);
       else pm('⚠ Please drop a PDF file.');
     });
-    dropZone.addEventListener('click',function(){
+    dz.addEventListener('click',function(){
       var inp=document.createElement('input');
       inp.type='file'; inp.accept='.pdf';
       inp.onchange=function(e){ if(e.target.files[0]) parsePdf(e.target.files[0]); };
@@ -2365,107 +2738,36 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  // Clear orders
-  var clearBtn=document.getElementById('clear-btn');
-  if(clearBtn) clearBtn.addEventListener('click',function(){
-    if(confirm('Clear ALL orders? This cannot be undone.')) {
-      orders=[]; ai=0;
-      pm('Orders cleared.');
-      renderAssignPanel(); renderDash(); renderFloor(); renderQueue(); renderActive();
-      document.getElementById('debug-log').textContent='';
-    }
-  });
-
-  // Copy debug log
-  document.getElementById('copy-debug-btn').addEventListener('click',function(){
-    var txt=document.getElementById('debug-log').textContent;
-    if(!txt){pm('Debug log is empty — import a PDF first.');return;}
-    var ta=document.createElement('textarea');
-    ta.value=txt; ta.style.cssText='position:fixed;left:-9999px;top:0;';
-    document.body.appendChild(ta);
-    ta.select(); ta.setSelectionRange(0,999999);
-    try{ document.execCommand('copy'); pm('✓ Debug log copied!'); }
-    catch(e){ pm('⚠ Auto-copy failed — select the log text manually.'); }
-    document.body.removeChild(ta);
-  });
-
-  // Print SKU sort
-  var skuBtn=document.getElementById('print-sku-sort-btn');
-  if(skuBtn) skuBtn.addEventListener('click', printSkuSort);
-
-  // Manager
-  document.getElementById('add-mgr-btn').addEventListener('click', addManager);
-  document.getElementById('add-packer-btn').addEventListener('click', addPacker);
-  document.getElementById('auto-assign-btn').addEventListener('click', autoAssign);
-
-  // Export CSV
-  var csvBtn=document.getElementById('export-csv-btn');
-  if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
-
-  // Enter key on staff fields
-  ['mgr-name','mgr-id','packer-name','packer-id'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el) el.addEventListener('keydown',function(e){
-      if(e.key==='Enter'){
-        if(id.startsWith('mgr')) addManager();
-        else addPacker();
-      }
-    });
-  });
-
-  // Print ID cards button
-  document.getElementById('print-cards-btn').addEventListener('click', printPackerCards);
-
-  // Print pick lists button
-  var plBtn=document.getElementById('print-picklist-btn');
-  if(plBtn) plBtn.addEventListener('click', printPickLists);
-
-
   // Pack station login scan
-  document.getElementById('login-scan-in').addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
-      var v=this.value.trim().toUpperCase();
-      if(v) loginPacker(v);
-    }
+  var loginIn=document.getElementById('login-scan-in');
+  if(loginIn) loginIn.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){ var v=this.value.trim().toUpperCase(); if(v) loginPacker(v); }
   });
 
-  // Switch packer button
-  document.getElementById('cp-switch').addEventListener('click',function(){
-    // Just surface the login overlay so another packer can scan in/out
-    // Don't clock anyone out — multiple packers work simultaneously
-    currentPacker=null;
-    saveStaff();
+  // Scan input (tracking / FNSKU)
+  var scanIn=document.getElementById('scan-in');
+  if(scanIn){
+    var scanTimer=null;
+    scanIn.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){ clearTimeout(scanTimer); var v=this.value.trim(); if(v) doScan(v); return; }
+      clearTimeout(scanTimer);
+      scanTimer=setTimeout(function(){ var v=scanIn.value.trim(); if(v&&v.length>=4&&!/\s/.test(v)) doScan(v); },150);
+    });
+  }
+
+  // Switch packer
+  var cpSwitch=document.getElementById('cp-switch');
+  if(cpSwitch) cpSwitch.addEventListener('click',function(){
+    currentPacker=null; saveStaff();
     var loginDiv=document.getElementById('packer-login');
     var barDiv=document.getElementById('current-packer-bar');
     if(loginDiv) loginDiv.classList.remove('hide');
     if(barDiv) barDiv.style.display='none';
     renderQuickLoginBtns();
-    setTimeout(function(){
-      var el=document.getElementById('login-scan-in');
-      if(el){ el.value=''; el.focus(); }
-    },50);
+    setTimeout(function(){ var el=document.getElementById('login-scan-in'); if(el){el.value='';el.focus();} },50);
   });
 
-  // Scan input
-  var scanIn=document.getElementById('scan-in');
-  if(scanIn){
-    var scanTimer=null;
-    scanIn.addEventListener('keydown',function(e){
-      if(e.key==='Enter'){
-        clearTimeout(scanTimer);
-        var v=this.value.trim();
-        if(v) doScan(v);
-        return;
-      }
-      clearTimeout(scanTimer);
-      scanTimer=setTimeout(function(){
-        var v=scanIn.value.trim();
-        if(v&&v.length>=4&&!/\s/.test(v)) doScan(v);
-      },150);
-    });
-  }
-
-  // Auto-focus scan box / login box on keypress
+  // Auto-focus scan/login on keypress when Pack Station is active
   document.addEventListener('keydown',function(e){
     if(e.ctrlKey||e.metaKey||e.altKey) return;
     var packView=document.getElementById('view-pack');
@@ -2474,53 +2776,35 @@ document.addEventListener('DOMContentLoaded',function(){
     if(loginOv&&!loginOv.classList.contains('hide')){
       if(e.target.id!=='login-scan-in'&&!e.target.dataset.quickLogin)
         document.getElementById('login-scan-in').focus();
-    } else if(e.target.id!=='scan-in'){
-      focusScan();
-    }
+    } else if(e.target.id!=='scan-in'){ focusScan(); }
   });
 
-  // Auto-refresh dashboard/floor/payroll every 10s
+  // Auto-refresh every 10s
   setInterval(function(){
     if(document.getElementById('view-dash').classList.contains('on')) renderDash();
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
     if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
-  }, 10000);
-
-  // Music player
-  var fmBtn=document.getElementById('fm-btn');
-  var fmPanel=document.getElementById('fm-panel');
-  if(fmBtn&&fmPanel){
-    fmBtn.addEventListener('click',function(){ fmPanel.style.display=fmPanel.style.display==='none'?'flex':'none'; });
-  }
-  var fmPlayBtn=document.getElementById('fm-play');
-  if(fmPlayBtn) fmPlayBtn.addEventListener('click',function(){
-    var url=document.getElementById('fm-url').value.trim();
-    if(url) fmPlay(url);
-  });
-  var fmClose=document.getElementById('fm-close');
-  if(fmClose) fmClose.addEventListener('click',function(){ if(fmPanel) fmPanel.style.display='none'; });
-  var fmUrlIn=document.getElementById('fm-url');
-  if(fmUrlIn) fmUrlIn.addEventListener('keydown',function(e){ if(e.key==='Enter'){ var url=this.value.trim(); if(url) fmPlay(url); }});
+  },10000);
 });
 </script>
 
   <!-- ── Floating Music Player ── -->
-  <button id="fm-btn" title="Music Player">♪</button>
-  <div id="fm-panel" style="display:none;">
+  <button id="fm-btn" title="Music Player" onclick="var p=document.getElementById('fm-panel');p.style.display=p.style.display==='flex'?'none':'flex';">♪</button>
+  <div id="fm-panel" style="display:none;flex-direction:column;">
     <div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">MUSIC PLAYER</div>
     <div style="display:flex;gap:6px;margin-bottom:8px;">
-      <input id="fm-url" placeholder="Paste YouTube URL…" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-      <button id="fm-play" style="padding:6px 12px;font-size:10px;letter-spacing:1px;">▶ PLAY</button>
+      <input id="fm-url" placeholder="Paste YouTube URL…" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;" onkeydown="if(event.key==='Enter'){fmPlay(this.value.trim());}"/>
+      <button onclick="fmPlay(document.getElementById('fm-url').value.trim())" style="padding:6px 12px;font-size:10px;letter-spacing:1px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);cursor:pointer;font-family:inherit;">▶ PLAY</button>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
-      <button onclick="fmQ('lofi hip hop')" style="font-size:9px;padding:3px 8px;">Lo-Fi</button>
-      <button onclick="fmQ('pop music mix')" style="font-size:9px;padding:3px 8px;">Pop</button>
-      <button onclick="fmQ('edm mix')" style="font-size:9px;padding:3px 8px;">EDM</button>
-      <button onclick="fmQ('rock mix')" style="font-size:9px;padding:3px 8px;">Rock</button>
-      <button onclick="fmQ('chinese pop')" style="font-size:9px;padding:3px 8px;">C-Pop</button>
+      <button onclick="fmQ('lofi hip hop')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Lo-Fi</button>
+      <button onclick="fmQ('pop music mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Pop</button>
+      <button onclick="fmQ('edm mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">EDM</button>
+      <button onclick="fmQ('rock mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Rock</button>
+      <button onclick="fmQ('chinese pop')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">C-Pop</button>
     </div>
     <iframe id="fm-frame" width="280" height="158" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="display:none;border:1px solid var(--bdr);"></iframe>
-    <button id="fm-close" style="margin-top:6px;width:100%;font-size:9px;padding:4px;background:transparent;border:1px solid var(--bdr);color:var(--td);">✕ CLOSE</button>
+    <button onclick="document.getElementById('fm-panel').style.display='none';" style="margin-top:6px;width:100%;font-size:9px;padding:4px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">✕ CLOSE</button>
   </div>
 </body>
 </html>
