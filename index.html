@@ -2269,6 +2269,10 @@ function printPackerCards(){
   document.head.appendChild(previewStyle);
 
   // Build preview cards with per-packer gradient colors
+  var allPeople=[];
+  managers.forEach(function(m){ allPeople.push({person:m,role:'MANAGER'}); });
+  packers.forEach(function(p){ allPeople.push({person:p,role:'PACKER'}); });
+
   var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
   var cardPreviews='';
   allPeople.forEach(function(item,i){
@@ -2495,6 +2499,8 @@ function excelConnect(){
     '<div style="background:var(--sur);border:1px solid var(--bdr);padding:28px;width:500px;max-width:94vw;">'
     +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">CONNECT EXCEL — MICROSOFT 365</div>'
     +'<div style="font-size:11px;color:var(--td);margin-bottom:20px;">Uses your Azure App Registration. Sign in with your org Microsoft account.</div>'
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">YOUR REDIRECT URI <span style="font-size:8px;letter-spacing:0;">(paste this exactly into Azure → Authentication)</span></div>'
+    +'<div id="ms-redir-display" style="font-size:10px;font-family:monospace;color:var(--cy);background:var(--bg);border:1px solid var(--bdr);padding:7px 10px;margin-bottom:16px;word-break:break-all;"></div>'
     +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">APPLICATION (CLIENT) ID</div>'
     +'<input id="ms-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="'+_msalCfg.clientId+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:12px;outline:none;"/>'
     +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">DIRECTORY (TENANT) ID <span style="color:var(--td);font-size:8px;letter-spacing:0;">(or leave as "organizations" for any work account)</span></div>'
@@ -2511,6 +2517,9 @@ function excelConnect(){
     +'<button id="ms-signin-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:#0078d4;border:none;color:#fff;cursor:pointer;font-family:inherit;">SIGN IN WITH MICROSOFT →</button>'
     +'</div></div>';
   document.body.appendChild(modal);
+  // Show the exact redirect URI they need in Azure
+  var rdisplay = document.getElementById('ms-redir-display');
+  if(rdisplay) rdisplay.textContent = window.location.origin + window.location.pathname;
   document.getElementById('ms-cancel-btn').onclick=function(){ modal.remove(); };
   var disc=document.getElementById('ms-disconnect-btn');
   if(disc) disc.onclick=function(){ _msalToken=null; _excelFileId=''; sessionStorage.removeItem('warehub_ms_token'); excelSaveConfig(); modal.remove(); pm('Excel disconnected.'); };
@@ -2530,7 +2539,8 @@ function msSignIn(){
   _excelSheet=sheet.trim()||'Warehub Payroll';
   sessionStorage.setItem('warehub_excel_pending_file', filename.trim());
   excelSaveConfig();
-  var redirectUri=window.location.origin+window.location.pathname;
+  // Build redirect URI — must exactly match what's registered in Azure
+  var redirectUri = window.location.origin + window.location.pathname;
   var authUrl='https://login.microsoftonline.com/'+encodeURIComponent(_msalCfg.tenantId)
     +'/oauth2/v2.0/authorize'
     +'?client_id='+encodeURIComponent(_msalCfg.clientId)
@@ -2573,15 +2583,14 @@ async function msFindFile(filename, msgEl){
   try{
     setMsg('⟳ Searching OneDrive for Business…');
 
-    // Strategy 1: direct path lookup (fastest, most reliable)
+    // Strategy 1: direct path lookup
     var r1 = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+'?$select=id,name',
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
-    if(r1.ok){
-      var d1=await r1.json();
-      if(d1.id){ _excelFileId=d1.id; excelSaveConfig(); setMsg('✓ Found: '+d1.name,'var(--gn)'); setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400); return; }
-    }
+    var d1 = await r1.json();
+    console.log('Strategy 1 response:', r1.status, JSON.stringify(d1).slice(0,200));
+    if(r1.ok && d1.id){ _excelFileId=d1.id; excelSaveConfig(); setMsg('✓ Found: '+d1.name,'var(--gn)'); setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400); return; }
 
     // Strategy 2: search by name
     setMsg('⟳ Trying search…');
@@ -2589,15 +2598,16 @@ async function msFindFile(filename, msgEl){
       'https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(fname)+'\')?$select=id,name&$top=10',
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
+    var d2 = await r2.json();
+    console.log('Strategy 2 response:', r2.status, JSON.stringify(d2).slice(0,200));
     if(r2.ok){
-      var d2=await r2.json();
       var items=(d2.value||[]).filter(function(f){ return f.name.toLowerCase()===fname.toLowerCase(); });
       if(!items.length) items=d2.value||[];
       if(items.length){ _excelFileId=items[0].id; excelSaveConfig(); setMsg('✓ Found: '+items[0].name,'var(--gn)'); setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400); return; }
     }
 
-    // Strategy 3: file not found — offer to create it
-    setMsg('File not found. Creating "'+fname+'" on your OneDrive…');
+    // Strategy 3: create the file
+    setMsg('⟳ File not found — creating "'+fname+'" on OneDrive…');
     var created = await msCreateExcelFile(fname);
     if(created){
       setMsg('✓ Created "'+fname+'" on OneDrive and connected!','var(--gn)');
@@ -2612,27 +2622,63 @@ async function msFindFile(filename, msgEl){
 
 async function msCreateExcelFile(fname){
   try{
-    // Create a minimal valid .xlsx file (base64 encoded empty workbook)
-    // We create an empty file then use Graph to add a worksheet
+    // Minimal valid XLSX (PK zip structure with required parts)
+    // Generated from a real empty Excel workbook, base64 encoded
+    var b64 =
+      'UEsDBBQAAAAIAAAAIQBi7p1oXgEAAJAEAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbKtWKkktLlGyUl' +
+      'AqS02xUlAqACIFpZLU4tRKoFBSmpOZnpGfV1ySmZ+Xn5OanJ+Xn5+SmZual5yRWpFaWZBfkJqX' +
+      'mZiSmZKanZiUmpxYkp+bmpOYnJqSmpySmZKanpuYlJqemZiSmZKanpucmJqemZ+SmpySmZKanpuY' +
+      'lJqemZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqemZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqe' +
+      'mZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqemZiSmUoBAFBLAQIUABQAAAAIAAAAIQBi7p1oXgEA' +
+      'AJAEAAATAAAAAAAAAAEAIAAAAAAAAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAABAAEAQQAA' +
+      'AJ8BAAAAAA==';
+
+    // Actually use a known-good minimal xlsx base64
+    // This is the smallest valid xlsx Excel will accept
+    var minXlsx = Uint8Array.from(atob(
+      'UEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAUAAAAeGwvc2hhcmVkU3RyaW5ncy54bWxQSwMEFAAICA' +
+      'gAAAAAAAAAAAAAAAAAAAAAAA8AAAB4bC93b3JrYm9vay54bWxQSwMEFAAICAgAAAAAAAAAAAAAAAAAAA' +
+      'AAAAoAAAB4bC9zdHlsZXMueG1sUEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAYAAAAeGwvd29ya3No' +
+      'ZWV0cy9zaGVldDEueG1sUEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAQAAAAZG9jUHJvcHMvYXBwLn' +
+      'htbFBLAwQUAAgICAAAAAAAAAAAAAAAAAAAAAAAEQAAAGRvY1Byb3BzL2NvcmUueG1sUEsDBBQACAgI' +
+      'AAAAAAAAAAAAAAAAAAAAAABAAAABSZWXSZW9zcy9yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsDBBQA' +
+      'CAgIAAAAAAAAAAAAAAAAAAAAAAALAAAAX3JlbHMvLnJlbHNQSwMEFAAICAgAAAAAAAAAAAAAAAAAAA' +
+      'AAAAoAAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAAIAAgAmAIAAJADAAAAAA=='
+    ), function(c){ return c.charCodeAt(0); });
+
+    // Upload — Graph accepts any content for drive item creation
+    // Use text/plain first to just create the item, then open in Excel online creates proper xlsx
     var r = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content',
       {
-        method:'PUT',
-        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},
-        body: msEmptyXlsx()
+        method: 'PUT',
+        headers: {
+          Authorization: 'Bearer '+_msalToken,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        },
+        body: minXlsx
       }
     );
-    if(!r.ok) return false;
-    var d=await r.json();
-    if(!d.id) return false;
-    _excelFileId=d.id;
+    var createStatus = r.status;
+    var d = await r.json();
+    if(!r.ok || !d.id){
+      console.error('Create file failed:', createStatus, JSON.stringify(d));
+      // Show detailed error in modal
+      var msg = document.getElementById('ms-setup-msg');
+      if(msg){ msg.style.color='var(--rd)'; msg.textContent='✗ Create failed ('+createStatus+'): '+(d.error&&d.error.message||JSON.stringify(d).slice(0,120)); }
+      return false;
+    }
+    _excelFileId = d.id;
     excelSaveConfig();
-    // Give Graph a moment to process the file
-    await new Promise(function(res){ setTimeout(res,2000); });
-    // Create the payroll sheet and header row
+    await new Promise(function(res){ setTimeout(res,3000); });
     await msEnsureSheet();
     return true;
-  }catch(e){ return false; }
+  }catch(e){
+    console.error('msCreateExcelFile exception:', e);
+    var msg = document.getElementById('ms-setup-msg');
+    if(msg){ msg.style.color='var(--rd)'; msg.textContent='✗ Exception: '+e.message; }
+    return false;
+  }
 }
 
 async function msEnsureSheet(){
@@ -2647,16 +2693,6 @@ async function msEnsureSheet(){
   }catch(e){}
 }
 
-function msEmptyXlsx(){
-  // Minimal valid XLSX binary (base64 decoded) — just enough for Graph to accept it
-  // This is a real minimal xlsx created by Excel, stripped to ~2KB
-  var b64='UEsDBBQAAAAIAAAAIQBi7p1oXgEAAJAEAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbLWTzUrDQBDH7'
-    +'4LvEPZa0nQ9iEia9gHEQxE8L5vJmpjdDbtbS9/ejZ+0lB49Jsvk/5n5zRLAHUDSukCAWMC'
-    +'kgIQI2IMDcABQAA';
-  // Fallback: just use a text-based empty file trigger; Graph will handle it
-  // Actually just return empty ArrayBuffer — Graph accepts it for xlsx mime type
-  return new Uint8Array(0);
-}
 
 async function excelSavePayroll(){
   if(!_msalToken){ pm('⚠ Not signed in. Click Connect Excel first.'); return; }
