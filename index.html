@@ -1,4 +1,93 @@
-<!DOCTYPE html>
+<!DOC
+  <!-- ── Vehicle Log ── -->
+  <div id="view-vehicle" class="view">
+    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">VEHICLE LOG</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Daily Usage Record</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · Company Vehicle</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="gmapsShowSetup()" style="font-size:9px;border-color:#4285f4;color:#4285f4;">📍 MAPS KEY</button>
+          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;">⬇ EXPORT CSV</button>
+          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;">📊 SAVE TO EXCEL</button>
+        </div>
+      </div>
+
+      <!-- New Trip Form -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:14px;">NEW TRIP ENTRY</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DRIVER</div>
+            <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— select driver —</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
+            <div style="position:relative;">
+              <input id="veh-dest" placeholder="Start typing destination…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DEPARTURE TIME</div>
+            <div style="display:flex;gap:6px;">
+              <input id="veh-depart" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <button onclick="vehicleSetNow('veh-depart')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TIME</div>
+            <div style="display:flex;gap:6px;">
+              <input id="veh-return" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <button onclick="vehicleSetNow('veh-return')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER START (mi)</div>
+            <input id="veh-odo-start" type="number" placeholder="e.g. 45230" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER END (mi)</div>
+            <input id="veh-odo-end" type="number" placeholder="e.g. 45265" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">PURPOSE / NOTES</div>
+          <textarea id="veh-notes" placeholder="Purpose of trip, items picked up, fuel filled, any incidents…" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:60px;"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div id="veh-form-msg" style="font-size:10px;color:var(--am);"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="vehicleClearForm()" style="font-size:9px;">✕ CLEAR</button>
+            <button class="btn btn-c" onclick="vehicleAddTrip()" style="font-size:9px;">+ LOG TRIP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div id="veh-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
+
+      <!-- Trip log table -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">TRIP HISTORY</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="veh-filter" placeholder="Filter by driver or destination…" oninput="renderVehicleLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:200px;"/>
+            <button class="btn" onclick="if(confirm('Delete ALL trip records? This cannot be undone.')){{vehicleTrips=[];vehicleSave();renderVehicleLog();renderVehicleStats();}}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="veh-log" style="overflow-x:auto;"></div>
+      </div>
+
+    </div>
+  </div>
+TYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -167,8 +256,22 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 @keyframes shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
 
 
-#fm-btn{position:fixed;bottom:20px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
-#fm-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:300px;background:var(--sur);border:1px solid var(--bdr);padding:14px;flex-direction:column;box-shadow:0 4px 24px #0008;}
+#fm-btn{position:fixed;bottom:74px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
+#fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:300px;background:var(--sur);border:1px solid var(--bdr);padding:14px;flex-direction:column;box-shadow:0 4px 24px #0008;}
+
+#ai-btn{position:fixed;bottom:20px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:20px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 16px #6366f166;}
+#ai-btn:hover{transform:scale(1.08);}
+#ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:340px;height:480px;background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
+#ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+#ai-msgs .ai-msg-user{background:#6366f122;border:1px solid #6366f144;padding:8px 10px;font-size:11px;color:var(--tx);align-self:flex-end;max-width:85%;border-radius:8px 8px 2px 8px;line-height:1.5;}
+#ai-msgs .ai-msg-ai{background:var(--bg);border:1px solid var(--bdr);padding:8px 10px;font-size:11px;color:var(--tx);align-self:flex-start;max-width:90%;border-radius:8px 8px 8px 2px;line-height:1.5;}
+#ai-msgs .ai-msg-sys{font-size:9px;color:var(--td);text-align:center;letter-spacing:1px;}
+#ai-input-row{display:flex;gap:6px;padding:10px;border-top:1px solid var(--bdr);}
+#ai-input{flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 10px;font-size:11px;font-family:inherit;outline:none;resize:none;height:36px;max-height:80px;}
+#ai-send{padding:7px 12px;background:#6366f1;border:none;color:#fff;cursor:pointer;font-size:12px;font-family:inherit;}
+#ai-key-row{display:flex;gap:6px;padding:0 10px 8px;flex-wrap:wrap;}
+#ai-key-row button{font-size:8px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;border-radius:3px;white-space:nowrap;}
+#ai-key-row button:hover{border-color:#6366f1;color:#6366f1;}
 </style>
 </head>
 <body>
@@ -189,6 +292,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
     <button class="tab"     data-view="dash"     onclick="gv('dash')">Dashboard</button>
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')">Payroll</button>
     <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
+    <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
   </div>
 </div>
 
@@ -529,6 +633,7 @@ function gv(name){
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
+  if(name==='vehicle'){ vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); }
@@ -2194,146 +2299,124 @@ function renderFloor(){
 function printPackerCards(){
   if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
 
-  // One card per page, 4"×6" thermal label
-  // All text BLACK on WHITE — no grays, no colors (thermal paper ignores white ink)
-  function makeCard(person, role){
-    var svg=C128.svg(person.id, 3, 80);
-    return '<div class="ic">'
-      +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
-      +'<div class="ic-divider"></div>'
-      +'<div class="ic-init">'+packerInitial(person)+'</div>'
-      +'<div class="ic-name">'+person.name+'</div>'
-      +'<div class="ic-role">'+role+'</div>'
-      +'<div class="ic-divider"></div>'
-      +'<div class="ic-svg">'+svg+'</div>'
-      +'<div class="ic-id">'+person.id+'</div>'
-      +'</div>';
-  }
-
-  // Print CSS: 4×6 inch per card, one per page, solid black text only
   var printCss=
     '*{box-sizing:border-box;margin:0;padding:0;}'
-    // Page = 4x6 thermal label; badge = CR80 standard ID card size (3.375 x 2.125 in)
     +'@page{size:4in 6in;margin:0;}'
-    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;}'
-    // Wrapper centers the badge on the label
+    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;}'
     +'.ic-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;}'
     +'.ic-page:last-child{page-break-after:auto;}'
-    // Badge = CR80 standard: 3.375" x 2.125"
     +'.ic{width:3.375in;height:2.125in;border:1.5pt solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff;}'
-    +'.ic-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3pt 6pt 2pt;}'
+    +'.ic-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4pt 6pt 2pt;}'
     +'.ic-company{font-size:5pt;font-weight:700;color:#000;letter-spacing:2px;text-align:center;margin-bottom:2pt;}'
     +'.ic-init{font-size:22pt;font-weight:900;color:#000;line-height:1;}'
-    +'.ic-name{font-size:10pt;font-weight:900;color:#000;text-align:center;margin-top:1pt;}'
-    +'.ic-role{font-size:5.5pt;font-weight:700;color:#000;letter-spacing:3px;margin-top:1pt;}'
-    +'.ic-divider{width:85%;border-top:0.75pt solid #000;margin:2pt auto;}'
+    +'.ic-name{font-size:10pt;font-weight:900;color:#000;text-align:center;margin-top:2pt;}'
+    +'.ic-role{font-size:5.5pt;font-weight:700;color:#000;letter-spacing:3px;margin-top:2pt;}'
+    +'.ic-divider{width:85%;border-top:0.75pt solid #000;margin:3pt auto;}'
     +'.ic-bot{padding:2pt 6pt 3pt;text-align:center;}'
-    +'.ic-svg svg{width:100%;height:auto;max-height:20pt;}'
-    +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}'
-    +'@media print{html,body{display:flex;align-items:center;justify-content:center;}}';
+    +'.ic-svg svg{width:80%;height:auto;max-height:18pt;display:block;margin:0 auto;}'
+    +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}';
 
-  // Preview CSS — shows white card on dark overlay
-    // Preview CSS — colorful screen display, print stays black-only
-  var previewCss=
-    '.ic-prev{'
-      +'width:270px;height:170px;border-radius:8px;display:flex;flex-direction:column;'
-      +'overflow:hidden;cursor:pointer;position:relative;'
-      +'box-shadow:0 8px 32px #0008;transition:transform .15s,box-shadow .15s;'
-    +'}'
-    +'.ic-prev:hover{transform:translateY(-4px);box-shadow:0 14px 40px #000a;}'
-    +'.ic-prev .ic-header{'
-      +'flex:0 0 55%;display:flex;flex-direction:column;align-items:center;justify-content:center;'
-      +'padding:16px 12px 10px;position:relative;overflow:hidden;'
-    +'}'
-    +'.ic-prev .ic-company{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:3px;text-align:center;margin-bottom:6px;}'
-    +'.ic-prev .ic-init{font-size:56px;font-weight:900;color:#fff;line-height:1;text-shadow:0 2px 8px rgba(0,0,0,.4);}'
-    +'.ic-prev .ic-name{font-size:14px;font-weight:900;color:#fff;text-align:center;margin-top:6px;letter-spacing:.5px;text-shadow:0 1px 4px rgba(0,0,0,.4);}'
-    +'.ic-prev .ic-body{'
-      +'flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;'
-      +'justify-content:center;padding:10px 12px;gap:4px;'
-    +'}'
-    +'.ic-prev .ic-role{font-size:7px;font-weight:700;letter-spacing:4px;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);margin-bottom:4px;}'
-    +'.ic-prev .ic-divider{width:60%;border-top:1px solid rgba(255,255,255,.15);margin:4px auto;}'
-    +'.ic-prev .ic-svg{width:100%;text-align:center;background:#fff;border-radius:4px;padding:4px;}'
-    +'.ic-prev .ic-svg svg{width:90%;height:auto;}'
-    +'.ic-prev .ic-id{font-size:7px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}';
-
-  var existing=document.getElementById('card-print-overlay');
-  if(existing) existing.remove();
-  var styleTag=document.getElementById('ic-style');
-  if(styleTag) styleTag.remove();
-
-  var previewStyle=document.createElement('style');
-  previewStyle.id='ic-style';
-  previewStyle.textContent=previewCss;
-  document.head.appendChild(previewStyle);
-
-  // Build preview cards with per-packer gradient colors
   var allPeople=[];
   managers.forEach(function(m){ allPeople.push({person:m,role:'MANAGER'}); });
   packers.forEach(function(p){ allPeople.push({person:p,role:'PACKER'}); });
 
   var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
-  var cardPreviews='';
-  allPeople.forEach(function(item,i){
-    var svg=C128.svg(item.person.id, 2, 50);
-    var baseCol=item.person.color||defaultColors[i%defaultColors.length];
-    var isManager=item.role==='MANAGER';
-    var headerBg=isManager?'linear-gradient(145deg,#b8860b,#8b6914)':'linear-gradient(145deg,'+baseCol+','+baseCol+'99)';
-    cardPreviews+=
-      '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">'
-      +'<div class="ic-prev" data-pid="'+item.person.id+'" data-role="'+item.role+'" style="cursor:pointer;box-shadow:0 8px 32px '+baseCol+'44;">'
-        +'<div class="ic-header" style="background:'+headerBg+'">'
-          +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
-          +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
-          +'<div class="ic-name">'+item.person.name+'</div>'
-        +'</div>'
-        +'<div class="ic-body">'
-          +'<div class="ic-role" style="border-color:'+baseCol+'66;color:'+baseCol+';">'+item.role+'</div>'
-          +'<div class="ic-divider"></div>'
-          +'<div class="ic-svg">'+svg+'</div>'
-          +'<div class="ic-id">'+item.person.id+'</div>'
-        +'</div>'
-      +'</div>'
-      +'<button data-pid="'+item.person.id+'" data-role="'+item.role+'" '
-        +'style="padding:5px 16px;font-size:9px;letter-spacing:2px;background:'+baseCol+';color:#fff;border:none;cursor:pointer;font-family:inherit;border-radius:4px;">🖨 PRINT</button>'
-      +'</div>';
-  });
 
-var ov=document.createElement('div');
+  // Remove existing overlay
+  var existing=document.getElementById('card-print-overlay');
+  if(existing) existing.remove();
+  var styleTag=document.getElementById('ic-style');
+  if(styleTag) styleTag.remove();
+
+  // Inject preview styles
+  var st=document.createElement('style');
+  st.id='ic-style';
+  st.textContent=[
+    '.icpv-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}',
+    '.icpv{width:270px;height:170px;border-radius:6px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:transform .15s;}',
+    '.icpv:hover{transform:translateY(-3px);}',
+    '.icpv-hdr{flex:0 0 58%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;}',
+    '.icpv-co{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;text-align:center;margin-bottom:3px;}',
+    '.icpv-in{font-size:30px;font-weight:900;color:#fff;line-height:1;}',
+    '.icpv-nm{font-size:11px;font-weight:900;color:#fff;text-align:center;margin-top:3px;}',
+    '.icpv-bod{flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px;gap:3px;}',
+    '.icpv-rl{font-size:6px;font-weight:700;letter-spacing:3px;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.2);}',
+    '.icpv-bc{background:#fff;border-radius:3px;padding:3px;margin-top:3px;width:90%;}',
+    '.icpv-id{font-size:6px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}'
+  ].join('');
+  document.head.appendChild(st);
+
+  // Build overlay using DOM
+  var ov=document.createElement('div');
   ov.id='card-print-overlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
-  ov.innerHTML=
-    '<div style="width:100%;max-width:900px;">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      +'<div>'
-        +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">ID CARDS — DOUBLE SIDED ISCM LLC</div>'
-        +'<div style="font-size:9px;color:#666;margin-top:3px;">4″ × 6″ thermal · black ink · click card or PRINT button to print individually</div>'
-      +'</div>'
-      +'<div style="display:flex;gap:8px;">'
-        +'<button onclick="printAllCards()" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
-        +'<button id="ic-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;">✕ CLOSE</button>'
-      +'</div>'
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);overflow-y:auto;padding:28px 20px;';
+
+  // Header bar
+  var header=document.createElement('div');
+  header.style.cssText='max-width:960px;margin:0 auto 20px;display:flex;align-items:center;justify-content:space-between;';
+  header.innerHTML=
+    '<div>'
+    +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">ID CARDS — DOUBLE SIDED ISCM LLC</div>'
+    +'<div style="font-size:9px;color:#555;margin-top:3px;">CR80 badge (3.375×2.125in) · printed centered on 4×6 thermal label</div>'
     +'</div>'
-    +'<div style="font-size:8px;color:#555;margin-bottom:20px;">Tip: set paper size to 4×6 in printer dialog · disable headers/footers · scale = 100%</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:20px;">'+cardPreviews+'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button id="ic-print-all" style="padding:7px 16px;font-size:9px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
+    +'<button id="ic-close" style="padding:7px 12px;font-size:9px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;">✕ CLOSE</button>'
     +'</div>';
+  ov.appendChild(header);
 
-  document.body.appendChild(ov);
+  var hint=document.createElement('div');
+  hint.style.cssText='max-width:960px;margin:0 auto 16px;font-size:8px;color:#444;';
+  hint.textContent='Click a card or its PRINT button to print one · PRINT ALL sends every card one by one';
+  ov.appendChild(hint);
 
-  // Event delegation for card clicks and print buttons
-  ov.addEventListener('click',function(e){
-    var el=e.target.closest('[data-pid]');
-    if(!el) return;
-    printSingleCard(el.dataset.pid, el.dataset.role);
+  // Cards container
+  var grid=document.createElement('div');
+  grid.style.cssText='max-width:960px;margin:0 auto;display:flex;flex-wrap:wrap;gap:20px;';
+
+  allPeople.forEach(function(item,i){
+    var col=item.person.color||defaultColors[i%defaultColors.length];
+    var hdr=item.role==='MANAGER'?'linear-gradient(135deg,#b8860b,#8b6914)':'linear-gradient(135deg,'+col+','+col+'bb)';
+    var svg=C128.svg(item.person.id, 2, 36);
+
+    var wrap=document.createElement('div');
+    wrap.className='icpv-wrap';
+
+    var card=document.createElement('div');
+    card.className='icpv';
+    card.style.boxShadow='0 6px 24px '+col+'44';
+    card.innerHTML=
+      '<div class="icpv-hdr" style="background:'+hdr+';">'
+      +'<div class="icpv-co">DOUBLE SIDED ISCM LLC</div>'
+      +'<div class="icpv-in">'+packerInitial(item.person)+'</div>'
+      +'<div class="icpv-nm">'+item.person.name+'</div>'
+      +'</div>'
+      +'<div class="icpv-bod">'
+      +'<div class="icpv-rl" style="color:'+col+';border-color:'+col+'44;">'+item.role+'</div>'
+      +'<div class="icpv-bc">'+svg+'</div>'
+      +'<div class="icpv-id">'+item.person.id+'</div>'
+      +'</div>';
+
+    var btn=document.createElement('button');
+    btn.textContent='🖨 PRINT';
+    btn.style.cssText='padding:4px 14px;font-size:9px;letter-spacing:1px;background:'+col+';color:#fff;border:none;cursor:pointer;font-family:inherit;border-radius:4px;';
+    btn.onclick=function(){ printSingleCard(item.person.id, item.role); };
+    card.onclick=function(){ printSingleCard(item.person.id, item.role); };
+
+    wrap.appendChild(card);
+    wrap.appendChild(btn);
+    grid.appendChild(wrap);
   });
+
+  ov.appendChild(grid);
+  document.body.appendChild(ov);
 
   document.getElementById('ic-close').onclick=function(){
     ov.remove();
     var s=document.getElementById('ic-style'); if(s) s.remove();
   };
+  document.getElementById('ic-print-all').onclick=function(){ printAllCards(); };
 
-  // Store print data for individual prints
   window._icPrintData={people:allPeople, css:printCss};
 }
 
@@ -2774,11 +2857,334 @@ function fmQ(q){
   frame.src='https://www.youtube.com/results?search_query='+encodeURIComponent(q);
   frame.style.display='block';
 }
-function downloadAndPrint(filename,css,bodyHtml){ printViaIframe(css,bodyHtml); }
+// ══════════════════════════════════════════
+// VEHICLE LOG
+// ══════════════════════════════════════════
+
+var vehicleTrips = [];
+
+function vehicleLoad(){
+  try{ vehicleTrips=JSON.parse(localStorage.getItem('warehub_vehicle')||'[]'); }catch(e){ vehicleTrips=[]; }
+}
+
+function vehicleSave(){
+  try{ localStorage.setItem('warehub_vehicle', JSON.stringify(vehicleTrips)); }catch(e){}
+}
+
+function vehiclePopulateDrivers(){
+  var sel=document.getElementById('veh-driver');
+  if(!sel) return;
+  var cur=sel.value;
+  sel.innerHTML='<option value="">— select driver —</option>';
+  // Add managers first, then packers
+  managers.forEach(function(m){ sel.innerHTML+='<option value="'+m.name+'">'+m.name+' (Manager)</option>'; });
+  packers.forEach(function(p){ sel.innerHTML+='<option value="'+p.name+'">'+p.name+'</option>'; });
+  // Also allow custom entry
+  sel.innerHTML+='<option value="__other__">Other (type below)…</option>';
+  if(cur) sel.value=cur;
+}
+
+function vehicleSetNow(fieldId){
+  var el=document.getElementById(fieldId);
+  if(!el) return;
+  var now=new Date();
+  // datetime-local format: YYYY-MM-DDTHH:MM
+  var pad=function(n){return n<10?'0'+n:n;};
+  el.value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'T'+pad(now.getHours())+':'+pad(now.getMinutes());
+}
+
+function vehicleAddTrip(){
+  var driver=document.getElementById('veh-driver').value;
+  var dest=document.getElementById('veh-dest').value.trim();
+  var depart=document.getElementById('veh-depart').value;
+  var ret=document.getElementById('veh-return').value;
+  var odoStart=document.getElementById('veh-odo-start').value;
+  var odoEnd=document.getElementById('veh-odo-end').value;
+  var notes=document.getElementById('veh-notes').value.trim();
+  var msg=document.getElementById('veh-form-msg');
+
+  if(!driver||driver==='__other__'){ msg.textContent='⚠ Select a driver.'; return; }
+  if(!dest){ msg.textContent='⚠ Enter a destination.'; return; }
+  if(!depart){ msg.textContent='⚠ Enter departure time.'; return; }
+
+  var miles=null;
+  if(odoStart&&odoEnd){
+    miles=parseFloat(odoEnd)-parseFloat(odoStart);
+    if(miles<0){ msg.textContent='⚠ End odometer must be greater than start.'; return; }
+  }
+
+  var trip={
+    id: Date.now(),
+    date: depart.split('T')[0],
+    driver: driver,
+    destination: dest,
+    departure: depart,
+    returned: ret||'',
+    odoStart: odoStart?parseFloat(odoStart):null,
+    odoEnd: odoEnd?parseFloat(odoEnd):null,
+    miles: miles,
+    notes: notes
+  };
+
+  vehicleTrips.unshift(trip); // newest first
+  vehicleSave();
+  vehicleClearForm();
+  renderVehicleLog();
+  renderVehicleStats();
+  msg.style.color='var(--gn)';
+  msg.textContent='✓ Trip logged!';
+  setTimeout(function(){ msg.textContent=''; },2500);
+}
+
+function vehicleClearForm(){
+  document.getElementById('veh-driver').value='';
+  document.getElementById('veh-dest').value='';
+  document.getElementById('veh-depart').value='';
+  document.getElementById('veh-return').value='';
+  document.getElementById('veh-odo-start').value='';
+  document.getElementById('veh-odo-end').value='';
+  document.getElementById('veh-notes').value='';
+}
+
+function vehicleDeleteTrip(id){
+  vehicleTrips=vehicleTrips.filter(function(t){return t.id!==id;});
+  vehicleSave();
+  renderVehicleLog();
+  renderVehicleStats();
+}
+
+function renderVehicleStats(){
+  var el=document.getElementById('veh-stats');
+  if(!el) return;
+  var totalTrips=vehicleTrips.length;
+  var totalMiles=vehicleTrips.reduce(function(s,t){return s+(t.miles||0);},0);
+  // Trips this month
+  var now=new Date();
+  var thisMonth=vehicleTrips.filter(function(t){
+    var d=new Date(t.date);
+    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+  }).length;
+  // Most frequent driver
+  var driverCount={};
+  vehicleTrips.forEach(function(t){driverCount[t.driver]=(driverCount[t.driver]||0)+1;});
+  var topDriver=Object.keys(driverCount).sort(function(a,b){return driverCount[b]-driverCount[a];})[0]||'—';
+
+  var cards=[
+    {label:'TOTAL TRIPS',value:totalTrips,color:'var(--cy)'},
+    {label:'TOTAL MILES',value:totalMiles.toFixed(1)+' mi',color:'var(--gn)'},
+    {label:'THIS MONTH',value:thisMonth+' trips',color:'var(--am)'},
+    {label:'TOP DRIVER',value:topDriver,color:'var(--pu)'}
+  ];
+  el.innerHTML=cards.map(function(card){
+    return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 16px;">'
+      +'<div style="font-size:8px;letter-spacing:2px;color:var(--td);">'+card.label+'</div>'
+      +'<div style="font-size:20px;font-weight:700;color:'+card.color+';margin-top:4px;">'+card.value+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderVehicleLog(){
+  var el=document.getElementById('veh-log');
+  if(!el) return;
+  var filter=(document.getElementById('veh-filter')||{}).value||'';
+  var trips=vehicleTrips;
+  if(filter){
+    var f=filter.toLowerCase();
+    trips=trips.filter(function(t){
+      return t.driver.toLowerCase().includes(f)||t.destination.toLowerCase().includes(f)||t.notes.toLowerCase().includes(f);
+    });
+  }
+  if(!trips.length){
+    el.innerHTML='<div style="padding:32px;text-align:center;font-size:11px;color:var(--td);">No trips logged yet. Fill in the form above to add the first entry.</div>';
+    return;
+  }
+  var rows=trips.map(function(t){
+    var dur='—';
+    if(t.departure&&t.returned){
+      var ms=new Date(t.returned)-new Date(t.departure);
+      if(ms>0){
+        var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
+        dur=h>0?h+'h '+m+'m':m+'m';
+      }
+    }
+    return '<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<td style="padding:9px 12px;font-size:10px;color:var(--td);white-space:nowrap;">'+t.date+'</td>'
+      +'<td style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--cy);">'+t.driver+'</td>'
+      +'<td style="padding:9px 12px;font-size:11px;">'+t.destination+'</td>'
+      +'<td style="padding:9px 12px;font-size:10px;white-space:nowrap;">'+(t.departure?t.departure.replace('T',' ').slice(0,16):'—')+'</td>'
+      +'<td style="padding:9px 12px;font-size:10px;white-space:nowrap;">'+(t.returned?t.returned.replace('T',' ').slice(0,16):'—')+'</td>'
+      +'<td style="padding:9px 12px;font-size:10px;text-align:center;">'+dur+'</td>'
+      +'<td style="padding:9px 12px;font-size:10px;text-align:center;color:var(--gn);">'+(t.miles!==null?t.miles.toFixed(1)+' mi':'—')+'</td>'
+      +'<td style="padding:9px 12px;font-size:10px;color:var(--td);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+t.notes+'">'+( t.notes||'—')+'</td>'
+      +'<td style="padding:9px 12px;text-align:center;">'
+        +'<button onclick="vehicleDeleteTrip('+t.id+')" style="font-size:9px;padding:2px 8px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">✕</button>'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+
+  el.innerHTML='<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr style="border-bottom:2px solid var(--bdr);">'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DATE</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DRIVER</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DESTINATION</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DEPARTURE</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">RETURN</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:center;color:var(--td);">DURATION</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:center;color:var(--td);">MILES</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">NOTES</th>'
+    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;color:var(--td);"></th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody></table>';
+}
+
+function vehicleExportCSV(){
+  if(!vehicleTrips.length){pm('⚠ No trips to export.');return;}
+  var hdr=['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes'];
+  var rows=vehicleTrips.map(function(t){
+    var dur='';
+    if(t.departure&&t.returned){var ms=new Date(t.returned)-new Date(t.departure);if(ms>0) dur=Math.round(ms/60000);}
+    return [t.date,t.driver,t.destination,t.departure,t.returned||'',dur,t.miles!==null?t.miles.toFixed(1):'',t.notes].map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');
+  });
+  var csv=[hdr.join(',')].concat(rows).join('\n');
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='vehicle-log-'+shiftDate+'.csv';
+  a.click();
+}
+
+async function vehicleSaveExcel(){
+  if(!_msalToken||!_excelFileId){pm('⚠ Connect Excel first (Payroll tab → Connect Excel).');return;}
+  if(!vehicleTrips.length){pm('⚠ No trips to save.');return;}
+  var sheet='Vehicle Log';
+  var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  pm('⟳ Saving vehicle log to Excel…');
+  try{
+    // Ensure sheet exists
+    await fetch(base+'/worksheets',{method:'POST',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({name:sheet})});
+    // Get row count
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
+    var rd=await rr.json();
+    var existing=rd.rowCount||0;
+    var hdr=[['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes']];
+    var dataRows=vehicleTrips.map(function(t){
+      var dur='';
+      if(t.departure&&t.returned){var ms=new Date(t.returned)-new Date(t.departure);if(ms>0)dur=Math.round(ms/60000);}
+      return [t.date,t.driver,t.destination,t.departure,t.returned||'',dur,t.miles!==null?t.miles.toFixed(1):'',t.notes];
+    });
+    var rows=existing===0?hdr.concat(dataRows):dataRows;
+    var startRow=existing+1,endRow=startRow+rows.length-1;
+    var wr=await fetch(
+      base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A'+startRow+':H'+endRow+'\')',
+      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:rows})}
+    );
+    if(wr.ok) pm('✓ Vehicle log saved to Excel → "'+sheet+'" tab');
+    else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
+  }catch(e){ pm('✗ Save failed: '+e.message); }
+}
+
+// ══════════════════════════════════════════
+// GOOGLE MAPS PLACES AUTOCOMPLETE
+// ══════════════════════════════════════════
+
+var _gmapsLoaded = false;
+var _gmapsKey    = '';
+
+function gmapsLoadConfig(){
+  try{ _gmapsKey=localStorage.getItem('warehub_gmaps_key')||''; }catch(e){}
+}
+
+function gmapsSaveKey(key){
+  _gmapsKey=key.trim();
+  try{ localStorage.setItem('warehub_gmaps_key',_gmapsKey); }catch(e){}
+}
+
+function gmapsInit(){
+  if(_gmapsLoaded||!_gmapsKey) return;
+  if(typeof google!=='undefined'&&google.maps&&google.maps.places){ gmapsAttach(); return; }
+  var s=document.createElement('script');
+  s.src='https://maps.googleapis.com/maps/api/js?key='+_gmapsKey+'&libraries=places&callback=gmapsOnLoad';
+  s.async=true; s.defer=true;
+  document.head.appendChild(s);
+}
+
+function gmapsOnLoad(){
+  _gmapsLoaded=true;
+  gmapsAttach();
+}
+window.gmapsOnLoad=gmapsOnLoad;
+
+function gmapsAttach(){
+  var input=document.getElementById('veh-dest');
+  if(!input||input._gmapsAttached) return;
+  var ac=new google.maps.places.Autocomplete(input,{
+    fields:['formatted_address','name','geometry','url'],
+    types:['establishment','geocode']
+  });
+  ac.addListener('place_changed',function(){
+    var place=ac.getPlace();
+    input.value=place.formatted_address||place.name||input.value;
+    var linkEl=document.getElementById('veh-dest-map-link');
+    if(linkEl&&place.url){
+      linkEl.style.display='block';
+      linkEl.innerHTML='<a href="'+place.url+'" target="_blank" style="color:var(--cy);text-decoration:none;">📍 View on Google Maps</a>';
+    }
+  });
+  input._gmapsAttached=true;
+  var st=document.createElement('style');
+  st.textContent=
+    '.pac-container{background:#1e1e1e!important;border:1px solid #333!important;font-family:inherit!important;}'
+    +'.pac-item{background:#1e1e1e!important;color:#ccc!important;padding:6px 10px!important;font-size:11px!important;border-top:1px solid #333!important;cursor:pointer!important;}'
+    +'.pac-item:hover,.pac-item-selected{background:#2a2a2a!important;}'
+    +'.pac-item-query{color:#fff!important;font-size:11px!important;}'
+    +'.pac-matched{color:#0af!important;font-weight:700!important;}'
+    +'.pac-icon{display:none!important;}';
+  document.head.appendChild(st);
+}
+
+function gmapsShowSetup(){
+  var existing=document.getElementById('gmaps-setup-modal');
+  if(existing){ existing.remove(); return; }
+  var modal=document.createElement('div');
+  modal.id='gmaps-setup-modal';
+  modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML=
+    '<div style="background:var(--sur);border:1px solid var(--bdr);padding:28px;width:460px;max-width:94vw;">'
+    +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">GOOGLE MAPS API KEY</div>'
+    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Enables address autocomplete on the destination field.</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--bdr);padding:12px;font-size:10px;color:var(--td);line-height:1.8;margin-bottom:14px;">'
+    +'1. Go to <a href="https://console.cloud.google.com" target="_blank" style="color:var(--cy);">console.cloud.google.com</a><br>'
+    +'2. APIs &amp; Services → Enable → <b style="color:var(--tx);">Places API</b><br>'
+    +'3. Credentials → + Create → API Key → copy it<br>'
+    +'4. Restrict to <b style="color:var(--tx);">Places API</b> + your GitHub Pages URL'
+    +'</div>'
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">PASTE YOUR API KEY</div>'
+    +'<input id="gmaps-key-input" placeholder="AIzaSy…" value="'+_gmapsKey+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:14px;outline:none;"/>'
+    +'<div id="gmaps-msg" style="font-size:10px;color:var(--am);min-height:16px;margin-bottom:12px;"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
+    +'<button id="gmaps-cancel-btn" style="padding:7px 16px;font-size:10px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
+    +'<button id="gmaps-save-btn" style="padding:7px 16px;font-size:10px;background:#4285f4;border:none;color:#fff;cursor:pointer;font-family:inherit;">SAVE & ENABLE →</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('gmaps-cancel-btn').onclick=function(){ modal.remove(); };
+  document.getElementById('gmaps-save-btn').onclick=function(){
+    var key=document.getElementById('gmaps-key-input').value.trim();
+    var msg=document.getElementById('gmaps-msg');
+    if(!key||!key.startsWith('AIza')){ msg.textContent='⚠ Paste a valid key (starts with AIza…)'; return; }
+    gmapsSaveKey(key);
+    msg.style.color='var(--gn)'; msg.textContent='✓ Saved! Loading Maps…';
+    gmapsInit();
+    setTimeout(function(){ modal.remove(); pm('✓ Google Maps autocomplete active on destination field!'); },1200);
+  };
+}
+
+
+
 
 document.addEventListener('DOMContentLoaded',function(){
   loadStaff();
   excelLoadConfig();
+  gmapsLoadConfig();
+  vehicleLoad();
   renderManagerPanel();
   renderPackerPanel();
   renderAssignPanel();
@@ -2928,5 +3334,171 @@ document.addEventListener('DOMContentLoaded',function(){
     <iframe id="fm-frame" width="280" height="158" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="display:none;border:1px solid var(--bdr);"></iframe>
     <button onclick="document.getElementById('fm-panel').style.display='none';" style="margin-top:6px;width:100%;font-size:9px;padding:4px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">✕ CLOSE</button>
   </div>
+<!-- ── AI Assistant ── -->
+<button id="ai-btn" title="AI Assistant" onclick="aiToggle()">🤖</button>
+<div id="ai-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--bdr);background:linear-gradient(135deg,#6366f122,#8b5cf622);">
+    <div>
+      <div style="font-size:10px;letter-spacing:2px;color:#8b5cf6;font-weight:700;">WAREHUB AI</div>
+      <div style="font-size:8px;color:var(--td);margin-top:1px;">Powered by Claude · knows your shift data</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button onclick="aiClear()" style="font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CLEAR</button>
+      <button onclick="aiToggle()" style="font-size:12px;background:transparent;border:none;color:var(--td);cursor:pointer;">✕</button>
+    </div>
+  </div>
+  <div id="ai-msgs"></div>
+  <div id="ai-key-row">
+    <button onclick="aiAsk('Who packed the most today?')">📦 Top packer</button>
+    <button onclick="aiAsk('Any unassigned orders?')">📋 Unassigned</button>
+    <button onclick="aiAsk('Show shift summary')">🕐 Shift summary</button>
+    <button onclick="aiAsk('Who is currently clocked in?')">👤 Online now</button>
+  </div>
+  <div id="ai-input-row">
+    <textarea id="ai-input" placeholder="Ask anything about your warehouse…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend();}"></textarea>
+    <button id="ai-send" onclick="aiSend()">▶</button>
+  </div>
+</div>
+<script>
+// ══════════════════════════════════════════
+// WAREHUB AI — Claude-powered assistant
+// ══════════════════════════════════════════
+
+var _aiHistory = [];
+var _aiLoading = false;
+
+function aiToggle(){
+  var p=document.getElementById('ai-panel');
+  var open=p.style.display==='flex';
+  p.style.display=open?'none':'flex';
+  if(!open){
+    var msgs=document.getElementById('ai-msgs');
+    if(!msgs.children.length) aiAddMsg('sys','👋 Hi! I know your current shift data. Ask me anything or give me commands like "assign all orders to Sarah".');
+    setTimeout(function(){ document.getElementById('ai-input').focus(); },100);
+  }
+}
+
+function aiClear(){
+  _aiHistory=[];
+  document.getElementById('ai-msgs').innerHTML='';
+  aiAddMsg('sys','Chat cleared.');
+}
+
+function aiAddMsg(type,text){
+  var msgs=document.getElementById('ai-msgs');
+  var div=document.createElement('div');
+  div.className=type==='user'?'ai-msg-user':type==='ai'?'ai-msg-ai':'ai-msg-sys';
+  div.innerHTML=text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+function aiGetContext(){
+  var now=Date.now();
+  var ctx='=== WAREHUB SHIFT CONTEXT ===\nDate: '+shiftDate+'\n\n';
+  var done=orders.filter(function(o){return o.status==='done';}).length;
+  var pending=orders.filter(function(o){return o.status==='pending';}).length;
+  var unassigned=orders.filter(function(o){return o.status==='pending'&&!o.assignedTo;}).length;
+  ctx+='ORDERS: '+orders.length+' total | '+done+' done | '+pending+' pending | '+unassigned+' unassigned\n';
+  var carriers={};
+  orders.forEach(function(o){ carriers[o.carrier]=(carriers[o.carrier]||0)+1; });
+  ctx+='CARRIERS: '+Object.keys(carriers).map(function(k){return k+':'+carriers[k];}).join(', ')+'\n\n';
+  ctx+='PACKERS:\n';
+  packers.forEach(function(p){
+    var ms=0;
+    (p.shiftSessions||[]).forEach(function(s){
+      var i=s.clockIn?new Date(s.clockIn).getTime():0,o2=s.clockOut?new Date(s.clockOut).getTime():0;
+      if(i&&o2) ms+=(o2-i);
+    });
+    if(p.online&&p.loginTime) ms+=(now-p.loginTime);
+    var myDone=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';}).length;
+    var myPending=orders.filter(function(o){return o.assignedTo===p.id&&o.status==='pending';}).length;
+    ctx+='  - '+p.name+' ('+p.id+'): '+(p.online?'CLOCKED IN':'out')+' | '+(p.active?'ON SHIFT':'off')+' | '+(ms>0?(ms/3600000).toFixed(2):'0')+'hrs | '+myDone+' done | '+myPending+' pending\n';
+  });
+  var pend=orders.filter(function(o){return o.status==='pending';}).slice(0,20);
+  if(pend.length){
+    ctx+='\nPENDING ORDERS (first '+pend.length+'):\n';
+    pend.forEach(function(o){ ctx+='  '+o.tracking+' | '+o.carrier+' | SKU:'+o.skus+' | Shelf:'+o.shelf+(o.assignedTo?' | '+o.assignedTo:' | UNASSIGNED')+'\n'; });
+  }
+  return ctx;
+}
+
+function aiSystemPrompt(){
+  return 'You are the Warehub AI assistant for Double Sided ISCM LLC warehouse.\nYou have real-time shift data in each message. Be concise — this is a busy warehouse.\nYou can answer questions AND take actions by appending a JSON block at the end of your reply.\n\nACTION FORMAT (only when needed):\n```json\n{"actions":[\n  {"type":"autoAssign"},\n  {"type":"assignAll","packerId":"PKR-001"},\n  {"type":"assign","trackingId":"TRACK123","packerId":"PKR-001"},\n  {"type":"clockIn","packerId":"PKR-001"},\n  {"type":"clockOut","packerId":"PKR-001"},\n  {"type":"setOnShift","packerId":"PKR-001"},\n  {"type":"setOffShift","packerId":"PKR-001"}\n]}\n```\nNever invent data. Use exact IDs from context.';
+}
+
+async function aiSend(){
+  if(_aiLoading) return;
+  var input=document.getElementById('ai-input');
+  var text=input.value.trim();
+  if(!text) return;
+  input.value='';
+  await aiAsk(text);
+}
+
+async function aiAsk(text){
+  if(_aiLoading) return;
+  _aiLoading=true;
+  aiAddMsg('user',text);
+  var loadDiv=aiAddMsg('ai','⟳ thinking…');
+  _aiHistory.push({role:'user',content:aiGetContext()+'\n\nUSER: '+text});
+  try{
+    var resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:aiSystemPrompt(),messages:_aiHistory})
+    });
+    var data=await resp.json();
+    var reply=(data.content&&data.content[0]&&data.content[0].text)||'⚠ No response.';
+    var actionMatch=reply.match(/```json([\s\S]*?)```/);
+    var display=reply.replace(/```json[\s\S]*?```/g,'').trim();
+    loadDiv.innerHTML=display.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    _aiHistory.push({role:'assistant',content:reply});
+    if(_aiHistory.length>20) _aiHistory=_aiHistory.slice(-20);
+    if(actionMatch){
+      try{
+        var parsed=JSON.parse(actionMatch[1].trim());
+        if(parsed.actions&&parsed.actions.length){
+          var r=aiDoActions(parsed.actions);
+          if(r) aiAddMsg('sys','✓ '+r);
+        }
+      }catch(e){ console.warn('AI action parse:',e); }
+    }
+  }catch(e){
+    loadDiv.innerHTML='✗ Error: '+e.message;
+  }
+  _aiLoading=false;
+}
+
+function aiDoActions(actions){
+  var results=[];
+  actions.forEach(function(a){
+    if(a.type==='autoAssign'){
+      autoAssign(); results.push('auto-assigned orders');
+    } else if(a.type==='assignAll'){
+      var p=packers.find(function(pk){return pk.id===a.packerId||pk.name.toLowerCase()===(a.packerId||'').toLowerCase();});
+      if(p){var n=0;orders.forEach(function(o){if(o.status==='pending'){o.assignedTo=p.id;n++;}});saveStaff();renderAssignPanel();renderDash();results.push('assigned '+n+' orders to '+p.name);}
+    } else if(a.type==='assign'){
+      var o=orders.find(function(ord){return ord.tracking===a.trackingId;}),p=packers.find(function(pk){return pk.id===a.packerId;});
+      if(o&&p){o.assignedTo=p.id;renderAssignPanel();renderDash();results.push('assigned '+a.trackingId+' to '+p.name);}
+    } else if(a.type==='clockOut'){
+      var p=packers.find(function(pk){return pk.id===a.packerId||pk.name.toLowerCase()===(a.packerId||'').toLowerCase();});
+      if(p&&p.online){loginPacker(p.id);results.push('clocked out '+p.name);}
+    } else if(a.type==='clockIn'){
+      var p=packers.find(function(pk){return pk.id===a.packerId||pk.name.toLowerCase()===(a.packerId||'').toLowerCase();});
+      if(p&&!p.online){loginPacker(p.id);results.push('clocked in '+p.name);}
+    } else if(a.type==='setOnShift'){
+      var p=packers.find(function(pk){return pk.id===a.packerId;});
+      if(p){p.active=true;saveStaff();renderPackerPanel();results.push(p.name+' ON SHIFT');}
+    } else if(a.type==='setOffShift'){
+      var p=packers.find(function(pk){return pk.id===a.packerId;});
+      if(p){p.active=false;saveStaff();renderPackerPanel();results.push(p.name+' OFF SHIFT');}
+    }
+  });
+  return results.join(' · ');
+}
+</script>
 </body>
-</html>
