@@ -208,9 +208,9 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 
     <!-- Action buttons — always one row -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:nowrap;align-items:center;">
-      <button class="btn btn-r" id="clear-btn" style="font-size:9px;white-space:nowrap;">✕ CLEAR ALL ORDERS</button>
-      <button class="btn" id="print-sku-sort-btn" style="font-size:9px;white-space:nowrap;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT BY SKU GROUP</button>
-      <button class="btn" id="copy-debug-btn" style="font-size:9px;white-space:nowrap;border-color:var(--am);color:var(--am);">📋 COPY DEBUG LOG</button>
+      <button class="btn btn-r" id="clear-btn" style="font-size:9px;white-space:nowrap;" onclick="if(confirm('Clear ALL orders? This cannot be undone.')){orders=[];ai=0;pm('Orders cleared.');renderAssignPanel();renderDash();renderFloor();renderQueue();renderActive();document.getElementById('debug-log').textContent='';}">✕ CLEAR ALL ORDERS</button>
+      <button class="btn" id="print-sku-sort-btn" style="font-size:9px;white-space:nowrap;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printSkuSort()">🖨 PRINT BY SKU GROUP</button>
+      <button class="btn" id="copy-debug-btn" style="font-size:9px;white-space:nowrap;border-color:var(--am);color:var(--am);" onclick="var txt=document.getElementById('debug-log').textContent;if(!txt){pm('Debug log is empty.');return;}var ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;left:-9999px;top:0;';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,99999);try{document.execCommand('copy');pm('✓ Debug log copied!');}catch(e){pm('⚠ Auto-copy failed.');}document.body.removeChild(ta);">📋 COPY DEBUG LOG</button>
     </div>
 
     <!-- Info cards -->
@@ -236,7 +236,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
     <div id="debug-box" class="card" style="display:block;max-width:800px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div class="lbl">DEBUG LOG</div>
-        <button class="btn" id="demo-btn" style="font-size:8px;opacity:0.5;border-color:#444;color:#555;padding:2px 8px;">▶ DEMO</button>
+        <button class="btn" id="demo-btn" style="font-size:8px;opacity:0.5;border-color:#444;color:#555;padding:2px 8px;" onclick="loadDemo()">▶ DEMO</button>
       </div>
       <pre id="debug-log" style="font-size:10px;color:var(--am);white-space:pre-wrap;max-height:220px;overflow-y:auto;line-height:1.5;"></pre>
     </div>
@@ -253,9 +253,9 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <div>
         <div class="lbl" style="color:var(--am);margin-bottom:8px;">MANAGER</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <input class="inp" id="new-mgr-name" placeholder="Manager name…"/>
-          <input class="inp" id="new-mgr-id"   placeholder="Barcode ID (e.g. MGR-001)…"/>
-          <button class="btn" id="add-mgr-btn" style="border-color:var(--am);background:#ffb30010;color:var(--am);">💾 SAVE MANAGER</button>
+          <input class="inp" id="new-mgr-name" placeholder="Manager name…" onkeydown="if(event.key==='Enter')addManager()"/>
+          <input class="inp" id="new-mgr-id"   placeholder="Barcode ID (e.g. MGR-001)…" onkeydown="if(event.key==='Enter')addManager()"/>
+          <button class="btn" id="add-mgr-btn" style="border-color:var(--am);background:#ffb30010;color:var(--am);" onclick="addManager()">💾 SAVE MANAGER</button>
         </div>
         <div id="manager-panel" style="margin-top:8px;"></div>
       </div>
@@ -264,19 +264,19 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <div>
         <div class="lbl" style="color:var(--cy);margin-bottom:8px;">ADD PACKER</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <input class="inp" id="new-packer-name" placeholder="Packer name…"/>
-          <input class="inp" id="new-packer-id"   placeholder="Barcode ID (e.g. PKR-001)…"/>
-          <button class="btn btn-c" id="add-packer-btn">+ ADD PACKER</button>
+          <input class="inp" id="new-packer-name" placeholder="Packer name…" onkeydown="if(event.key==='Enter')addPacker()"/>
+          <input class="inp" id="new-packer-id"   placeholder="Barcode ID (e.g. PKR-001)…" onkeydown="if(event.key==='Enter')addPacker()"/>
+          <button class="btn btn-c" id="add-packer-btn" onclick="addPacker()">+ ADD PACKER</button>
         </div>
       </div>
     </div>
 
     <!-- ── Action Buttons ── -->
     <div style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);">🪪 PRINT ALL ID CARDS</button>
+      <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);" onclick="printPackerCards()">🪪 PRINT ALL ID CARDS</button>
       <div style="flex:1;"></div>
-      <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;">⚡ SKU AUTO-ASSIGN</button>
-      <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;">🖨 PRINT PICK LISTS</button>
+      <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;" onclick="autoAssign()">⚡ SKU AUTO-ASSIGN</button>
+      <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printPickLists()">🖨 PRINT PICK LISTS</button>
     </div>
 
     <!-- ── Main Grid: Managers | Packers | Orders ── -->
@@ -303,7 +303,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
     <div id="packer-login">
       <div style="font-size:10px;letter-spacing:4px;color:var(--td);margin-bottom:8px;">PACK STATION</div>
       <div style="font-family:'Barlow',sans-serif;font-size:22px;font-weight:700;color:var(--cy);margin-bottom:16px;">SCAN YOUR PACKER BARCODE</div>
-      <input id="login-scan-in" placeholder="Scan packer ID barcode…" autocomplete="off"/>
+      <input id="login-scan-in" placeholder="Scan packer ID barcode…" autocomplete="off" onkeydown="if(event.key==='Enter'){var v=this.value.trim().toUpperCase();if(v)loginPacker(v);}"/>
       <div id="login-msg">Scan to clock in · Scan again at end of shift to clock out</div>
       <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;" id="quick-login-btns"></div>
     </div>
@@ -312,7 +312,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <div id="cp-avatar"></div>
       <div id="cp-name"></div>
       <div id="cp-stats"></div>
-      <button id="cp-switch">SWITCH PACKER</button>
+      <button id="cp-switch" onclick="currentPacker=null;saveStaff();var ld=document.getElementById('packer-login'),bd=document.getElementById('current-packer-bar');if(ld)ld.classList.remove('hide');if(bd)bd.style.display='none';renderQuickLoginBtns();setTimeout(function(){var el=document.getElementById('login-scan-in');if(el){el.value='';el.focus();}},50);">SWITCH PACKER</button>
     </div>
     <!-- Pack layout -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
@@ -439,7 +439,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
           currentPacker=null; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); showLoginOrPack();
           pm('✓ Hours reset. Ready for a new shift.');
         ">↺ RESET HOURS</button>
-        <button class="btn btn-g" id="export-csv-btn">⬇ EXPORT CSV</button>
+        <button class="btn btn-g" id="export-csv-btn" onclick="exportPayrollCSV()">⬇ EXPORT CSV</button>
         <button class="btn" id="excel-connect-btn" style="border-color:#1D6F42;color:#1D6F42;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
         <button class="btn" id="excel-save-btn" style="border-color:#1D6F42;color:#1D6F42;display:none;" onclick="excelSavePayroll()">📊 SAVE TO EXCEL</button>
       </div>
@@ -2642,46 +2642,34 @@ async function msFindFile(fname, msgEl){
 }
 
 async function msCreateExcelFile(fname, msgEl){
-  function setMsg(t,c){ if(msgEl){msgEl.style.color=c||'var(--am)';msgEl.textContent=t;} }
+  function setMsg(t,col){ if(msgEl){msgEl.style.color=col||'var(--am)';msgEl.textContent=t;} }
   try{
-    // Upload a valid minimal xlsx binary
-    var minXlsx = Uint8Array.from(atob(
-      'UEsDBBQACAgIAAAAIQAAAAAAAAAAAAAAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbI1Ry'+
-      'WrDMBC9B/oPQfdYztISSkzu6aEf0HQeRLbGjkCWhKTk769cEkMJhd7Em+a9mWHm9dNR'+
-      'Fyf0wVqzJGVWEEAjrLT7JXn73Kw+SBWiMpIra3Amf0DI+v7u/t5VmKJOhWFJou+cXZ'+
-      'Q4xNhRSkONRxUy68CkTuv8UTE1/p42qBqle4BSSvFOyJdxBEvQxBKJJJIkAVBLBwiA'+
-      'mUFkiQAAAMIAAABQSwMEFAAICAgAAAAhAAAAAAAAAAAAAAAAACsAAAB4bC93b3JrYm9v'+
-      'ay9yZWxzL3dvcmtib29rLnhtbC5yZWxzhY9BCsIwEEX3niLM3qStCCJN3YgIbqUH'+
-      'CGOS1mAmIYmivb0RFQSXM/Pf48/2PD/VSxIuBBagagUAtZioixoKuB0P6w2ohJar'+
-      'SG0oYIAE27V3eDQU0CzqJfCFxbN1VQSjNY7DzAkSQlBk4IBPEoQnkEk9P7t+gFQ'+
-      'SwcIH/IsBFkAAACSAAAAUEsDBBQACAgIAAAAIQAAAAAAAAAAAAAAABQAAAB4bC9zaGFy'+
-      'ZWRTdHJpbmdzLnhtbCtJLS4BAABQSwcILj2AFQYAAAAMAAAAU EsDBBQACAgIAAAA'+
-      'IQAAAAAAAAAAAAAAAA8AAAB4bC93b3JrYm9vay54bWyNU8tu2zAQvBfoP wi6y7Ik'+
-      'x0ZgqUXaQw4FmhY9E9LKJkqRAkk59u+7lJy0LVD0Qe7Ozs5yluvHoxbRCayTxmYk'+
-      'jlMSgS1NJW2dke/br9GKRs4LW wlDGTkBI+vu4+L2GSmfIB+8ZCwHvL0pGmuO/O'+
-      'JR3OJ0knuFCgrNJKSHqakoSTRakkkzTRqZ4mgJ63cP2TzRiCSDpMhDW34CnIJKMU'+
-      'kxhBFlFNKU2w8oolFyWZppkFUTKJMniE/oElzY7cZOPCFkSqKpKM2yVLKkyKIkhD'+
-      'C0YBT9cFnBlH3BJMkxQoTlDJuoAeZsmkMGNmLiUUkBRpjkQtZgHmqXNS2oWqSyQH'+
-      'XFJM3AuAalQpGjFJMq0jEJGtmRKHnJMPIuZJK0QpWRDJJKoMhBkIeiFJMklIuqM'+
-      'xk7xmNk6KvY76eMSSFkFJMnJlJqpFukyKFxpkpGJkkCjE2VJMkkJJIRJjpmSFBpk'+
-      'iJIcRpjkQpJJMiYIuaTJMkkKFBpktJMilJJMckJJMkgJIiUpJMnJFJqpFukyKFxp'+
-      'kpGJkkCjE2VJMklJJIRJjpmSFBpkiJIcRpjkQpJJMiYIuaTJMkkKFBpktJMilJJM'+
-      'ckJJMkgJIiUpJMnJFJqpFukyKFxpkpGJkkCjE2VJAAAAU EsFBgAAAAAGAAYAxAEA'+
-      'ANUBAAAAAA=='
-    ), function(c){ return c.charCodeAt(0); });
-
+    // Upload empty body — OneDrive initializes it as a valid xlsx from the filename extension
     var r = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content',
-      {method:'PUT', headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:minXlsx}
+      {
+        method:'PUT',
+        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},
+        body: new Blob([], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+      }
     );
     var d = await r.json();
-    console.log('Create file:', r.status, d);
-    if(!r.ok||!d.id){ setMsg('✗ Create failed ('+r.status+'): '+((d.error&&d.error.message)||JSON.stringify(d).slice(0,100)),'var(--rd)'); return false; }
-    _excelFileId=d.id; excelSaveConfig();
-    await new Promise(function(res){ setTimeout(res,2500); });
+    console.log('Create file response:', r.status, d);
+    if(!r.ok || !d.id){
+      setMsg('⚠ Auto-create failed ('+r.status+'). Please create the file manually in OneDrive → New → Excel workbook, name it "'+fname.replace('.xlsx','')+'" then reconnect.','var(--am)');
+      return false;
+    }
+    _excelFileId = d.id;
+    excelSaveConfig();
+    setMsg('⟳ File created, initializing…');
+    await new Promise(function(res){ setTimeout(res,3000); });
     await msEnsureSheet();
     return true;
-  }catch(e){ console.error('msCreateExcelFile:', e); setMsg('✗ '+e.message,'var(--rd)'); return false; }
+  }catch(e){
+    console.error('msCreateExcelFile:', e);
+    setMsg('⚠ Could not auto-create. Please create "'+fname.replace('.xlsx','')+'" in OneDrive manually, then reconnect.','var(--am)');
+    return false;
+  }
 }
 
 async function msEnsureSheet(){
@@ -2853,6 +2841,56 @@ document.addEventListener('DOMContentLoaded',function(){
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
     if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
   },10000);
+
+  // ── Packers tab ──
+  var addMgrBtn=document.getElementById('add-mgr-btn');
+  if(addMgrBtn) addMgrBtn.addEventListener('click', addManager);
+  var addPackerBtn=document.getElementById('add-packer-btn');
+  if(addPackerBtn) addPackerBtn.addEventListener('click', addPacker);
+  var autoAssignBtn=document.getElementById('auto-assign-btn');
+  if(autoAssignBtn) autoAssignBtn.addEventListener('click', autoAssign);
+  var printCardsBtn=document.getElementById('print-cards-btn');
+  if(printCardsBtn) printCardsBtn.addEventListener('click', printPackerCards);
+  var printPicklistBtn=document.getElementById('print-picklist-btn');
+  if(printPicklistBtn) printPicklistBtn.addEventListener('click', printPickLists);
+
+  // Enter key on staff input fields
+  ['new-packer-name','new-packer-id'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener('keydown',function(e){ if(e.key==='Enter') addPacker(); });
+  });
+  ['new-mgr-name','new-mgr-id'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener('keydown',function(e){ if(e.key==='Enter') addManager(); });
+  });
+
+  // ── Import tab ──
+  var clearBtn=document.getElementById('clear-btn');
+  if(clearBtn) clearBtn.addEventListener('click',function(){
+    if(confirm('Clear ALL orders? This cannot be undone.')){
+      orders=[]; ai=0;
+      pm('Orders cleared.');
+      renderAssignPanel(); renderDash(); renderFloor(); renderQueue(); renderActive();
+      document.getElementById('debug-log').textContent='';
+    }
+  });
+  var copyDebugBtn=document.getElementById('copy-debug-btn');
+  if(copyDebugBtn) copyDebugBtn.addEventListener('click',function(){
+    var txt=document.getElementById('debug-log').textContent;
+    if(!txt){ pm('Debug log is empty — import a PDF first.'); return; }
+    var ta=document.createElement('textarea');
+    ta.value=txt; ta.style.cssText='position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,999999);
+    try{ document.execCommand('copy'); pm('✓ Debug log copied!'); }
+    catch(e){ pm('⚠ Auto-copy failed.'); }
+    document.body.removeChild(ta);
+  });
+  var skuSortBtn=document.getElementById('print-sku-sort-btn');
+  if(skuSortBtn) skuSortBtn.addEventListener('click', printSkuSort);
+
+  // ── Payroll tab ──
+  var csvBtn=document.getElementById('export-csv-btn');
+  if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
 });
 </script>
 
