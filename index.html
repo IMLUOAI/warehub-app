@@ -6,6 +6,7 @@
 <title>WAREHUB — Double Sided ISCM LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
 <style>
 :root{
   --bg:#05080f;--sur:#0a0f1e;--bdr:#162035;
@@ -2440,23 +2441,27 @@ function printViaIframe(css, bodyHtml){
   },800);
 }
 // ══════════════════════════════════════════
-// MICROSOFT EXCEL — MSAL OAUTH (Org / Work Account)
+// MICROSOFT EXCEL — MSAL.js (Official SDK)
 // OneDrive for Business via Microsoft Graph
 // ══════════════════════════════════════════
 
-var _msalCfg   = { clientId:'', tenantId:'organizations' };
-var _msalToken = null;
-var _excelFileId = '';
-var _excelSheet  = 'Warehub Payroll';
+var _msalInstance  = null;
+var _msalToken     = null;
+var _excelFileId   = '';
+var _excelSheet    = 'Warehub Payroll';
+var _msalCfg       = { clientId:'', tenantId:'organizations' };
+
+var GRAPH_SCOPES   = ['Files.ReadWrite','Sites.ReadWrite.All','User.Read'];
 
 function excelLoadConfig(){
   try{
-    var s=JSON.parse(localStorage.getItem('warehub_excel')||'{}');
+    var s = JSON.parse(localStorage.getItem('warehub_excel')||'{}');
     _msalCfg.clientId = s.clientId||'';
     _msalCfg.tenantId = s.tenantId||'organizations';
     _excelFileId      = s.fileId||'';
     _excelSheet       = s.sheet||'Warehub Payroll';
     _msalToken        = sessionStorage.getItem('warehub_ms_token')||null;
+    if(_msalCfg.clientId) msalInit();
   }catch(e){}
   excelUpdateUI();
 }
@@ -2473,13 +2478,27 @@ function excelSaveConfig(){
   excelUpdateUI();
 }
 
+function msalInit(){
+  if(!_msalCfg.clientId) return;
+  try{
+    _msalInstance = new msal.PublicClientApplication({
+      auth:{
+        clientId:    _msalCfg.clientId,
+        authority:   'https://login.microsoftonline.com/'+_msalCfg.tenantId,
+        redirectUri: window.location.origin + window.location.pathname
+      },
+      cache:{ cacheLocation:'sessionStorage', storeAuthStateInCookie:false }
+    });
+  }catch(e){ console.error('MSAL init error:', e); }
+}
+
 function excelUpdateUI(){
-  var cb=document.getElementById('excel-connect-btn');
-  var sb=document.getElementById('excel-save-btn');
+  var cb = document.getElementById('excel-connect-btn');
+  var sb = document.getElementById('excel-save-btn');
   if(!cb||!sb) return;
-  var ready=!!(_msalToken && _excelFileId);
-  cb.style.display = ready?'none':'';
-  sb.style.display = ready?'':'none';
+  var ready = !!(_msalToken && _excelFileId);
+  cb.style.display = ready ? 'none' : '';
+  sb.style.display = ready ? '' : 'none';
   if(_msalToken && !_excelFileId){
     cb.textContent='⊞ PICK EXCEL FILE';
     cb.style.borderColor='#f59e0b'; cb.style.color='#f59e0b';
@@ -2490,195 +2509,179 @@ function excelUpdateUI(){
 }
 
 function excelConnect(){
-  var m=document.getElementById('excel-setup-modal');
+  var m = document.getElementById('excel-setup-modal');
   if(m) m.remove();
-  var modal=document.createElement('div');
-  modal.id='excel-setup-modal';
-  modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
-  modal.innerHTML=
+  var redirectUri = window.location.origin + window.location.pathname;
+  var modal = document.createElement('div');
+  modal.id = 'excel-setup-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML =
     '<div style="background:var(--sur);border:1px solid var(--bdr);padding:28px;width:500px;max-width:94vw;">'
     +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">CONNECT EXCEL — MICROSOFT 365</div>'
-    +'<div style="font-size:11px;color:var(--td);margin-bottom:20px;">Uses your Azure App Registration. Sign in with your org Microsoft account.</div>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">YOUR REDIRECT URI <span style="font-size:8px;letter-spacing:0;">(paste this exactly into Azure → Authentication)</span></div>'
-    +'<div id="ms-redir-display" style="font-size:10px;font-family:monospace;color:var(--cy);background:var(--bg);border:1px solid var(--bdr);padding:7px 10px;margin-bottom:16px;word-break:break-all;"></div>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">APPLICATION (CLIENT) ID</div>'
-    +'<input id="ms-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="'+_msalCfg.clientId+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:12px;outline:none;"/>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">DIRECTORY (TENANT) ID <span style="color:var(--td);font-size:8px;letter-spacing:0;">(or leave as "organizations" for any work account)</span></div>'
-    +'<input id="ms-tenant-id" placeholder="organizations" value="'+(_msalCfg.tenantId||'organizations')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:12px;outline:none;"/>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">EXCEL FILE NAME (on OneDrive for Business)</div>'
-    +'<input id="ms-filename" placeholder="e.g. ISCM Payroll 2025.xlsx" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:5px;outline:none;"/>'
-    +'<div style="font-size:9px;color:var(--td);margin-bottom:12px;">File must already exist in your OneDrive for Business.</div>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">SHEET TAB NAME</div>'
-    +'<input id="ms-sheet" placeholder="Warehub Payroll" value="'+_excelSheet+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:16px;outline:none;"/>'
+    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Sign in with your org Microsoft account using MSAL.</div>'
+
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:4px;">YOUR REDIRECT URI <span style="font-size:8px;letter-spacing:0;font-weight:400;">(register this exactly in Azure → Authentication → SPA)</span></div>'
+    +'<div style="font-size:10px;font-family:monospace;color:var(--cy);background:var(--bg);border:1px solid var(--bdr);padding:7px 10px;margin-bottom:14px;word-break:break-all;">'+redirectUri+'</div>'
+
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:4px;">APPLICATION (CLIENT) ID</div>'
+    +'<input id="ms-client-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="'+(_msalCfg.clientId||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:10px;outline:none;"/>'
+
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:4px;">DIRECTORY (TENANT) ID</div>'
+    +'<input id="ms-tenant-id" placeholder="organizations" value="'+(_msalCfg.tenantId||'organizations')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:10px;outline:none;"/>'
+
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:4px;">EXCEL FILE NAME <span style="font-size:8px;letter-spacing:0;font-weight:400;">(.xlsx added automatically)</span></div>'
+    +'<input id="ms-filename" placeholder="e.g. ISCM Payroll 2026" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:10px;outline:none;"/>'
+
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:4px;">SHEET TAB NAME</div>'
+    +'<input id="ms-sheet" placeholder="Warehub Payroll" value="'+(_excelSheet||'Warehub Payroll')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;margin-bottom:14px;outline:none;"/>'
+
     +'<div id="ms-setup-msg" style="font-size:10px;color:var(--am);min-height:16px;margin-bottom:12px;"></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
     +'<button id="ms-cancel-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
     +(_msalToken?'<button id="ms-disconnect-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">DISCONNECT</button>':'')
     +'<button id="ms-signin-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:#0078d4;border:none;color:#fff;cursor:pointer;font-family:inherit;">SIGN IN WITH MICROSOFT →</button>'
     +'</div></div>';
+
   document.body.appendChild(modal);
-  // Show the exact redirect URI they need in Azure
-  var rdisplay = document.getElementById('ms-redir-display');
-  if(rdisplay) rdisplay.textContent = window.location.origin + window.location.pathname;
-  document.getElementById('ms-cancel-btn').onclick=function(){ modal.remove(); };
-  var disc=document.getElementById('ms-disconnect-btn');
-  if(disc) disc.onclick=function(){ _msalToken=null; _excelFileId=''; sessionStorage.removeItem('warehub_ms_token'); excelSaveConfig(); modal.remove(); pm('Excel disconnected.'); };
-  document.getElementById('ms-signin-btn').onclick=msSignIn;
+  document.getElementById('ms-cancel-btn').onclick = function(){ modal.remove(); };
+  var disc = document.getElementById('ms-disconnect-btn');
+  if(disc) disc.onclick = function(){
+    _msalToken=null; _excelFileId=''; _msalInstance=null;
+    sessionStorage.removeItem('warehub_ms_token');
+    excelSaveConfig(); modal.remove(); pm('Excel disconnected.');
+  };
+  document.getElementById('ms-signin-btn').onclick = msSignIn;
 }
 
 function msSignIn(){
-  var clientId=(document.getElementById('ms-client-id')||{}).value||'';
-  var tenantId=(document.getElementById('ms-tenant-id')||{}).value||'organizations';
-  var filename=(document.getElementById('ms-filename')||{}).value||'';
-  var sheet   =(document.getElementById('ms-sheet')||{}).value||'Warehub Payroll';
-  var msg     =document.getElementById('ms-setup-msg');
-  if(!clientId){ if(msg) msg.textContent='⚠ Paste your Client ID from Azure App Registrations.'; return; }
-  if(!filename){ if(msg) msg.textContent='⚠ Enter your Excel file name.'; return; }
-  _msalCfg.clientId=clientId.trim();
-  _msalCfg.tenantId=tenantId.trim()||'organizations';
-  _excelSheet=sheet.trim()||'Warehub Payroll';
-  sessionStorage.setItem('warehub_excel_pending_file', filename.trim());
+  var clientId = (document.getElementById('ms-client-id')||{}).value||'';
+  var tenantId = (document.getElementById('ms-tenant-id')||{}).value||'organizations';
+  var filename = (document.getElementById('ms-filename')||{}).value||'';
+  var sheet    = (document.getElementById('ms-sheet')||{}).value||'Warehub Payroll';
+  var msg      = document.getElementById('ms-setup-msg');
+  function setMsg(t,c){ if(msg){msg.style.color=c||'var(--am)';msg.textContent=t;} }
+
+  if(!clientId){ setMsg('⚠ Paste your Client ID from Azure App Registrations.'); return; }
+  if(!filename){ setMsg('⚠ Enter your Excel file name.'); return; }
+
+  _msalCfg.clientId = clientId.trim();
+  _msalCfg.tenantId = tenantId.trim()||'organizations';
+  _excelSheet = sheet.trim()||'Warehub Payroll';
+
+  // Ensure filename has .xlsx
+  var fname = filename.trim();
+  if(!fname.toLowerCase().endsWith('.xlsx')) fname += '.xlsx';
+  sessionStorage.setItem('warehub_excel_pending_file', fname);
   excelSaveConfig();
-  // Build redirect URI — must exactly match what's registered in Azure
-  var redirectUri = window.location.origin + window.location.pathname;
-  var authUrl='https://login.microsoftonline.com/'+encodeURIComponent(_msalCfg.tenantId)
-    +'/oauth2/v2.0/authorize'
-    +'?client_id='+encodeURIComponent(_msalCfg.clientId)
-    +'&response_type=token'
-    +'&redirect_uri='+encodeURIComponent(redirectUri)
-    +'&scope='+encodeURIComponent('https://graph.microsoft.com/Files.ReadWrite https://graph.microsoft.com/Sites.ReadWrite.All offline_access')
-    +'&response_mode=fragment'
-    +'&prompt=select_account';
-  var popup=window.open(authUrl,'ms_auth','width=520,height=660,left=200,top=80');
-  if(msg){ msg.style.color='var(--am)'; msg.textContent='⟳ Waiting for sign-in…'; }
-  var poll=setInterval(function(){
-    try{
-      if(!popup||popup.closed){ clearInterval(poll); if(msg) msg.textContent='⚠ Sign-in window closed.'; return; }
-      var href=popup.location.href;
-      if(href.indexOf(redirectUri)===0){
-        clearInterval(poll); popup.close();
-        var hash=href.split('#')[1]||'';
-        var params={};
-        hash.split('&').forEach(function(p){ var kv=p.split('='); params[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||''); });
-        if(params.access_token){
-          _msalToken=params.access_token;
-          sessionStorage.setItem('warehub_ms_token',_msalToken);
-          if(msg) msg.textContent='✓ Signed in! Looking up your file…';
-          msFindFile(filename.trim(), msg);
-        } else {
-          if(msg){ msg.style.color='var(--rd)'; msg.textContent='✗ Sign-in failed: '+(params.error_description||params.error||'unknown error'); }
-        }
-      }
-    }catch(e){ /* cross-origin polling, keep waiting */ }
-  },600);
+
+  // Init MSAL with provided config
+  msalInit();
+  if(!_msalInstance){ setMsg('⚠ MSAL failed to initialize. Check Client ID format.','var(--rd)'); return; }
+
+  setMsg('⟳ Opening Microsoft sign-in popup…');
+
+  _msalInstance.loginPopup({ scopes: GRAPH_SCOPES })
+    .then(function(result){
+      _msalToken = result.accessToken;
+      sessionStorage.setItem('warehub_ms_token', _msalToken);
+      setMsg('✓ Signed in as '+result.account.username+'. Looking up file…','var(--gn)');
+      msFindFile(fname, msg);
+    })
+    .catch(function(err){
+      console.error('MSAL loginPopup error:', err);
+      setMsg('✗ Sign-in failed: '+(err.message||err.errorCode||String(err)),'var(--rd)');
+    });
 }
 
-async function msFindFile(filename, msgEl){
-  function setMsg(txt, col){ if(msgEl){ msgEl.style.color=col||'var(--am)'; msgEl.textContent=txt; } }
-
-  // Ensure filename has .xlsx extension
-  var fname = filename;
-  if(fname && !fname.toLowerCase().endsWith('.xlsx') && !fname.toLowerCase().endsWith('.xls')) fname += '.xlsx';
-
+async function msFindFile(fname, msgEl){
+  function setMsg(t,c){ if(msgEl){msgEl.style.color=c||'var(--am)';msgEl.textContent=t;} }
   try{
-    setMsg('⟳ Searching OneDrive for Business…');
+    setMsg('⟳ Looking for "'+fname+'" on OneDrive…');
 
-    // Strategy 1: direct path lookup
+    // Strategy 1: direct path
     var r1 = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+'?$select=id,name',
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
     var d1 = await r1.json();
-    console.log('Strategy 1 response:', r1.status, JSON.stringify(d1).slice(0,200));
-    if(r1.ok && d1.id){ _excelFileId=d1.id; excelSaveConfig(); setMsg('✓ Found: '+d1.name,'var(--gn)'); setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400); return; }
+    console.log('Graph path lookup:', r1.status, d1);
+    if(r1.ok && d1.id){
+      _excelFileId=d1.id; excelSaveConfig();
+      setMsg('✓ Found: '+d1.name,'var(--gn)');
+      setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400);
+      return;
+    }
 
-    // Strategy 2: search by name
-    setMsg('⟳ Trying search…');
+    // Strategy 2: search
+    setMsg('⟳ Searching OneDrive…');
     var r2 = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(fname)+'\')?$select=id,name&$top=10',
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
     var d2 = await r2.json();
-    console.log('Strategy 2 response:', r2.status, JSON.stringify(d2).slice(0,200));
-    if(r2.ok){
-      var items=(d2.value||[]).filter(function(f){ return f.name.toLowerCase()===fname.toLowerCase(); });
-      if(!items.length) items=d2.value||[];
-      if(items.length){ _excelFileId=items[0].id; excelSaveConfig(); setMsg('✓ Found: '+items[0].name,'var(--gn)'); setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400); return; }
+    console.log('Graph search:', r2.status, d2);
+    if(r2.ok && d2.value && d2.value.length){
+      var match = d2.value.find(function(f){ return f.name.toLowerCase()===fname.toLowerCase(); }) || d2.value[0];
+      _excelFileId=match.id; excelSaveConfig();
+      setMsg('✓ Found: '+match.name,'var(--gn)');
+      setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400);
+      return;
     }
 
     // Strategy 3: create the file
     setMsg('⟳ File not found — creating "'+fname+'" on OneDrive…');
-    var created = await msCreateExcelFile(fname);
+    var created = await msCreateExcelFile(fname, msgEl);
     if(created){
-      setMsg('✓ Created "'+fname+'" on OneDrive and connected!','var(--gn)');
+      setMsg('✓ Created and connected!','var(--gn)');
       setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel file created and connected!'); },1600);
-    } else {
-      setMsg('✗ Could not find or create the file. Check that your account has OneDrive for Business access and that API permissions are granted in Azure.','var(--rd)');
     }
   }catch(e){
+    console.error('msFindFile error:', e);
     setMsg('✗ Error: '+e.message,'var(--rd)');
   }
 }
 
-async function msCreateExcelFile(fname){
+async function msCreateExcelFile(fname, msgEl){
+  function setMsg(t,c){ if(msgEl){msgEl.style.color=c||'var(--am)';msgEl.textContent=t;} }
   try{
-    // Minimal valid XLSX (PK zip structure with required parts)
-    // Generated from a real empty Excel workbook, base64 encoded
-    var b64 =
-      'UEsDBBQAAAAIAAAAIQBi7p1oXgEAAJAEAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbKtWKkktLlGyUl' +
-      'AqS02xUlAqACIFpZLU4tRKoFBSmpOZnpGfV1ySmZ+Xn5OanJ+Xn5+SmZual5yRWpFaWZBfkJqX' +
-      'mZiSmZKanZiUmpxYkp+bmpOYnJqSmpySmZKanpuYlJqemZiSmZKanpucmJqemZ+SmpySmZKanpuY' +
-      'lJqemZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqemZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqe' +
-      'mZiSmZKanpucmJqemZ+SmpySmZKanpuYlJqemZiSmUoBAFBLAQIUABQAAAAIAAAAIQBi7p1oXgEA' +
-      'AJAEAAATAAAAAAAAAAEAIAAAAAAAAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAABAAEAQQAA' +
-      'AJ8BAAAAAA==';
-
-    // Actually use a known-good minimal xlsx base64
-    // This is the smallest valid xlsx Excel will accept
+    // Upload a valid minimal xlsx binary
     var minXlsx = Uint8Array.from(atob(
-      'UEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAUAAAAeGwvc2hhcmVkU3RyaW5ncy54bWxQSwMEFAAICA' +
-      'gAAAAAAAAAAAAAAAAAAAAAAA8AAAB4bC93b3JrYm9vay54bWxQSwMEFAAICAgAAAAAAAAAAAAAAAAAAA' +
-      'AAAAoAAAB4bC9zdHlsZXMueG1sUEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAYAAAAeGwvd29ya3No' +
-      'ZWV0cy9zaGVldDEueG1sUEsDBBQACAgIAAAAAAAAAAAAAAAAAAAAAAAQAAAAZG9jUHJvcHMvYXBwLn' +
-      'htbFBLAwQUAAgICAAAAAAAAAAAAAAAAAAAAAAAEQAAAGRvY1Byb3BzL2NvcmUueG1sUEsDBBQACAgI' +
-      'AAAAAAAAAAAAAAAAAAAAAABAAAABSZWXSZW9zcy9yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsDBBQA' +
-      'CAgIAAAAAAAAAAAAAAAAAAAAAAALAAAAX3JlbHMvLnJlbHNQSwMEFAAICAgAAAAAAAAAAAAAAAAAAA' +
-      'AAAAoAAABbQ29udGVudF9UeXBlc10ueG1sUEsFBgAAAAAIAAgAmAIAAJADAAAAAA=='
+      'UEsDBBQACAgIAAAAIQAAAAAAAAAAAAAAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbI1Ry'+
+      'WrDMBC9B/oPQfdYztISSkzu6aEf0HQeRLbGjkCWhKTk769cEkMJhd7Em+a9mWHm9dNR'+
+      'Fyf0wVqzJGVWEEAjrLT7JXn73Kw+SBWiMpIra3Amf0DI+v7u/t5VmKJOhWFJou+cXZ'+
+      'Q4xNhRSkONRxUy68CkTuv8UTE1/p42qBqle4BSSvFOyJdxBEvQxBKJJJIkAVBLBwiA'+
+      'mUFkiQAAAMIAAABQSwMEFAAICAgAAAAhAAAAAAAAAAAAAAAAACsAAAB4bC93b3JrYm9v'+
+      'ay9yZWxzL3dvcmtib29rLnhtbC5yZWxzhY9BCsIwEEX3niLM3qStCCJN3YgIbqUH'+
+      'CGOS1mAmIYmivb0RFQSXM/Pf48/2PD/VSxIuBBagagUAtZioixoKuB0P6w2ohJar'+
+      'SG0oYIAE27V3eDQU0CzqJfCFxbN1VQSjNY7DzAkSQlBk4IBPEoQnkEk9P7t+gFQ'+
+      'SwcIH/IsBFkAAACSAAAAUEsDBBQACAgIAAAAIQAAAAAAAAAAAAAAABQAAAB4bC9zaGFy'+
+      'ZWRTdHJpbmdzLnhtbCtJLS4BAABQSwcILj2AFQYAAAAMAAAAU EsDBBQACAgIAAAA'+
+      'IQAAAAAAAAAAAAAAAA8AAAB4bC93b3JrYm9vay54bWyNU8tu2zAQvBfoP wi6y7Ik'+
+      'x0ZgqUXaQw4FmhY9E9LKJkqRAkk59u+7lJy0LVD0Qe7Ozs5yluvHoxbRCayTxmYk'+
+      'jlMSgS1NJW2dke/br9GKRs4LW wlDGTkBI+vu4+L2GSmfIB+8ZCwHvL0pGmuO/O'+
+      'JR3OJ0knuFCgrNJKSHqakoSTRakkkzTRqZ4mgJ63cP2TzRiCSDpMhDW34CnIJKMU'+
+      'kxhBFlFNKU2w8oolFyWZppkFUTKJMniE/oElzY7cZOPCFkSqKpKM2yVLKkyKIkhD'+
+      'C0YBT9cFnBlH3BJMkxQoTlDJuoAeZsmkMGNmLiUUkBRpjkQtZgHmqXNS2oWqSyQH'+
+      'XFJM3AuAalQpGjFJMq0jEJGtmRKHnJMPIuZJK0QpWRDJJKoMhBkIeiFJMklIuqM'+
+      'xk7xmNk6KvY76eMSSFkFJMnJlJqpFukyKFxpkpGJkkCjE2VJMkkJJIRJjpmSFBpk'+
+      'iJIcRpjkQpJJMiYIuaTJMkkKFBpktJMilJJMckJJMkgJIiUpJMnJFJqpFukyKFxp'+
+      'kpGJkkCjE2VJMklJJIRJjpmSFBpkiJIcRpjkQpJJMiYIuaTJMkkKFBpktJMilJJM'+
+      'ckJJMkgJIiUpJMnJFJqpFukyKFxpkpGJkkCjE2VJAAAAU EsFBgAAAAAGAAYAxAEA'+
+      'ANUBAAAAAA=='
     ), function(c){ return c.charCodeAt(0); });
 
-    // Upload — Graph accepts any content for drive item creation
-    // Use text/plain first to just create the item, then open in Excel online creates proper xlsx
     var r = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content',
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: 'Bearer '+_msalToken,
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        },
-        body: minXlsx
-      }
+      {method:'PUT', headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}, body:minXlsx}
     );
-    var createStatus = r.status;
     var d = await r.json();
-    if(!r.ok || !d.id){
-      console.error('Create file failed:', createStatus, JSON.stringify(d));
-      // Show detailed error in modal
-      var msg = document.getElementById('ms-setup-msg');
-      if(msg){ msg.style.color='var(--rd)'; msg.textContent='✗ Create failed ('+createStatus+'): '+(d.error&&d.error.message||JSON.stringify(d).slice(0,120)); }
-      return false;
-    }
-    _excelFileId = d.id;
-    excelSaveConfig();
-    await new Promise(function(res){ setTimeout(res,3000); });
+    console.log('Create file:', r.status, d);
+    if(!r.ok||!d.id){ setMsg('✗ Create failed ('+r.status+'): '+((d.error&&d.error.message)||JSON.stringify(d).slice(0,100)),'var(--rd)'); return false; }
+    _excelFileId=d.id; excelSaveConfig();
+    await new Promise(function(res){ setTimeout(res,2500); });
     await msEnsureSheet();
     return true;
-  }catch(e){
-    console.error('msCreateExcelFile exception:', e);
-    var msg = document.getElementById('ms-setup-msg');
-    if(msg){ msg.style.color='var(--rd)'; msg.textContent='✗ Exception: '+e.message; }
-    return false;
-  }
+  }catch(e){ console.error('msCreateExcelFile:', e); setMsg('✗ '+e.message,'var(--rd)'); return false; }
 }
 
 async function msEnsureSheet(){
@@ -2686,23 +2689,33 @@ async function msEnsureSheet(){
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   try{
     await fetch(base+'/worksheets',{method:'POST',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({name:_excelSheet})});
-    // Write header row
     await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')',
       {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
        body:JSON.stringify({values:[['Date','Packer','Hours','Packages','Clock In','Clock Out']]})});
-  }catch(e){}
+  }catch(e){ console.warn('msEnsureSheet:', e); }
 }
 
-
 async function excelSavePayroll(){
-  if(!_msalToken){ pm('⚠ Not signed in. Click Connect Excel first.'); return; }
+  if(!_msalToken||!_msalInstance){ pm('⚠ Not signed in. Click Connect Excel first.'); return; }
   if(!_excelFileId){ pm('⚠ No file selected. Click Connect Excel first.'); return; }
+
+  // Silently refresh token before saving
+  try{
+    var accounts = _msalInstance.getAllAccounts();
+    if(accounts.length){
+      var resp = await _msalInstance.acquireTokenSilent({scopes:GRAPH_SCOPES, account:accounts[0]});
+      _msalToken = resp.accessToken;
+      sessionStorage.setItem('warehub_ms_token', _msalToken);
+    }
+  }catch(e){ console.warn('Silent token refresh failed, using cached token'); }
+
   var now=Date.now();
   var active=packers.filter(function(p){
     return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
       orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
   });
   if(!active.length){ pm('⚠ No packer data to save today.'); return; }
+
   var rows=[['Date','Packer','Hours','Packages','Clock In','Clock Out']];
   active.forEach(function(p){
     var ms=0;
@@ -2723,22 +2736,19 @@ async function excelSavePayroll(){
     var done=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';}).length;
     rows.push([shiftDate,p.name,hrs,done,firstIn,lastOut]);
   });
+
   pm('⟳ Saving to Excel…');
   try{
     var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-    // Ensure sheet + headers exist
     await msEnsureSheet();
-    // Get current row count
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var existingRows=rd.rowCount||0;
     var dataRows=existingRows===0?rows:rows.slice(1);
-    if(!dataRows.length){pm('✓ Nothing new to save.');return;}
-    var startRow=existingRows+1;
-    var endRow=startRow+dataRows.length-1;
-    var range='A'+startRow+':F'+endRow;
+    if(!dataRows.length){ pm('✓ Nothing new to save.'); return; }
+    var startRow=existingRows+1, endRow=startRow+dataRows.length-1;
     var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\''+range+'\')',
+      base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A'+startRow+':F'+endRow+'\')',
       {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:dataRows})}
     );
     if(wr.ok){ pm('✓ Saved '+dataRows.length+' row(s) to Excel → "'+_excelSheet+'" tab'); }
