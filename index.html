@@ -295,6 +295,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')">Payroll</button>
     <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
+    <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
   </div>
 </div>
 
@@ -636,6 +637,7 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
+  if(name==='rackmap'){ rackClearHighlight(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); }
@@ -3088,18 +3090,24 @@ function vehicleExportCSV(){
 }
 
 async function vehicleSaveExcel(){
-  if(!_msalToken||!_excelFileId){pm('⚠ Connect Excel first (Payroll tab → Connect Excel).');return;}
+  // If not connected, open the Connect Excel modal just like Payroll does
+  if(!_msalToken||!_excelFileId){
+    excelConnect();
+    // After user connects, they can click Save to Excel again
+    pm('⚠ Sign in to Excel first, then click Save to Excel again.');
+    return;
+  }
   if(!vehicleTrips.length){pm('⚠ No trips to save.');return;}
   var sheet='Vehicle Log';
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   pm('⟳ Saving vehicle log to Excel…');
   try{
-    // Ensure sheet exists
-    await fetch(base+'/worksheets',{method:'POST',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({name:sheet})});
+    // Ensure sheet exists with header
+    await msEnsureVehicleSheet();
     // Get row count
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
-    var existing=rd.rowCount||0;
+    var existing=(rd.rowCount&&!rd.error)?rd.rowCount:0;
     var hdr=[['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes']];
     var dataRows=vehicleTrips.map(function(t){
       var dur='';
@@ -3115,6 +3123,33 @@ async function vehicleSaveExcel(){
     if(wr.ok) pm('✓ Vehicle log saved to Excel → "'+sheet+'" tab');
     else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
+}
+
+async function msEnsureVehicleSheet(){
+  if(!_msalToken||!_excelFileId) return;
+  var sheet='Vehicle Log';
+  var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  try{
+    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sd=await sr.json();
+    var existing=(sd.value||[]).map(function(s){return s.name;});
+    if(!existing.includes(sheet)){
+      await fetch(base+'/worksheets',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+        body:JSON.stringify({name:sheet})
+      });
+    }
+    // Write header if sheet is empty
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')?$select=values',{headers:{Authorization:'Bearer '+_msalToken}});
+    var rd=await rr.json();
+    var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
+    if(!hasHeader){
+      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')',
+        {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+         body:JSON.stringify({values:[['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes']]})});
+    }
+  }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
 }
 
 // ══════════════════════════════════════════
@@ -3290,6 +3325,226 @@ function gmapsShowSetup(){ vehMapSearch(); } // alias kept for compatibility
 
 
 
+
+// ══════════════════════════════════════════
+// RACK MAP
+// ══════════════════════════════════════════
+
+// Zone center coordinates on SVG (for route drawing)
+var RACK_CENTERS = {
+  'C-1':  {x:226, y:89},
+  'R3':   {x:93,  y:255},
+  'R2':   {x:153, y:255},
+  'R1':   {x:213, y:338},
+  'W1':   {x:271, y:319},
+  'W2':   {x:271, y:399},
+  'W3':   {x:271, y:479},
+  'A-1':  {x:153, y:500},
+  'B-1':  {x:358, y:288}
+};
+
+var RACK_INFO = {
+  'R1':  {type:'METAL RACKING', color:'#e53e3e'},
+  'R2':  {type:'METAL RACKING', color:'#e53e3e'},
+  'R3':  {type:'METAL RACKING', color:'#e53e3e'},
+  'W1':  {type:'WOOD RACKING',  color:'#38a169'},
+  'W2':  {type:'WOOD RACKING',  color:'#38a169'},
+  'W3':  {type:'WOOD RACKING',  color:'#38a169'},
+  'A-1': {type:'GROUND PALLET', color:'#d53f8c'},
+  'B-1': {type:'GROUND PILE — NEW GOODS', color:'#3182ce'},
+  'C-1': {type:'GROUND PALLET', color:'#dd6b20'}
+};
+
+// Normalise shelf code to match zone IDs
+function rackNormalise(shelf){
+  if(!shelf) return '';
+  var s = shelf.toString().trim().toUpperCase();
+  // Handle variants: r1→R1, w-1→W1, 10-1-1, a1→A-1
+  s = s.replace(/^R(\d)$/,  'R$1');
+  s = s.replace(/^W(\d)$/,  'W$1');
+  s = s.replace(/^A(\d)$/,  'A-$1');
+  s = s.replace(/^B(\d)$/,  'B-$1');
+  s = s.replace(/^C(\d)$/,  'C-$1');
+  return s;
+}
+
+function rackClick(zoneId){
+  rackClearHighlight();
+  rackHighlight(zoneId);
+  // Show info panel
+  var info = RACK_INFO[zoneId]||{type:'STORAGE ZONE',color:'var(--cy)'};
+  var panel = document.getElementById('rack-info-panel');
+  var title = document.getElementById('rack-info-title');
+  var type  = document.getElementById('rack-info-type');
+  var ordersEl = document.getElementById('rack-info-orders');
+  panel.style.display='block';
+  panel.style.borderColor = info.color;
+  title.style.color = info.color;
+  title.textContent = zoneId;
+  type.textContent  = info.type;
+
+  // Find orders assigned to this shelf
+  var norm = zoneId.toLowerCase().replace(/-/g,'');
+  var zoneOrders = orders.filter(function(o){
+    var shelf = (o.shelf||'').toLowerCase().replace(/-/g,'');
+    return shelf===norm || shelf.startsWith(norm);
+  });
+
+  if(!zoneOrders.length){
+    ordersEl.innerHTML = '<span style="color:var(--td);">No orders currently assigned to this location.</span>';
+  } else {
+    var pending = zoneOrders.filter(function(o){return o.status==='pending';});
+    var done    = zoneOrders.filter(function(o){return o.status==='done';});
+    ordersEl.innerHTML =
+      '<div style="font-size:10px;letter-spacing:1px;color:var(--td);margin-bottom:8px;">'
+      +zoneOrders.length+' ORDER(S) · '+pending.length+' PENDING · '+done.length+' DONE</div>'
+      + zoneOrders.slice(0,10).map(function(o){
+          var packer = o.assignedTo ? (packers.find(function(p){return p.id===o.assignedTo;})||{name:o.assignedTo}).name : '—';
+          return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);gap:10px;">'
+            +'<span style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-12)+'</span>'
+            +'<span style="font-size:10px;color:var(--td);">'+o.skus+'</span>'
+            +'<span style="font-size:10px;color:var(--cy);">'+packer+'</span>'
+            +'<span style="font-size:9px;padding:1px 6px;background:'+(o.status==='done'?'#38a16922':'#e53e3e22')+';color:'+(o.status==='done'?'var(--gn)':'var(--rd)')+';">'+o.status.toUpperCase()+'</span>'
+            +'</div>';
+        }).join('')
+      +(zoneOrders.length>10?'<div style="font-size:9px;color:var(--td);margin-top:4px;">+ '+(zoneOrders.length-10)+' more…</div>':'');
+  }
+}
+
+function rackHighlight(zoneId){
+  var g = document.getElementById('zone-'+zoneId);
+  if(!g) return;
+  var rect = g.querySelector('rect');
+  if(rect){
+    rect.setAttribute('stroke','#0af');
+    rect.setAttribute('stroke-width','3');
+    rect.setAttribute('fill-opacity','1');
+    // Pulse animation
+    rect.style.filter='drop-shadow(0 0 8px #0af)';
+  }
+}
+
+function rackClearHighlight(){
+  document.querySelectorAll('.rack-zone rect').forEach(function(rect){
+    rect.setAttribute('stroke-width','2');
+    rect.setAttribute('fill-opacity','0.85');
+    rect.style.filter='';
+    // Restore original stroke color
+    var id = rect.parentElement.id.replace('zone-','');
+    var info = RACK_INFO[id];
+    if(info) rect.setAttribute('stroke', info.color === '#e53e3e' ? '#fc8181'
+      : info.color === '#38a169' ? '#68d391'
+      : info.color === '#d53f8c' ? '#f687b3'
+      : info.color === '#3182ce' ? '#63b3ed'
+      : info.color === '#dd6b20' ? '#ed8936'
+      : '#f6e05e');
+  });
+  document.getElementById('rack-info-panel').style.display='none';
+  document.getElementById('rack-route-panel').style.display='none';
+  // Hide route
+  var rp=document.getElementById('rack-route-path');
+  var ra=document.getElementById('rack-route-arrow');
+  if(rp) rp.style.display='none';
+  if(ra) ra.style.display='none';
+}
+
+function rackSearch(val){
+  rackClearHighlight();
+  if(!val.trim()) return;
+  var norm = rackNormalise(val.trim());
+  // Try exact match first, then partial
+  var found = RACK_CENTERS[norm];
+  if(found){
+    rackClick(norm);
+  } else {
+    // Partial match
+    var keys = Object.keys(RACK_CENTERS);
+    var match = keys.find(function(k){ return k.startsWith(norm) || norm.startsWith(k); });
+    if(match) rackClick(match);
+  }
+}
+
+function rackShowPickRoute(){
+  rackClearHighlight();
+  // Get all pending orders with shelf locations
+  var pending = orders.filter(function(o){
+    return o.status==='pending' && o.shelf;
+  });
+  if(!pending.length){
+    pm('⚠ No pending orders with shelf locations to route.');
+    return;
+  }
+
+  // Group by zone
+  var zoneMap = {};
+  pending.forEach(function(o){
+    var norm = rackNormalise(o.shelf);
+    // Match to known zones
+    var zoneId = Object.keys(RACK_CENTERS).find(function(k){
+      var s = norm.replace(/-/g,'').toLowerCase();
+      var z = k.replace(/-/g,'').toLowerCase();
+      return s===z || s.startsWith(z);
+    });
+    if(zoneId){
+      if(!zoneMap[zoneId]) zoneMap[zoneId]=[];
+      zoneMap[zoneId].push(o);
+    }
+  });
+
+  var zones = Object.keys(zoneMap);
+  if(!zones.length){
+    pm('⚠ Could not match any shelf codes to map zones.');
+    return;
+  }
+
+  // Optimal route: sort by Y position (top→bottom) then X (left→right)
+  // This matches a natural walking path through the warehouse
+  zones.sort(function(a,b){
+    var ca=RACK_CENTERS[a], cb=RACK_CENTERS[b];
+    // Group into rows by Y proximity (±60px = same row)
+    var rowA=Math.round(ca.y/80), rowB=Math.round(cb.y/80);
+    if(rowA!==rowB) return rowA-rowB;
+    // Serpentine: even rows left→right, odd rows right→left
+    return rowA%2===0 ? ca.x-cb.x : cb.x-ca.x;
+  });
+
+  // Highlight each zone on the route
+  zones.forEach(function(z){ rackHighlight(z); });
+
+  // Draw route polyline
+  var points = zones.map(function(z){
+    var c = RACK_CENTERS[z];
+    return c.x+','+c.y;
+  }).join(' ');
+
+  var rp = document.getElementById('rack-route-path');
+  var ra = document.getElementById('rack-route-arrow');
+  rp.setAttribute('points', points);
+  ra.setAttribute('points', points);
+  rp.style.display='block';
+  ra.style.display='block';
+
+  // Show route steps panel
+  var panel = document.getElementById('rack-route-panel');
+  var steps = document.getElementById('rack-route-steps');
+  panel.style.display='block';
+
+  steps.innerHTML = zones.map(function(z, i){
+    var info = RACK_INFO[z]||{type:'Storage',color:'var(--cy)'};
+    var count = zoneMap[z].length;
+    var skus  = zoneMap[z].map(function(o){return o.skus;}).join(', ');
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+      +'<div style="width:22px;height:22px;border-radius:50%;background:'+info.color+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;">'+(i+1)+'</div>'
+      +'<div style="flex:1;">'
+        +'<span style="font-weight:700;color:'+info.color+';">'+z+'</span>'
+        +'<span style="color:var(--td);font-size:10px;margin-left:6px;">'+info.type+'</span>'
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--cy);">'+count+' order'+(count>1?'s':'')+'</div>'
+      +'<div style="font-size:9px;color:var(--td);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+skus+'">'+skus+'</div>'
+      +'</div>';
+  }).join('');
+}
+
 document.addEventListener('DOMContentLoaded',function(){
   loadStaff();
   excelLoadConfig();
@@ -3425,6 +3680,217 @@ document.addEventListener('DOMContentLoaded',function(){
   if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
 });
 </script>
+
+  <!-- ══ RACK MAP ══ -->
+  <div id="view-rackmap" class="view">
+    <div style="padding:0 0 40px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Goods Location Map</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">1701 10th St Suite 200 · Plano TX 75074 · 9,129 sqft</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="rack-search" placeholder="Search shelf (e.g. R1, W2, A-1)…" oninput="rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:200px;"/>
+          <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
+          <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
+        </div>
+      </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;font-size:9px;">
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#e53e3e;border-radius:2px;"></div>Metal Racking (R1/R2/R3)</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#38a169;border-radius:2px;"></div>Wood Racking (W1/W2/W3)</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#d53f8c;border-radius:2px;"></div>Ground Pallet A-1</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#3182ce;border-radius:2px;"></div>Ground Pile B-1 (New Goods)</div>
+        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#dd6b20;border-radius:2px;"></div>Ground Pallet C-1</div>
+      </div>
+
+      <!-- Map container -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;display:flex;justify-content:center;align-items:center;">
+        <svg id="rack-svg" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg"
+          style="width:100%;height:auto;max-height:80vh;display:block;">
+
+          <!-- ── DEFS ── -->
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="#0af"/>
+            </marker>
+            <pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="8" stroke="#555" stroke-width="1.5"/>
+            </pattern>
+          </defs>
+
+          <!-- ── OUTER WAREHOUSE WALL ── -->
+          <rect x="60" y="40" width="580" height="600" fill="#161616" stroke="#666" stroke-width="3" rx="2"/>
+
+          <!-- ── DOCK DOORS (3 openings in top wall) ── -->
+          <!-- Dock 1 -->
+          <rect x="155" y="37" width="60" height="7" fill="#161616" stroke="none"/>
+          <line x1="155" y1="40" x2="155" y2="44" stroke="#888" stroke-width="2"/>
+          <line x1="215" y1="40" x2="215" y2="44" stroke="#888" stroke-width="2"/>
+          <text x="185" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-1</text>
+
+          <!-- Dock 2 -->
+          <rect x="248" y="37" width="60" height="7" fill="#161616" stroke="none"/>
+          <line x1="248" y1="40" x2="248" y2="44" stroke="#888" stroke-width="2"/>
+          <line x1="308" y1="40" x2="308" y2="44" stroke="#888" stroke-width="2"/>
+          <text x="278" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-2</text>
+
+          <!-- Dock 3 -->
+          <rect x="340" y="37" width="90" height="7" fill="#161616" stroke="none"/>
+          <line x1="340" y1="40" x2="340" y2="44" stroke="#888" stroke-width="2"/>
+          <line x1="430" y1="40" x2="430" y2="44" stroke="#888" stroke-width="2"/>
+          <text x="385" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-3</text>
+
+          <!-- ── HATCHED AREA (left of C-1, near dock) ── -->
+          <rect x="68" y="44" width="80" height="100" fill="url(#hatch)" opacity="0.4"/>
+
+          <!-- ── OFFICE / RESTROOM (bottom-right) ── -->
+          <rect x="416" y="434" width="220" height="198" fill="#1f1f1f" stroke="#555" stroke-width="1.5"/>
+          <text x="526" y="520" text-anchor="middle" fill="#555" font-size="11" font-weight="700">OFFICE /</text>
+          <text x="526" y="537" text-anchor="middle" fill="#555" font-size="11" font-weight="700">RESTROOM</text>
+
+          <!-- ── AISLE / FLOOR MARKINGS ── -->
+          <line x1="60" y1="434" x2="416" y2="434" stroke="#2a2a2a" stroke-width="1" stroke-dasharray="8,4"/>
+          <line x1="304" y1="40" x2="304" y2="434" stroke="#2a2a2a" stroke-width="1" stroke-dasharray="8,4"/>
+
+          <!-- ══════════════════════════════════════
+               C-1  Orange · Ground Pallet
+               PDF: x=198-235, y=216-247
+               SVG: x=179, y=85, w=65, h=44
+          ══════════════════════════════════════ -->
+          <g id="zone-C-1" class="rack-zone" onclick="rackClick('C-1')" style="cursor:pointer;">
+            <rect x="179" y="44" width="95" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
+            <text x="226" y="84" text-anchor="middle" fill="#fff" font-size="20" font-weight="900">C-1</text>
+            <text x="226" y="102" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Ground Pallet</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               R3  Red · Metal Racking (leftmost column)
+               PDF: x=187-203, y=201-334
+               SVG: x=160, y=63, w=28, h=190
+          ══════════════════════════════════════ -->
+          <g id="zone-R3" class="rack-zone" onclick="rackClick('R3')" style="cursor:pointer;">
+            <rect x="68" y="148" width="50" height="222" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="93" y="255" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R3</text>
+            <text x="93" y="276" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               R2  Red · Metal Racking (middle column)
+               PDF: x=220-234, y=201-334
+          ══════════════════════════════════════ -->
+          <g id="zone-R2" class="rack-zone" onclick="rackClick('R2')" style="cursor:pointer;">
+            <rect x="128" y="148" width="50" height="222" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="153" y="255" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R2</text>
+            <text x="153" y="276" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               R1  Red · Metal Racking (right column, taller — extends past W zones)
+               PDF: x=252-271, y=201-423
+          ══════════════════════════════════════ -->
+          <g id="zone-R1" class="rack-zone" onclick="rackClick('R1')" style="cursor:pointer;">
+            <rect x="188" y="148" width="50" height="380" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="213" y="330" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R1</text>
+            <text x="213" y="352" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               W1  Green · Wood Racking (top row)
+               PDF: x=172-232, y=349-363
+          ══════════════════════════════════════ -->
+          <g id="zone-W1" class="rack-zone" onclick="rackClick('W1')" style="cursor:pointer;">
+            <rect x="248" y="284" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
+            <text x="271" y="324" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W1</text>
+            <text x="271" y="340" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               W2  Green · Wood Racking (middle row)
+               PDF: x=172-232, y=380-395
+          ══════════════════════════════════════ -->
+          <g id="zone-W2" class="rack-zone" onclick="rackClick('W2')" style="cursor:pointer;">
+            <rect x="248" y="364" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
+            <text x="271" y="404" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W2</text>
+            <text x="271" y="420" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               W3  Green · Wood Racking (bottom row)
+               PDF: x=172-232, y=412-427
+          ══════════════════════════════════════ -->
+          <g id="zone-W3" class="rack-zone" onclick="rackClick('W3')" style="cursor:pointer;">
+            <rect x="248" y="444" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
+            <text x="271" y="484" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W3</text>
+            <text x="271" y="500" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               A-1  Magenta · Ground Pallet (large bottom-left)
+               PDF: x=171-229, y=432-532
+          ══════════════════════════════════════ -->
+          <g id="zone-A-1" class="rack-zone" onclick="rackClick('A-1')" style="cursor:pointer;">
+            <rect x="68" y="394" width="170" height="234" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
+            <text x="153" y="500" text-anchor="middle" fill="#fff" font-size="30" font-weight="900">A-1</text>
+            <text x="153" y="526" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pallet</text>
+          </g>
+
+          <!-- ══════════════════════════════════════
+               B-1  Blue · Ground Pile New Goods (tall center)
+               PDF: x=270-284, y=249-459
+          ══════════════════════════════════════ -->
+          <g id="zone-B-1" class="rack-zone" onclick="rackClick('B-1')" style="cursor:pointer;">
+            <rect x="304" y="148" width="108" height="280" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/>
+            <text x="358" y="280" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">B-1</text>
+            <text x="358" y="302" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pile</text>
+            <text x="358" y="316" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">(New Goods)</text>
+          </g>
+
+          <!-- ── COMPASS ── -->
+          <g transform="translate(628,630)">
+            <circle cx="0" cy="0" r="16" fill="none" stroke="#444" stroke-width="1.5"/>
+            <text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text>
+            <polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/>
+          </g>
+
+          <!-- ── ENTRANCE label ── -->
+          <text x="340" y="656" text-anchor="middle" fill="#444" font-size="9" letter-spacing="3">ENTRANCE / EXIT</text>
+          <line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/>
+          <line x1="160" y1="638" x2="160" y2="642" stroke="#444" stroke-width="2"/>
+          <line x1="520" y1="638" x2="520" y2="642" stroke="#444" stroke-width="2"/>
+
+          <!-- ── PICK ROUTE PATH ── -->
+          <polyline id="rack-route-path" points="" fill="none" stroke="#0af" stroke-width="3"
+            stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/>
+          <polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3"
+            stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/>
+
+        </svg>
+      </div>
+
+      <!-- Info panel -->
+      <div id="rack-info-panel" style="display:none;background:var(--sur);border:1px solid var(--cy);margin-top:12px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div id="rack-info-title" style="font-size:16px;font-weight:900;color:var(--cy);"></div>
+            <div id="rack-info-type" style="font-size:10px;color:var(--td);margin-top:2px;letter-spacing:1px;"></div>
+          </div>
+          <button onclick="rackClearHighlight()" style="background:transparent;border:none;color:var(--td);cursor:pointer;font-size:14px;">✕</button>
+        </div>
+        <div id="rack-info-orders" style="margin-top:12px;font-size:11px;"></div>
+      </div>
+
+      <!-- Pick route panel -->
+      <div id="rack-route-panel" style="display:none;background:var(--sur);border:1px solid var(--cy);margin-top:12px;padding:16px;">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">🚶 OPTIMAL PICK ROUTE</div>
+        <div id="rack-route-steps" style="font-size:11px;"></div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- ── Floating Music Player ── -->
   <button id="fm-btn" title="Music Player" onclick="var p=document.getElementById('fm-panel');p.style.display=p.style.display==='flex'?'none':'flex';">♪</button>
