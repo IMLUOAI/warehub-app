@@ -347,7 +347,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
         <div id="err-bar"></div>
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
-          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off"/>
+          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="if(event.key==='Enter'){if(window._scanTimer)clearTimeout(window._scanTimer);var v=this.value.trim();if(v)doScan(v);}else{if(window._scanTimer)clearTimeout(window._scanTimer);window._scanTimer=setTimeout(function(){var v=document.getElementById('scan-in').value.trim();if(v&&v.length>=4&&!/\s/.test(v))doScan(v);},150);}"/>
           <div id="scan-fb">ready…</div>
         </div>
       </div>
@@ -442,6 +442,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
         <button class="btn btn-g" id="export-csv-btn" onclick="exportPayrollCSV()">⬇ EXPORT CSV</button>
         <button class="btn" id="excel-connect-btn" style="border-color:#1D6F42;color:#1D6F42;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
         <button class="btn" id="excel-save-btn" style="border-color:#1D6F42;color:#1D6F42;display:none;" onclick="excelSavePayroll()">📊 SAVE TO EXCEL</button>
+        <button id="excel-settings-btn" style="border-color:#555;color:#888;display:none;padding:6px 8px;font-size:10px;" onclick="excelConnect()" title="Change Excel file / Disconnect">⚙</button>
       </div>
     </div>
     <!-- Summary cards -->
@@ -2212,38 +2213,36 @@ function printPackerCards(){
   // Print CSS: 4×6 inch per card, one per page, solid black text only
   var printCss=
     '*{box-sizing:border-box;margin:0;padding:0;}'
-    +'body{background:#fff;font-family:Arial,Helvetica,sans-serif;}'
-    +'.ic{'
-      +'width:4in;height:6in;'
-      +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-      +'padding:0.3in;'
-      +'page-break-after:always;'
-      +'background:#fff;'
-      +'border:3px solid #000;'  // visible border for cutting guide
-    +'}'
-    +'.ic:last-child{page-break-after:auto;}'
-    +'.ic-company{font-size:9pt;font-weight:700;color:#000;letter-spacing:3px;text-align:center;margin-bottom:6pt;}'
-    +'.ic-divider{width:80%;border-top:2px solid #000;margin:8pt auto;}'
-    +'.ic-init{font-size:72pt;font-weight:900;color:#000;line-height:1;text-align:center;}'
-    +'.ic-name{font-size:28pt;font-weight:900;color:#000;text-align:center;margin-top:6pt;letter-spacing:1px;}'
-    +'.ic-role{font-size:10pt;font-weight:700;color:#000;letter-spacing:4px;text-align:center;margin-top:4pt;}'
-    +'.ic-svg{width:100%;text-align:center;margin-top:4pt;}'
-    +'.ic-svg svg{width:90%;height:auto;}'
-    +'.ic-id{font-size:10pt;color:#000;margin-top:4pt;letter-spacing:3px;font-family:monospace;font-weight:700;text-align:center;}'
+    // Page = 4x6 thermal label; badge = CR80 standard ID card size (3.375 x 2.125 in)
     +'@page{size:4in 6in;margin:0;}'
-    +'@media print{html,body{width:4in;height:6in;margin:0;padding:0;}}';
+    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;}'
+    // Wrapper centers the badge on the label
+    +'.ic-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;}'
+    +'.ic-page:last-child{page-break-after:auto;}'
+    // Badge = CR80 standard: 3.375" x 2.125"
+    +'.ic{width:3.375in;height:2.125in;border:1.5pt solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff;}'
+    +'.ic-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3pt 6pt 2pt;}'
+    +'.ic-company{font-size:5pt;font-weight:700;color:#000;letter-spacing:2px;text-align:center;margin-bottom:2pt;}'
+    +'.ic-init{font-size:22pt;font-weight:900;color:#000;line-height:1;}'
+    +'.ic-name{font-size:10pt;font-weight:900;color:#000;text-align:center;margin-top:1pt;}'
+    +'.ic-role{font-size:5.5pt;font-weight:700;color:#000;letter-spacing:3px;margin-top:1pt;}'
+    +'.ic-divider{width:85%;border-top:0.75pt solid #000;margin:2pt auto;}'
+    +'.ic-bot{padding:2pt 6pt 3pt;text-align:center;}'
+    +'.ic-svg svg{width:100%;height:auto;max-height:20pt;}'
+    +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}'
+    +'@media print{html,body{display:flex;align-items:center;justify-content:center;}}';
 
   // Preview CSS — shows white card on dark overlay
     // Preview CSS — colorful screen display, print stays black-only
   var previewCss=
     '.ic-prev{'
-      +'width:240px;height:360px;border-radius:12px;display:flex;flex-direction:column;'
+      +'width:270px;height:170px;border-radius:8px;display:flex;flex-direction:column;'
       +'overflow:hidden;cursor:pointer;position:relative;'
       +'box-shadow:0 8px 32px #0008;transition:transform .15s,box-shadow .15s;'
     +'}'
     +'.ic-prev:hover{transform:translateY(-4px);box-shadow:0 14px 40px #000a;}'
     +'.ic-prev .ic-header{'
-      +'flex:0 0 52%;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      +'flex:0 0 55%;display:flex;flex-direction:column;align-items:center;justify-content:center;'
       +'padding:16px 12px 10px;position:relative;overflow:hidden;'
     +'}'
     +'.ic-prev .ic-company{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:3px;text-align:center;margin-bottom:6px;}'
@@ -2338,43 +2337,55 @@ var ov=document.createElement('div');
   window._icPrintData={people:allPeople, css:printCss};
 }
 
+function icCardHtml(item){
+  var svg = C128.svg(item.person.id, 2, 32);
+  return '<div class="ic-page">'
+    +'<div class="ic">'
+      +'<div class="ic-top">'
+        +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+        +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
+        +'<div class="ic-name">'+item.person.name+'</div>'
+        +'<div class="ic-role">'+item.role+'</div>'
+      +'</div>'
+      +'<div class="ic-divider"></div>'
+      +'<div class="ic-bot">'
+        +'<div class="ic-svg">'+svg+'</div>'
+        +'<div class="ic-id">'+item.person.id+'</div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+function icPrintWindow(css, bodyHtml){
+  var w = window.open('', '_blank', 'width=400,height=600');
+  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.'); return; }
+  w.document.open();
+  w.document.write(
+    '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<style>'+css+'</style>'
+    +'</head><body>'+bodyHtml
+    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},1200);},300);}<'+'/scr'+'ipt>'
+    +'</body></html>'
+  );
+  w.document.close();
+}
+
 function printSingleCard(personId, role){
-  if(!window._icPrintData) return;
-  var item=window._icPrintData.people.find(function(x){return x.person.id===personId&&x.role===role;});
-  if(!item) return;
-  var svg=C128.svg(item.person.id, 3, 80);
-  var html='<div class="ic">'
-    +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
-    +'<div class="ic-divider"></div>'
-    +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
-    +'<div class="ic-name">'+item.person.name+'</div>'
-    +'<div class="ic-role">'+item.role+'</div>'
-    +'<div class="ic-divider"></div>'
-    +'<div class="ic-svg">'+svg+'</div>'
-    +'<div class="ic-id">'+item.person.id+'</div>'
-    +'</div>';
-  printViaIframe(window._icPrintData.css, html);
+  if(!window._icPrintData){ pm('⚠ Open the ID card preview first.'); return; }
+  var item = window._icPrintData.people.find(function(x){ return x.person.id===personId && x.role===role; });
+  if(!item){ pm('⚠ Card not found.'); return; }
+  icPrintWindow(window._icPrintData.css, icCardHtml(item));
 }
 
 function printAllCards(){
-  if(!window._icPrintData) return;
-  var html='';
-  window._icPrintData.people.forEach(function(item){
-    var svg=C128.svg(item.person.id, 3, 80);
-    html+='<div class="ic">'
-      +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
-      +'<div class="ic-divider"></div>'
-      +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
-      +'<div class="ic-name">'+item.person.name+'</div>'
-      +'<div class="ic-role">'+item.role+'</div>'
-      +'<div class="ic-divider"></div>'
-      +'<div class="ic-svg">'+svg+'</div>'
-      +'<div class="ic-id">'+item.person.id+'</div>'
-      +'</div>';
+  if(!window._icPrintData){ pm('⚠ Open the ID card preview first.'); return; }
+  // Each card gets its own window/print job — staggered so browser allows popups
+  window._icPrintData.people.forEach(function(item, i){
+    setTimeout(function(){
+      icPrintWindow(window._icPrintData.css, icCardHtml(item));
+    }, i * 900);
   });
-  printViaIframe(window._icPrintData.css, html);
 }
-
 
 // ══════════════════════════════════════════
 // PRINT PICK LISTS
@@ -2420,25 +2431,28 @@ function printPickLists(){
 // PRINT VIA IFRAME (no popup, works on GitHub Pages)
 // ══════════════════════════════════════════
 function printViaIframe(css, bodyHtml){
-  var iframe=document.createElement('iframe');
-  iframe.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;border:none;';
-  document.body.appendChild(iframe);
-  var doc=iframe.contentDocument||iframe.contentWindow.document;
-  doc.open();
-  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+bodyHtml+'</body></html>');
-  doc.close();
-  iframe.onload=function(){
+  // Use window.open — more reliable than iframe on hosted pages
+  var w = window.open('', '_blank', 'width=800,height=600');
+  if(!w){
+    pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.');
+    return;
+  }
+  w.document.open();
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+bodyHtml+'</body></html>');
+  w.document.close();
+  w.onload = function(){
     setTimeout(function(){
-      iframe.contentWindow.print();
-      setTimeout(function(){ document.body.removeChild(iframe); },2000);
-    },400);
+      w.focus();
+      w.print();
+      setTimeout(function(){ w.close(); }, 1500);
+    }, 400);
   };
+  // Fallback if onload already fired
   setTimeout(function(){
-    if(document.body.contains(iframe)){
-      try{ iframe.contentWindow.print(); }catch(e){}
-      setTimeout(function(){ if(document.body.contains(iframe)) document.body.removeChild(iframe); },2000);
+    if(w && !w.closed){
+      try{ w.focus(); w.print(); }catch(e){}
     }
-  },800);
+  }, 800);
 }
 // ══════════════════════════════════════════
 // MICROSOFT EXCEL — MSAL.js (Official SDK)
@@ -2495,10 +2509,12 @@ function msalInit(){
 function excelUpdateUI(){
   var cb = document.getElementById('excel-connect-btn');
   var sb = document.getElementById('excel-save-btn');
+  var gb = document.getElementById('excel-settings-btn');
   if(!cb||!sb) return;
   var ready = !!(_msalToken && _excelFileId);
   cb.style.display = ready ? 'none' : '';
   sb.style.display = ready ? '' : 'none';
+  if(gb) gb.style.display = ready ? '' : 'none';
   if(_msalToken && !_excelFileId){
     cb.textContent='⊞ PICK EXCEL FILE';
     cb.style.borderColor='#f59e0b'; cb.style.color='#f59e0b';
@@ -2538,7 +2554,7 @@ function excelConnect(){
     +'<div id="ms-setup-msg" style="font-size:10px;color:var(--am);min-height:16px;margin-bottom:12px;"></div>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
     +'<button id="ms-cancel-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
-    +(_msalToken?'<button id="ms-disconnect-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">DISCONNECT</button>':'')
+    +'<button id="ms-disconnect-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">DISCONNECT</button>'
     +'<button id="ms-signin-btn" style="padding:7px 16px;font-size:10px;letter-spacing:1px;background:#0078d4;border:none;color:#fff;cursor:pointer;font-family:inherit;">SIGN IN WITH MICROSOFT →</button>'
     +'</div></div>';
 
