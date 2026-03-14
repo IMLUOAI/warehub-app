@@ -11,7 +11,6 @@
           <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · Company Vehicle</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn" onclick="gmapsShowSetup()" style="font-size:9px;border-color:#4285f4;color:#4285f4;">📍 MAPS KEY</button>
           <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;">⬇ EXPORT CSV</button>
           <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;">📊 SAVE TO EXCEL</button>
         </div>
@@ -30,7 +29,10 @@
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
             <div style="position:relative;">
-              <input id="veh-dest" placeholder="Start typing destination…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <div style="display:flex;gap:6px;">
+                <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+                <button onclick="vehMapSearch()" style="padding:4px 10px;font-size:12px;background:#4285f4;border:none;color:#fff;cursor:pointer;white-space:nowrap;" title="Search address on map">🔍</button>
+              </div>
               <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
             </div>
           </div>
@@ -2743,30 +2745,41 @@ async function msFindFile(fname, msgEl){
 async function msCreateExcelFile(fname, msgEl){
   function setMsg(t,col){ if(msgEl){msgEl.style.color=col||'var(--am)';msgEl.textContent=t;} }
   try{
-    // Upload empty body — OneDrive initializes it as a valid xlsx from the filename extension
-    var r = await fetch(
+    setMsg('⟳ Creating "'+fname+'" on OneDrive…');
+
+    // Real minimal xlsx with Warehub Payroll + Vehicle Log sheets pre-created
+    var b64='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';
+    var binary=atob(b64);
+    var bytes=new Uint8Array(binary.length);
+    for(var i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+
+    var r=await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content',
       {
         method:'PUT',
-        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},
-        body: new Blob([], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+        headers:{
+          Authorization:'Bearer '+_msalToken,
+          'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        },
+        body:bytes
       }
     );
-    var d = await r.json();
+    var d=await r.json();
     console.log('Create file response:', r.status, d);
-    if(!r.ok || !d.id){
-      setMsg('⚠ Auto-create failed ('+r.status+'). Please create the file manually in OneDrive → New → Excel workbook, name it "'+fname.replace('.xlsx','')+'" then reconnect.','var(--am)');
+
+    if(!r.ok||!d.id){
+      setMsg('✗ Create failed ('+r.status+'): '+((d.error&&d.error.message)||'Unknown error')+'. Try creating the file manually in OneDrive first.','var(--rd)');
       return false;
     }
-    _excelFileId = d.id;
+
+    _excelFileId=d.id;
     excelSaveConfig();
-    setMsg('⟳ File created, initializing…');
-    await new Promise(function(res){ setTimeout(res,3000); });
-    await msEnsureSheet();
+    setMsg('⟳ File created — initializing sheets…');
+    await new Promise(function(res){ setTimeout(res,2000); });
     return true;
   }catch(e){
-    console.error('msCreateExcelFile:', e);
-    setMsg('⚠ Could not auto-create. Please create "'+fname.replace('.xlsx','')+'" in OneDrive manually, then reconnect.','var(--am)');
+    console.error('msCreateExcelFile:',e);
+    setMsg('✗ '+e.message+'. Try creating the file manually in OneDrive first.','var(--rd)');
     return false;
   }
 }
@@ -2775,11 +2788,31 @@ async function msEnsureSheet(){
   if(!_msalToken||!_excelFileId) return;
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   try{
-    await fetch(base+'/worksheets',{method:'POST',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({name:_excelSheet})});
-    await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')',
-      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
-       body:JSON.stringify({values:[['Date','Packer','Hours','Packages','Clock In','Clock Out']]})});
-  }catch(e){ console.warn('msEnsureSheet:', e); }
+    // Get existing sheets
+    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sd=await sr.json();
+    var existing=(sd.value||[]).map(function(s){return s.name;});
+
+    // Create sheet if it doesn't exist
+    if(!existing.includes(_excelSheet)){
+      await fetch(base+'/worksheets',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+        body:JSON.stringify({name:_excelSheet})
+      });
+    }
+
+    // Check if header row already exists
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')?$select=values',
+      {headers:{Authorization:'Bearer '+_msalToken}});
+    var rd=await rr.json();
+    var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
+    if(!hasHeader){
+      await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')',
+        {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+         body:JSON.stringify({values:[['Date','Packer','Hours','Packages','Clock In','Clock Out']]})});
+    }
+  }catch(e){ console.warn('msEnsureSheet:',e); }
 }
 
 async function excelSavePayroll(){
@@ -2828,10 +2861,12 @@ async function excelSavePayroll(){
   try{
     var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
     await msEnsureSheet();
+    // Find next empty row using usedRange
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
-    var existingRows=rd.rowCount||0;
-    var dataRows=existingRows===0?rows:rows.slice(1);
+    // If error (empty sheet), start at row 1
+    var existingRows=(rd.rowCount&&!rd.error)?rd.rowCount:0;
+    var dataRows=existingRows===0?rows:rows.slice(1); // include header only on first write
     if(!dataRows.length){ pm('✓ Nothing new to save.'); return; }
     var startRow=existingRows+1, endRow=startRow+dataRows.length-1;
     var wr=await fetch(
@@ -3087,10 +3122,10 @@ async function vehicleSaveExcel(){
 // ══════════════════════════════════════════
 
 var _gmapsLoaded = false;
-var _gmapsKey    = '';
+var _gmapsKey    = 'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw';
 
 function gmapsLoadConfig(){
-  try{ _gmapsKey=localStorage.getItem('warehub_gmaps_key')||''; }catch(e){}
+  try{ _gmapsKey=localStorage.getItem('warehub_gmaps_key')||'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw'; }catch(e){ _gmapsKey='AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw'; }
 }
 
 function gmapsSaveKey(key){
@@ -3141,41 +3176,116 @@ function gmapsAttach(){
   document.head.appendChild(st);
 }
 
-function gmapsShowSetup(){
-  var existing=document.getElementById('gmaps-setup-modal');
+function vehMapSearch(){
+  var existing = document.getElementById('veh-map-modal');
   if(existing){ existing.remove(); return; }
-  var modal=document.createElement('div');
-  modal.id='gmaps-setup-modal';
-  modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
-  modal.innerHTML=
-    '<div style="background:var(--sur);border:1px solid var(--bdr);padding:28px;width:460px;max-width:94vw;">'
-    +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">GOOGLE MAPS API KEY</div>'
-    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Enables address autocomplete on the destination field.</div>'
-    +'<div style="background:var(--bg);border:1px solid var(--bdr);padding:12px;font-size:10px;color:var(--td);line-height:1.8;margin-bottom:14px;">'
-    +'1. Go to <a href="https://console.cloud.google.com" target="_blank" style="color:var(--cy);">console.cloud.google.com</a><br>'
-    +'2. APIs &amp; Services → Enable → <b style="color:var(--tx);">Places API</b><br>'
-    +'3. Credentials → + Create → API Key → copy it<br>'
-    +'4. Restrict to <b style="color:var(--tx);">Places API</b> + your GitHub Pages URL'
+
+  var modal = document.createElement('div');
+  modal.id = 'veh-map-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML =
+    '<div style="background:var(--sur);border:1px solid var(--bdr);width:580px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">'
+      +'<div style="font-size:10px;letter-spacing:2px;color:#4285f4;font-weight:700;">🔍 SEARCH DESTINATION</div>'
+      +'<button id="veh-map-close" style="background:transparent;border:none;color:var(--td);font-size:14px;cursor:pointer;">✕</button>'
     +'</div>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">PASTE YOUR API KEY</div>'
-    +'<input id="gmaps-key-input" placeholder="AIzaSy…" value="'+_gmapsKey+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-family:monospace;font-size:11px;margin-bottom:14px;outline:none;"/>'
-    +'<div id="gmaps-msg" style="font-size:10px;color:var(--am);min-height:16px;margin-bottom:12px;"></div>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
-    +'<button id="gmaps-cancel-btn" style="padding:7px 16px;font-size:10px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
-    +'<button id="gmaps-save-btn" style="padding:7px 16px;font-size:10px;background:#4285f4;border:none;color:#fff;cursor:pointer;font-family:inherit;">SAVE & ENABLE →</button>'
-    +'</div></div>';
+    +'<div style="padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;gap:8px;">'
+      +'<input id="veh-map-search-input" placeholder="Search any address, business, or place…" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px 10px;font-size:12px;font-family:inherit;outline:none;"/>'
+      +'<button id="veh-map-search-btn" style="padding:8px 14px;background:#4285f4;border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:11px;">Search</button>'
+    +'</div>'
+    +'<div id="veh-map-results" style="max-height:180px;overflow-y:auto;border-bottom:1px solid var(--bdr);"></div>'
+    +'<div id="veh-map-frame-wrap" style="flex:1;min-height:280px;position:relative;">'
+      +'<iframe id="veh-map-iframe" style="width:100%;height:100%;border:none;min-height:280px;" src="about:blank"></iframe>'
+      +'<div id="veh-map-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--td);">'
+        +'<div style="font-size:32px;">🗺</div>'
+        +'<div style="font-size:11px;">Search for a place above to see it on the map</div>'
+      +'</div>'
+    +'</div>'
+    +'<div style="padding:10px 16px;border-top:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;">'
+      +'<div id="veh-map-selected" style="font-size:11px;color:var(--cy);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>'
+      +'<button id="veh-map-use-btn" style="padding:7px 16px;background:#4285f4;border:none;color:#fff;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;display:none;">✓ USE THIS ADDRESS</button>'
+    +'</div>'
+    +'</div>';
+
   document.body.appendChild(modal);
-  document.getElementById('gmaps-cancel-btn').onclick=function(){ modal.remove(); };
-  document.getElementById('gmaps-save-btn').onclick=function(){
-    var key=document.getElementById('gmaps-key-input').value.trim();
-    var msg=document.getElementById('gmaps-msg');
-    if(!key||!key.startsWith('AIza')){ msg.textContent='⚠ Paste a valid key (starts with AIza…)'; return; }
-    gmapsSaveKey(key);
-    msg.style.color='var(--gn)'; msg.textContent='✓ Saved! Loading Maps…';
-    gmapsInit();
-    setTimeout(function(){ modal.remove(); pm('✓ Google Maps autocomplete active on destination field!'); },1200);
+
+  var selectedPlace = null;
+
+  document.getElementById('veh-map-close').onclick = function(){ modal.remove(); };
+
+  // Close on backdrop click
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+
+  // Search function using Places Text Search
+  function doSearch(){
+    var query = document.getElementById('veh-map-search-input').value.trim();
+    if(!query) return;
+    var resultsEl = document.getElementById('veh-map-results');
+    resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">⟳ Searching…</div>';
+
+    var svc = new google.maps.places.PlacesService(document.createElement('div'));
+    svc.textSearch({query: query}, function(results, status){
+      if(status !== google.maps.places.PlacesServiceStatus.OK || !results.length){
+        resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">No results found.</div>';
+        return;
+      }
+      resultsEl.innerHTML = '';
+      results.slice(0,6).forEach(function(place){
+        var row = document.createElement('div');
+        row.style.cssText = 'padding:9px 16px;font-size:11px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:8px;align-items:flex-start;';
+        row.innerHTML =
+          '<div style="flex:1;">'
+          +'<div style="font-weight:700;color:var(--tx);">'+place.name+'</div>'
+          +'<div style="font-size:10px;color:var(--td);margin-top:2px;">'+(place.formatted_address||'')+'</div>'
+          +'</div>'
+          +'<div style="font-size:9px;color:#4285f4;white-space:nowrap;padding-top:2px;">Select</div>';
+        row.addEventListener('mouseenter', function(){ this.style.background='var(--bg)'; });
+        row.addEventListener('mouseleave', function(){ this.style.background=''; });
+        row.onclick = function(){
+          selectedPlace = place;
+          // Highlight selected
+          resultsEl.querySelectorAll('div[data-selected]').forEach(function(el){ el.removeAttribute('data-selected'); el.style.background=''; });
+          row.setAttribute('data-selected','1');
+          row.style.background='var(--bg)';
+          // Show on map via embed
+          var addr = encodeURIComponent(place.name+' '+place.formatted_address);
+          var iframe = document.getElementById('veh-map-iframe');
+          iframe.src = 'https://www.google.com/maps/embed/v1/place?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+addr+'&zoom=15';
+          document.getElementById('veh-map-placeholder').style.display='none';
+          // Show selected address
+          var label = place.name+(place.formatted_address?'  —  '+place.formatted_address:'');
+          document.getElementById('veh-map-selected').textContent = '📍 '+label;
+          document.getElementById('veh-map-use-btn').style.display='block';
+        };
+        resultsEl.appendChild(row);
+      });
+    });
+  }
+
+  document.getElementById('veh-map-search-btn').onclick = doSearch;
+  document.getElementById('veh-map-search-input').addEventListener('keydown', function(e){
+    if(e.key==='Enter') doSearch();
+  });
+  setTimeout(function(){ document.getElementById('veh-map-search-input').focus(); },100);
+
+  // Use address button
+  document.getElementById('veh-map-use-btn').onclick = function(){
+    if(!selectedPlace) return;
+    var addr = selectedPlace.formatted_address || selectedPlace.name;
+    document.getElementById('veh-dest').value = addr;
+    var linkEl = document.getElementById('veh-dest-map-link');
+    if(linkEl){
+      var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addr)+'&query_place_id='+selectedPlace.place_id;
+      linkEl.style.display='block';
+      linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:#4285f4;text-decoration:none;font-size:9px;">📍 View on Google Maps</a>';
+    }
+    modal.remove();
+    pm('✓ Destination set: '+addr);
   };
 }
+
+function gmapsShowSetup(){ vehMapSearch(); } // alias kept for compatibility
+
 
 
 
