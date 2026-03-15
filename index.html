@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>WAREHUB — Double Sided ISCM LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;700;900&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
 <style>
 :root{
   --bg:#05080f;--sur:#0a0f1e;--bdr:#162035;
@@ -15,23 +15,23 @@
   --tx:#e8f0fe;--td:#4a6080;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;}
-body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:clamp(11px,1.5vw,13px);height:100%;overflow:hidden;}
+html{height:100%;height:-webkit-fill-available;overflow:hidden;}html,body{margin:0;padding:0;}
+body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:clamp(11px,1.5vw,13px);height:100%;min-height:-webkit-fill-available;overflow:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);}
 
 /* ── HEADER ── */
-#hdr{flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--bdr);background:var(--sur);}
+#hdr{flex-shrink:0;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;border-bottom:1px solid var(--bdr);background:var(--sur);}
 #logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
 #dot{width:7px;height:7px;border-radius:50%;background:var(--bdr);margin-right:8px;transition:all .4s;}
 #dot.live{background:var(--gn);box-shadow:0 0 8px var(--gn);}
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
-.tabs{display:flex;gap:0;overflow-x:auto;flex-shrink:0;width:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch;border-top:1px solid var(--bdr);}
+.tabs{display:-webkit-flex;display:flex;gap:0;overflow-x:auto;flex-shrink:0;width:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch;border-top:1px solid var(--bdr);}
 .tab{flex:1;padding:6px 4px;font-size:8.5px;letter-spacing:1px;border:none;border-right:1px solid var(--bdr);cursor:pointer;font-family:inherit;white-space:nowrap;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;text-align:center;min-width:0;}
 .tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
 
 /* ── LAYOUT ── */
-#app{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:0;}
-.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
-.view.on{display:flex;}
+#app{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;overflow:hidden;min-height:0;}
+.view{display:none;-webkit-box-flex:1;-webkit-flex:1;flex:1;-webkit-flex-direction:column;flex-direction:column;min-height:0;overflow:hidden;padding:0;}
+.view.on{display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 
 /* ── SHARED ── */
 .card{background:var(--sur);border:1px solid var(--bdr);padding:15px;}
@@ -199,6 +199,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #ai-btn:hover{transform:scale(1.08)!important;}
 #ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:min(340px,95vw);height:min(480px,70vh);background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
 
+.view-scroll{overflow-y:auto;overflow-x:hidden;padding:16px 18px;-webkit-overflow-scrolling:touch;flex:1;}
 /* ══ RESPONSIVE ══ */
 
 /* All screens — tabs always full width, just scale font */
@@ -238,6 +239,12 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 }
 
 </style>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="dns-prefetch" href="https://alcdn.msauth.net"/>
+  <link rel="dns-prefetch" href="https://maps.googleapis.com"/>
+  <link rel="dns-prefetch" href="https://graph.microsoft.com"/>
 </head>
 <body>
 
@@ -271,7 +278,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 <div id="app">
 
   <!-- ══ IMPORT ══ -->
-  <div id="view-import" class="view on" style="overflow-y:auto;padding:20px 24px;">
+  <div id="view-import" class="view on" style="padding:20px 24px;">
 
     <!-- Drop zone -->
     <div id="dz" style="margin-bottom:14px;">
@@ -320,7 +327,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
   </div>
 
   <!-- ══ MANAGER / PACKERS ══ -->
-  <div id="view-manager" class="view" style="gap:12px;overflow:hidden;">
+  <div id="view-manager" class="view" style="gap:12px;padding:16px 18px;">
 
     <!-- ── Section: Add Staff ── -->
     <div class="card" style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -433,7 +440,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 
 
   <!-- ══ DASHBOARD ══ -->
-  <div id="view-dash" class="view" style="overflow-y:auto;">
+  <div id="view-dash" class="view" style="padding:16px 18px;">
     <div id="dash-wrap">
 
       <!-- KPI row -->
@@ -501,7 +508,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
   </div>
 
   <!-- ══ PAYROLL ══ -->
-  <div id="view-payroll" class="view" style="overflow-y:auto;gap:12px;">
+  <div id="view-payroll" class="view" style="gap:12px;padding:16px 18px;">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <div>
         <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PAYROLL — TIME SHEET</div>
@@ -541,7 +548,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
   </div>
 
   <!-- ══ FLOOR DISPLAY ══ -->
-  <div id="view-floor" class="view">
+  <div id="view-floor" class="view" style="padding:16px 18px;">
     <div id="floor">
       <div id="fnum" style="color:var(--cy);">–</div>
       <div id="fsub">ORDERS REMAINING TODAY</div>
@@ -556,25 +563,17 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 </div><!-- #app -->
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// ══════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════
+
 var orders   = [];
-var packers  = [];   // {id, name, color, online, loginTime, ordersCompleted, skusScanned, orderTimes:[ms,...], totalPackTime:ms, shiftSessions:[{clockIn,clockOut,hoursWorked},...]}
-var managers = [];   // {id, name, color, shiftSessions:[...]}
+var packers  = [];
+var managers = [];
 var currentPacker = null;
 var ai = 0;
 var shiftDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-// Packer colors cycle
 var PCOLORS = ['#00e5ff','#00ff88','#c77dff','#ffb300','#ff3d5a','#eab308','#4ade80','#f472b6'];
 
-// ══════════════════════════════════════════
-// AUDIO
-// ══════════════════════════════════════════
 var _actx = null;
 function getAC(){ if(!_actx) _actx=new(window.AudioContext||window.webkitAudioContext)(); return _actx; }
 function bp(f,d,t,v){ try{ var a=getAC(),o=a.createOscillator(),g=a.createGain(); o.connect(g); g.connect(a.destination); o.type=t||'sine'; o.frequency.value=f; g.gain.setValueAtTime(v||.22,a.currentTime); g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d); o.start(); o.stop(a.currentTime+d); }catch(e){} }
@@ -583,9 +582,6 @@ function bpDone(){ [523,659,784,1047].forEach(function(f,i){ setTimeout(function
 function bpErr() { bp(180,.28,'sawtooth',.3); }
 function bpLogin(){ bp(660,.05,'sine',.2); setTimeout(function(){ bp(990,.08,'sine',.22); },60); }
 
-// ══════════════════════════════════════════
-// CARRIERS
-// ══════════════════════════════════════════
 var CR = {
   GOFO:   {c:'#00e5ff', t:function(s){return /^GFUS/i.test(s);}},
   FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|FX-|FEDEX-)/.test(s);}},
@@ -598,9 +594,6 @@ var CR = {
 function dc(s){ for(var n in CR) if(CR[n].t(s)) return n; return 'Unknown'; }
 function cc(c){ return (CR[c]&&CR[c].c)||'#4a6080'; }
 
-// ══════════════════════════════════════════
-// NAV
-// ══════════════════════════════════════════
 function gv(name){
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
@@ -616,12 +609,6 @@ function gv(name){
   if(name==='floor')  renderFloor();
 }
 
-// ══════════════════════════════════════════
-// PDF PARSE
-// ══════════════════════════════════════════
-
-// Tracking patterns — specific first to avoid false matches
-// Spaces stripped before matching (some labels print spaced digits)
 var TPATS=[
   {r:/^(GFUS\d{10,22})$/i},
   {r:/^(1Z[A-Z0-9]{14,18})$/i},
@@ -635,21 +622,20 @@ var TPATS=[
   {r:/^(\d{20,22})$/}
 ];
 
-// Try to match any single word OR concatenated adjacent words (for spaced tracking numbers)
 function matchTracking(words){
   function clean(s){ return s.replace(/[^A-Z0-9]/gi,''); }
 
-  // Collect all text on page for carrier hint detection
+
   var allText = words.map(function(w){return w.text;}).join(' ');
 
-  // Detect carrier logo/brand hints from label text
+
   var hintFedEx  = /FedEx|fedex/i.test(allText);
   var hintUPS    = /UPS/i.test(allText) || /1Z[A-Z0-9]{4,}/i.test(allText);
   var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POSTAGE/i.test(allText);
   var hintSpeedX = /SpeedX|SPXMIA|SDX/i.test(allText);
   var hintUniuni = /uniuni|UUS/i.test(allText);
 
-  // ── PASS 1: each word individually ──
+
   for(var i=0;i<words.length;i++){
     var s=clean(words[i].text);
     if(!s||s.length<8) continue;
@@ -659,7 +645,7 @@ function matchTracking(words){
     }
   }
 
-  // ── PASS 2: per-row concatenation (handles spaced digit strings) ──
+
   var rows={};
   words.forEach(function(w){
     var row=Math.round(w.top/4)*4;
@@ -677,11 +663,11 @@ function matchTracking(words){
     }
   }
 
-  // ── PASS 2.5: FedEx combo label — target the barcode number row directly ──
-  // These labels print "9632 0895 5 (000 000 0000) 0 00 8894 0615 7740" at ~top 290-310
-  // Also "FedEx Tracking ID# 3994 1311 4118" at ~top 154 with short display number
+
+
+
   if(/FedEx/i.test(allText)){
-    // Find the row with the long barcode number (contains many digit groups)
+
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
@@ -689,7 +675,7 @@ function matchTracking(words){
     for(var fi=0;fi<fedexRows.length;fi++){
       var fRow = rows[fedexRows[fi]].sort(function(a,b){return a.x-b.x;});
       var fConcat = fRow.map(function(w){return clean(w.text);}).join('');
-      // Try all substrings from length 22 down to 20
+
       var fDigits = fConcat.replace(/[^0-9]/g,'');
       for(var flen=Math.min(fDigits.length,34);flen>=20;flen--){
         for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
@@ -702,14 +688,14 @@ function matchTracking(words){
     }
   }
 
-  // ── PASS 3: FedEx fallback — if FedEx logo detected, look for any long digit string ──
-  // FedEx labels print numbers in many formats; grab longest digit-only sequence on page
+
+
   if(hintFedEx){
-    // Concatenate everything on page, strip non-digits, look for FedEx-length numbers
+
     var allDigits = words.map(function(w){return clean(w.text);}).join('');
-    // Try all substrings of length 12-34 from the full page digit soup
+
     var digitOnly = allDigits.replace(/[^0-9]/g,'');
-    // Slide window to find valid FedEx tracking
+
     var fedexPats = [
       /^(96[0-9]{18,22})$/,
       /^(61[0-9]{17,20})$/,
@@ -724,11 +710,11 @@ function matchTracking(words){
         }
       }
     }
-    // Last resort: use CUST REF as pseudo-tracking with FedEx prefix
+
     var custRef=words.filter(function(w){return /CUST\s*REF/i.test(w.text);});
     if(!custRef.length) custRef=words.filter(function(w){return /^PK-/.test(w.text);});
     if(custRef.length){
-      // Find the ref value (token after "CUST REF:" on same row)
+
       var refTop=custRef[0].top;
       var refRow=words.filter(function(w){return Math.abs(w.top-refTop)<8;})
                       .sort(function(a,b){return a.x-b.x;});
@@ -738,7 +724,7 @@ function matchTracking(words){
         return 'FX-'+clean(refVal[refVal.length-1].text).slice(0,20);
       }
     }
-    // Absolute last resort: synthesize from "Tracking ID#" short number
+
     var tidRow=words.filter(function(w){return /Tracking/i.test(w.text)&&/ID/i.test(w.text);});
     if(tidRow.length){
       var tidTop=tidRow[0].top;
@@ -752,27 +738,27 @@ function matchTracking(words){
     }
   }
 
-  // ── PASS 4: UPS fallback ──
-  // UPS tracking "1Z V57 J62 YW 9412 5061" is space-separated tokens
-  // Try joining ALL page tokens and scan for 1Z pattern
+
+
+
   if(hintUPS || /1Z/i.test(allText)){
-    // Try every row concatenated (spaces removed)
+
     for(var ri=0;ri<rowKeys.length;ri++){
       var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
-      // With spaces preserved
+
       var txtSpaced=sorted.map(function(w){return w.text;}).join(' ');
       var txtClean=clean(txtSpaced);
       var m2=txtClean.match(/^(1Z[A-Z0-9]{14,18})$/i);
       if(m2){ dbg('  UPS row match: '+m2[1]); return m2[1].toUpperCase(); }
-      // Partial match within row
+
       var m3=txtClean.match(/(1Z[A-Z0-9]{14,18})/i);
       if(m3){ dbg('  UPS partial match: '+m3[1]); return m3[1].toUpperCase(); }
     }
-    // Whole page concatenated
+
     var pageClean=words.map(function(w){return clean(w.text);}).join('');
     var m4=pageClean.match(/(1Z[A-Z0-9]{14,18})/i);
     if(m4){ dbg('  UPS full-page match: '+m4[1]); return m4[1].toUpperCase(); }
-    // Try "TRACKING #:" row — grab value after it
+
     var trkLabel=words.filter(function(w){return /TRACKING/i.test(w.text)&&/[#:]/i.test(w.text);});
     if(trkLabel.length){
       var tTop=trkLabel[0].top;
@@ -784,14 +770,14 @@ function matchTracking(words){
     }
   }
 
-  // ── PASS 5: Uniuni fallback ──
-  // Tracking "UUS6391780256479406" — should match pass 1, but may be split or prefixed
+
+
   if(hintUniuni || /UUS/i.test(allText)){
-    // Try full page clean concat
+
     var pageAll=words.map(function(w){return clean(w.text);}).join('');
     var uuM=pageAll.match(/(UUS[A-Z0-9]{10,22})/i);
     if(uuM){ dbg('  Uniuni full-page match: '+uuM[1]); return uuM[1].toUpperCase(); }
-    // Try per-row
+
     for(var ri=0;ri<rowKeys.length;ri++){
       var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
       var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
@@ -804,7 +790,11 @@ function matchTracking(words){
 }
 
 async function parsePdf(file){
-  // Clear previous state
+  if(typeof pdfjsLib==='undefined'){
+    await new Promise(function(res,rej){var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
   document.getElementById('debug-log').textContent='';
   orders=[]; ai=0;
   pm('⟳ Reading PDF…');
@@ -824,17 +814,17 @@ async function parsePdf(file){
       });
       dbg('\nPage '+p+' H='+H.toFixed(0));
       words.forEach(function(w){dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"');});
-      // Render page to canvas and store as image for label printing
+
       var canvas=document.createElement('canvas');
-      // Scale 3x = ~216 DPI for standard label (72pt base) — enough for barcode scanning
-      // Use devicePixelRatio too if high-DPI screen, but cap at 3x minimum
+
+
       var printScale=Math.max(3, window.devicePixelRatio||1);
       var vp2=page.getViewport({scale:printScale});
       canvas.width=vp2.width; canvas.height=vp2.height;
       var ctx2=canvas.getContext('2d');
-      ctx2.imageSmoothingEnabled=false; // no blur — keep edges sharp for barcodes
+      ctx2.imageSmoothingEnabled=false;
       await page.render({canvasContext:ctx2,viewport:vp2}).promise;
-      var pageImg=canvas.toDataURL('image/png'); // PNG = lossless, no JPEG artifacts on barcodes
+      var pageImg=canvas.toDataURL('image/png');
 
       var o=extractOrder(words,H);
       if(o){
@@ -864,17 +854,17 @@ function extractOrder(words, pageH){
   }
   function joinNear(target,tol){return near(target,tol).map(function(w){return w.text;}).join(' ');}
 
-  // ── TRACKING: search all words (spaced concatenation handled in matchTracking) ──
+
   var tracking = matchTracking(words);
   var carrier = tracking ? dc(tracking) : null;
 
-  // ── UNIUNI SPECIAL CASE: H≈1400, tracking is image-only (no text layer) ──
-  // Detect by tall page height + SKU pattern at extreme bottom
+
+
   if(!tracking && pageH >= 900){
-    // Look for SKU token anywhere on this tall page
+
     var uuSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
     if(uuSkuW.length){
-      // Build a unique ID from the SKU + shelf text
+
       var uuShelfW = words.filter(function(w){ return w.x > pageH*0.3 && /[A-Z]\d/.test(w.text); });
       var uuShelf  = uuShelfW.length ? uuShelfW[0].text : '';
       var uuSku    = uuSkuW[0].text.split('*')[0];
@@ -886,13 +876,13 @@ function extractOrder(words, pageH){
 
   if(!tracking) return null;
 
-  // ── SKU: always bottom-left corner across all carrier label types ──
+
   var H = pageH || 400;
-  // For tall Uniuni pages (H~1400), SKU is in the last ~200pt; for normal pages, bottom 18%
+
   var skuTopMin = H >= 900 ? H - 200 : H * 0.82;
   var bottomZone = words.filter(function(w){return w.top >= skuTopMin && w.x < Math.max(H*0.55, 150);});
   var skuW = bottomZone.filter(function(w){return /\*\d/.test(w.text);});
-  // Fallback: scan entire page for SKU pattern
+
   if(!skuW.length) skuW = words.filter(function(w){return /^[A-Z0-9][A-Z0-9\-]{1,18}\*\d+$/i.test(w.text);});
   // Some labels have SKU split: "D1YP03B-T" and "*2" separately — join adjacent bottom-left tokens
   if(!skuW.length){
@@ -911,37 +901,37 @@ function extractOrder(words, pageH){
   });
   if(!skus.length) skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
 
-  // ── SHELF: bottom-right corner ──
+
   var shelfTopMin = H >= 900 ? H - 200 : H * 0.82;
   var shelfW = words.filter(function(w){return w.top >= shelfTopMin && w.x > Math.max(H*0.45, 120);});
-  // Exclude tracking number and pure numeric strings
+
   shelfW = shelfW.filter(function(w){return !/^\d{10,}$/.test(w.text) && w.text!==tracking;});
-  // Prefer tokens matching shelf pattern: letter-digit-digit (e.g. A-1-2, LP-1-2, R-1-14, B-1-10)
+
   var shelfPat=shelfW.filter(function(w){return /^[A-Z]{1,3}[-.]\d{1,2}[-.]\d{1,3}$/i.test(w.text);});
   var shelf=(shelfPat.length?shelfPat:shelfW).map(function(w){return w.text;}).join(' ');
 
-  // ── RECIPIENT / DEST: varies by carrier — scan for address-like rows ──
-  // For GOFO labels: fixed coords. For others: find "SHIP TO:" or largest-font address block
+
+
   var recipient='', city='';
-  // Try fixed GOFO coords first
+
   var r49=joinNear(49,8); var c93=joinNear(93,8);
   if(r49 && !/^(FROM|TO|SHIP|Samuel|Deliver|Contact)/i.test(r49)){
     recipient=r49; city=c93;
   } else {
-    // Find "SHIP TO:" or "Deliver to:" label, take lines below it
+
     var shipToW=words.filter(function(w){return /^(SHIP\s*TO|Deliver\s*to|TO:)$/i.test(w.text.replace(':',''));});
     if(shipToW.length){
       var stTop=shipToW[0].top;
       var addrWords=words.filter(function(w){return w.top>stTop+2&&w.top<stTop+80;})
                          .sort(function(a,b){return a.top-b.top||a.x-b.x;});
-      // Group into lines
+
       var lines=[]; var lastTop=-999; var curLine=[];
       addrWords.forEach(function(w){
         if(Math.abs(w.top-lastTop)>8){if(curLine.length) lines.push(curLine); curLine=[w]; lastTop=w.top;}
         else{curLine.push(w);}
       });
       if(curLine.length) lines.push(curLine);
-      // Filter out lines that look like labels or tracking
+
       lines=lines.filter(function(l){
         var t=l.map(function(w){return w.text;}).join(' ');
         return !/^(Contact|Weight|Customer|Reference|SKU|Tracking|USPS|UPS|FedEx|HAZMAT|Parcel|Forward)/i.test(t);
@@ -949,8 +939,8 @@ function extractOrder(words, pageH){
       if(lines.length>=1) recipient=lines[0].map(function(w){return w.text;}).join(' ');
       if(lines.length>=2) city=lines[lines.length-1].map(function(w){return w.text;}).join(' ');
     } else {
-      // Last resort: look for "TO:" header and grab next lines
-      var toW=words.filter(function(w){return w.text==='TO:'||w.text==='TO';}); 
+
+      var toW=words.filter(function(w){return w.text==='TO:'||w.text==='TO';});
       if(toW.length){
         var toTop=toW[toW.length-1].top;
         var toLines=words.filter(function(w){return w.top>toTop&&w.top<toTop+60&&w.x>toW[toW.length-1].x-5;})
@@ -962,17 +952,17 @@ function extractOrder(words, pageH){
   }
   var dest=recipient+(city?' · '+city:'');
 
-  // ── WEIGHT ──
+
   var weightW=words.filter(function(w){return /^\d+(\.\d+)?\s*(lb|oz|lbs|KGS|kg)$/i.test(w.text);});
-  // Also catch "X.X lb" split across two words
+
   var weight='';
   if(weightW.length){
     weight=weightW[0].text;
   } else {
-    // try near GOFO coord
+
     var wn=near(280,8).filter(function(w){return w.text!=='Weight:';});
     if(wn.length) weight=wn.map(function(w){return w.text;}).join(' ');
-    // try "Weight:" label then adjacent value
+
     var wlabel=words.filter(function(w){return /^Weight:?$/i.test(w.text);});
     if(!weight&&wlabel.length){
       var wl=wlabel[0];
@@ -981,7 +971,7 @@ function extractOrder(words, pageH){
     }
   }
 
-  // ── REFERENCE / HUB (GOFO-specific, optional) ──
+
   var ref=near(291,8).filter(function(w){return w.text!=='Reference:'&&w.text!=='Reference#:'&&w.text!=='Reference';}).map(function(w){return w.text;}).join(' ');
   var routeRow=near(189,8);
   var hubW=null;for(var i=0;i<routeRow.length;i++){if(/^[A-Z]{2,5}\d{2,3}$/.test(routeRow[i].text)){hubW=routeRow[i];break;}}
@@ -1000,12 +990,9 @@ function initOrders(parsed){
   renderQueue();renderActive();renderDash();renderFloor();
 }
 
-// ══════════════════════════════════════════
-// DEMO
-// ══════════════════════════════════════════
 function loadDemo(){
   getAC();
-  // Add demo packers if none exist
+
   if(!packers.length){
     packers=[
       {id:'PKR-001',name:'Alex',color:PCOLORS[0],online:false,loginTime:null,ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]},
@@ -1032,16 +1019,13 @@ function loadDemo(){
   setTimeout(function(){gv('manager');},600);
 }
 
-// ══════════════════════════════════════════
-// MANAGER MANAGEMENT
-// ══════════════════════════════════════════
 function addManager(){
   var nameEl=document.getElementById('new-mgr-name');
   var idEl=document.getElementById('new-mgr-id');
   var name=nameEl.value.trim();
   var id=idEl.value.trim().toUpperCase();
   if(!name||!id){alert('Enter both a name and a barcode ID for the manager.');return;}
-  // Replace existing manager (only one allowed)
+
   managers=[{
     id:id, name:name,
     color:PCOLORS[(packers.length+4)%PCOLORS.length],
@@ -1052,7 +1036,6 @@ function addManager(){
   saveStaff();
   renderManagerPanel();
 }
-
 
 function removeManager(id){
   managers=managers.filter(function(m){return m.id!==id;});
@@ -1079,11 +1062,6 @@ function renderManagerPanel(){
     +'</div>';
 }
 
-
-// ══════════════════════════════════════════
-// PACKER MANAGEMENT
-// ══════════════════════════════════════════
-// ── Staff persistence ──
 function saveStaff(){
   try{
     localStorage.setItem('warehub_packers', JSON.stringify(packers));
@@ -1100,7 +1078,7 @@ function loadStaff(){
     if(ms) managers=JSON.parse(ms);
     packers.forEach(function(p){
       p.active = p.active===true||p.active==='true'? true : (p.active===false||p.active==='false'? false : true);
-      // Restore online state — don't reset, loginTime persists in localStorage
+
       p.online = p.online===true||p.online==='true' ? true : false;
       p.loginTime = p.loginTime||null;
       p.ordersCompleted = p.ordersCompleted||0;
@@ -1114,7 +1092,7 @@ function loadStaff(){
       m.online = false;
       m.shiftSessions = m.shiftSessions||[];
     });
-    // Restore currentPacker to whoever was last active on this terminal
+
     var savedId=localStorage.getItem('warehub_currentPacker');
     if(savedId){
       currentPacker=packers.find(function(p){return p.id===savedId;})||null;
@@ -1125,9 +1103,7 @@ function isOnShift(p){ return p.active===true; }
 function isOffShift(p){ return p.active!==true; }
 
 function packerColor(p){ return p.color||PCOLORS[0]; }
-// ══════════════════════════════════════════
-// CODE 128 BARCODE GENERATOR
-// ══════════════════════════════════════════
+
 var C128=(function(){
   var CHARS=[' ','!','"','#','$','%','&',"'",'(',')','*','+',',','-','.','/','0','1','2','3','4','5','6','7','8','9',':',';','<','=','>','?','@','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','[','\\',']','^','_','`','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','{','|','}','~'];
   var ENCODE=[212222,222122,222221,121223,121322,131222,122213,122312,132212,221213,221312,231212,112232,122132,122231,113222,123122,123221,223211,221132,221231,213212,223112,312131,311222,321122,321221,312212,322112,322211,212123,212321,232121,111323,131123,131321,112313,132113,132311,211313,231113,231311,112133,112331,132131,113123,113321,133121,313121,211331,231131,213113,213311,213131,311123,311321,331121,312113,312311,332111,314111,221411,431111,111224,111422,121124,121421,141122,141221,112214,112412,122114,122411,142112,142211,241211,221114,413111,241112,134111,111242,121142,121241,114212,124112,124211,411212,421112,421211,212141,214121,412121,111143,111341,131141,114113,114311,411113,411311,113141,114131,311141,411131,211412,211214,211232,23311120];
@@ -1223,7 +1199,7 @@ function renderPackerPanel(){
       +'</div>'
       +'</div>';
   }).join('');
-  // Wire toggle + remove buttons
+
   el.querySelectorAll('[data-toggle-packer]').forEach(function(btn){
     btn.addEventListener('click',function(){
       var p=packers.find(function(p){return p.id===btn.dataset.togglePacker;});
@@ -1282,14 +1258,13 @@ function renderAssignPanel(){
   });
 }
 
-// Auto-assign: round-robin across packers
 function autoAssign(){
   var activePkrs=packers.filter(isOnShift);
   if(!activePkrs.length){alert('No active packers on shift. Toggle packers to ON SHIFT first.');return;}
   var pending=orders.filter(function(o){return o.status==='pending';});
   if(!pending.length){alert('No pending orders to assign.');return;}
 
-  // Step 1: Group orders by primary SKU (first SKU on label)
+
   var groups={};
   pending.forEach(function(o){
     var primarySku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
@@ -1297,27 +1272,27 @@ function autoAssign(){
     groups[primarySku].push(o);
   });
 
-  // Step 2: Sort groups by order count descending (assign biggest groups first)
+
   var groupList=Object.keys(groups).map(function(sku){
     return{sku:sku,orders:groups[sku]};
   }).sort(function(a,b){return b.orders.length-a.orders.length;});
 
-  // Step 3: Load-balance — assign each group to packer with fewest orders so far
+
   var loads={};
   activePkrs.forEach(function(p){ loads[p.id]=0; });
 
   groupList.forEach(function(g){
-    // Find packer with lowest current load
+
     var minPacker=activePkrs.reduce(function(best,p){
       return loads[p.id]<loads[best.id]?p:best;
     },activePkrs[0]);
-    // Assign all orders in this group to that packer
+
     g.orders.forEach(function(o){ o.assignedTo=minPacker.id; });
     loads[minPacker.id]+=g.orders.length;
   });
 
   renderAssignPanel(); renderQueue();
-  // Show summary
+
   var summary=activePkrs.map(function(p){
     return p.name+': '+loads[p.id]+' orders';
   }).join(' · ');
@@ -1334,7 +1309,7 @@ function printSkuSort(){
 
   pm('Building sorted labels... '+withImg.length+' labels');
 
-  // Group by primary SKU, sort groups by SKU name
+
   var groups={};
   orders.forEach(function(o){
     if(!o.pageImg) return;
@@ -1344,7 +1319,7 @@ function printSkuSort(){
   });
   var skuKeys=Object.keys(groups).sort();
 
-  // Build HTML — sorted labels only, no divider pages
+
   var css='*{margin:0;padding:0;box-sizing:border-box;}'
     +'html,body{margin:0;padding:0;background:#fff;}'
     +'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'
@@ -1352,12 +1327,12 @@ function printSkuSort(){
     +'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
     +'@media print{'
       +'@page{margin:0;padding:0;size:auto;}'
-      +'html,body{margin:0;padding:0;}'
+      +'html{height:100%;overflow:hidden;}html,body{margin:0;padding:0;}'
       +'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
     +'}';
 
-  // Build body HTML with images as base64 data URIs — no server needed
+
   var bodyHtml='';
   skuKeys.forEach(function(sku){
     var grp=groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
@@ -1368,7 +1343,6 @@ function printSkuSort(){
 
   printViaIframe(css, bodyHtml);
 }
-
 
 function printPickLists(){
   if(!packers.length){alert('No packers added.');return;}
@@ -1381,7 +1355,7 @@ function printPickLists(){
     if(!myOrders.length) return;
     var col=packerColor(p);
 
-    // Build SKU summary: {sku: {shelf, totalQty, orderCount}}
+
     var skuMap={};
     myOrders.forEach(function(o){
       o.skus.forEach(function(s){
@@ -1392,7 +1366,7 @@ function printPickLists(){
       });
     });
 
-    // Sort by shelf location
+
     var skuRows=Object.values(skuMap).sort(function(a,b){
       return (a.shelf||'').localeCompare(b.shelf||'');
     });
@@ -1487,18 +1461,15 @@ function printPickLists(){
   });
 }
 
-// ══════════════════════════════════════════
-// PACKER LOGIN AT PACK STATION
-// ══════════════════════════════════════════
 function showLoginOrPack(){
-  // Login overlay always stays visible — multiple packers scan in/out independently
-  // The "current packer bar" just shows whoever scanned in most recently
+
+
   var loginDiv=document.getElementById('packer-login');
   var barDiv=document.getElementById('current-packer-bar');
   var onlinePackers=packers.filter(function(p){return p.online;});
 
   if(onlinePackers.length>0){
-    // Show the bar with current packer info, but keep login overlay accessible
+
     if(barDiv){barDiv.style.display='flex'; updatePackerBar();}
     if(loginDiv) loginDiv.classList.add('hide');
     setPackState(packState==='idle'?'idle':packState);
@@ -1521,7 +1492,7 @@ function renderQuickLoginBtns(){
   el.innerHTML=packers.filter(isOnShift).map(function(p){
     var col=packerColor(p);
     if(p.online){
-      // Show clock-out button
+
       var elapsed='';
       if(p.loginTime){
         var mins=Math.floor((Date.now()-p.loginTime)/60000);
@@ -1532,7 +1503,7 @@ function renderQuickLoginBtns(){
         +'<button style="padding:4px 10px;font-size:8px;letter-spacing:1px;border:1px solid '+col+';background:'+col+'22;color:'+col+';cursor:pointer;font-family:inherit;white-space:nowrap;" data-clockout="'+p.id+'">● CLOCK OUT'+(elapsed?' · '+elapsed:'')+'</button>'
         +'</div>';
     } else {
-      // Show clock-in button
+
       return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">'
         +'<div style="font-size:8px;color:var(--td);letter-spacing:1px;">'+p.name+'</div>'
         +'<button style="padding:4px 10px;font-size:8px;letter-spacing:1px;border:1px solid '+col+'44;background:'+col+'0d;color:'+col+';cursor:pointer;font-family:inherit;" data-quick-login="'+p.id+'">CLOCK IN</button>'
@@ -1545,7 +1516,7 @@ function renderQuickLoginBtns(){
   el.querySelectorAll('[data-clockout]').forEach(function(btn){
     btn.addEventListener('click',function(){ loginPacker(btn.dataset.clockout); });
   });
-  // Refresh elapsed times every minute
+
   clearTimeout(renderQuickLoginBtns._timer);
   renderQuickLoginBtns._timer=setTimeout(function(){
     if(document.getElementById('quick-login-btns')) renderQuickLoginBtns();
@@ -1567,7 +1538,7 @@ function loginPacker(rawId){
     return;
   }
 
-  // ── CLOCK OUT: same packer scanning again ──
+
   if(p.online){
     var now=new Date();
     var elapsed=now.getTime()-p.loginTime;
@@ -1579,7 +1550,7 @@ function loginPacker(rawId){
     });
     p.online=false;
     p.loginTime=null;
-    // If this packer was the active terminal packer, clear it
+
     if(currentPacker && currentPacker.id===p.id) currentPacker=null;
     bp(440,.12,'sine',.25); setTimeout(function(){ bp(330,.15,'sine',.2); },120);
     setLoginMsg('👋 '+p.name+' clocked out · '+hrs+' hrs recorded','var(--gn)');
@@ -1591,11 +1562,11 @@ function loginPacker(rawId){
     return;
   }
 
-  // ── CLOCK IN: packer not currently online ──
+
   p.online=true;
   p.active=true;
   p.loginTime=Date.now();
-  currentPacker=p;  // most recent clock-in owns the terminal
+  currentPacker=p;
   bpLogin();
   setLoginMsg('','');
   document.getElementById('login-scan-in').value='';
@@ -1652,15 +1623,8 @@ function setLoginMsg(msg,col){
   el.style.color=col||'var(--td)';
 }
 
-// ══════════════════════════════════════════
-// SCAN
-// ══════════════════════════════════════════
 function focusScan(){ var f=document.getElementById('scan-in'); if(f) f.focus(); }
 
-// ── Pack Station state ──
-// packState: 'idle' | 'verify-items' | 'scan-label'
-// activeOrder: the order currently being packed
-// verifySkus: [{sku, qty, scanned}] — live checklist for current order
 var packState = 'idle';
 var activeOrder = null;
 var verifySkus = [];
@@ -1692,20 +1656,20 @@ function doScan(raw){
   if(!scanned) return;
   document.getElementById('scan-in').value='';
 
-  // Normalize: strip spaces, dashes, parentheses for comparison
+
   function norm(s){ return s.replace(/[\s\-().]/g,'').toUpperCase(); }
   var scannedNorm=norm(scanned);
 
-  // ── STATE: idle or scan-label ── look for a tracking number
+
   if(packState==='idle' || packState==='scan-label'){
 
-    // Find order by tracking — try exact first, then normalized
+
     var order=null;
     for(var i=0;i<orders.length;i++){
       if(norm(orders[i].tracking)===scannedNorm){order=orders[i];break;}
     }
 
-    // Still not found — try substring match (gun may read full barcode, stored may be shorter or vice versa)
+
     if(!order){
       for(var i=0;i<orders.length;i++){
         var t=norm(orders[i].tracking);
@@ -1724,7 +1688,7 @@ function doScan(raw){
         setFb('✗ WRONG SCAN','var(--rd)');
       } else {
         bpErr(); flash('err');
-        // Show what was scanned to help diagnose mismatches
+
         var stored=orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
         setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
         setFb('✗ NOT FOUND','var(--rd)');
@@ -1739,12 +1703,12 @@ function doScan(raw){
       focusScan(); return;
     }
 
-    // ── Label found — check if this order has SKUs to verify ──
+
     var skus=order.skus||[];
     var hasSkus=skus.some(function(s){return s.sku&&s.sku!=='UNKNOWN'&&s.qty>0;});
 
     if(hasSkus && packState==='idle'){
-      // Enter VERIFY-ITEMS mode
+
       activeOrder=order;
       activeOrder.orderStartTime=activeOrder.orderStartTime||Date.now();
       verifySkus=[];
@@ -1757,21 +1721,21 @@ function doScan(raw){
       focusScan(); return;
     }
 
-    // No SKUs to verify (or already verified) — complete directly
+
     completeOrder(order, scanned);
     return;
   }
 
-  // ── STATE: verify-items ── expect FNSKU scans
+
   if(packState==='verify-items'){
 
-    // Check if they accidentally scanned a tracking number (shipping label)
+
     var isLabel=orders.some(function(o){return norm(o.tracking)===scannedNorm;});
     if(!isLabel) isLabel=orders.some(function(o){var t=norm(o.tracking);return t.length>=10&&scannedNorm.length>=10&&(scannedNorm.indexOf(t)>=0||t.indexOf(scannedNorm)>=0);});
     if(isLabel){
       var isThisLabel=(norm(activeOrder.tracking)===scannedNorm)||(scannedNorm.indexOf(norm(activeOrder.tracking))>=0||norm(activeOrder.tracking).indexOf(scannedNorm)>=0);
       if(isThisLabel){
-        // Tried to scan label before verifying items
+
         bpErr(); flash('err');
         var remaining=verifySkus.filter(function(v){return !v.scanned;});
         setErr('⚠ Scan the ITEM first! Still need: '+remaining.map(function(v){return v.sku;}).join(', '));
@@ -1784,7 +1748,7 @@ function doScan(raw){
       focusScan(); return;
     }
 
-    // Find next unscanned slot for this SKU
+
     var slot=null;
     for(var vi=0;vi<verifySkus.length;vi++){
       if(!verifySkus[vi].scanned && verifySkus[vi].sku.toUpperCase()===scanned){
@@ -1797,28 +1761,28 @@ function doScan(raw){
       bpOk(); clearErr(); flash('ok');
       var remaining2=verifySkus.filter(function(v){return !v.scanned;});
       if(remaining2.length===0){
-        // All items verified — advance to scan-label step
+
         setFb('✓ All items verified! Now scan the shipping label','var(--gn)');
-        bpLogin(); // rising tone = "move to next step"
+        bpLogin();
         setPackState('scan-label');
       } else {
         setFb('✓ '+scanned+' · '+remaining2.length+' more item'+(remaining2.length>1?'s':'')+' to scan','var(--gn)');
         renderActiveCard();
       }
     } else {
-      // Check if this SKU exists in the order at all (all already scanned)
+
       var alreadyDone=verifySkus.some(function(v){return v.scanned&&v.sku.toUpperCase()===scanned;});
       if(alreadyDone){
         bpErr(); flash('err');
         setErr('⚠ '+scanned+' already scanned for this order');
         setFb('⚠ ALREADY SCANNED','var(--am)');
       } else {
-        // Wrong item entirely
+
         bpErr(); flash('err');
         var expected=verifySkus.filter(function(v){return !v.scanned;});
         setErr('✗ WRONG ITEM — need: '+[...new Set(expected.map(function(v){return v.sku;}))].join(', '));
         setFb('✗ WRONG ITEM','var(--rd)');
-        // Flash checklist red to draw attention
+
         document.querySelectorAll('.ski-item.pending-item').forEach(function(el){
           el.style.background='#ff3d5a18';
           setTimeout(function(){el.style.background='';},600);
@@ -1828,20 +1792,20 @@ function doScan(raw){
     focusScan(); return;
   }
 
-  // ── STATE: rack-scan ── packer scans SKU → then location ──
+
   if(packState==='rack-scan'){
     if(!rackScanState) rackScanState = {};
 
     if(!rackScanState.sku){
-      // First scan = SKU
+
       rackScanState.sku = scanned;
       bpOk(); flash('ok');
       setFb('✓ SKU: '+scanned+' — now scan LOCATION (e.g. R1-05)','var(--am)');
       setErr('Scan the rack location label now');
     } else {
-      // Second scan = location
+
       var loc = scanned.toUpperCase().replace(/\s/g,'');
-      // Validate location exists in rack map
+
       var validLoc = document.getElementById('spot-'+loc);
       if(!validLoc){
         bpErr(); flash('err');
@@ -1849,11 +1813,11 @@ function doScan(raw){
         setFb('✗ INVALID LOCATION','var(--rd)');
         focusScan(); return;
       }
-      // Store in inventory data
+
       if(!window._inventoryData) window._inventoryData = {};
       if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
       var invLoc = window._inventoryData[loc];
-      // Check if SKU already exists at this location
+
       var existing = invLoc.skus.find(function(s){return s.sku===rackScanState.sku;});
       if(existing){
         existing.qty = (parseInt(existing.qty)||0) + 1;
@@ -1861,9 +1825,9 @@ function doScan(raw){
         invLoc.skus.push({sku:rackScanState.sku, name:'', qty:1, unit:'PCS'});
       }
       invLoc.lastUpdated = new Date().toLocaleDateString();
-      // Highlight spot
+
       rackHighlightInventory();
-      // Highlight the specific spot on map
+
       var spotEl = document.getElementById('spot-'+loc);
       if(spotEl){
         spotEl.classList.remove('active');
@@ -1874,9 +1838,9 @@ function doScan(raw){
       bpOk(); flash('ok');
       setFb('✓ '+rackScanState.sku+' → '+loc+' saved! Scan next SKU','var(--gn)');
       setErr('');
-      // Save to localStorage
+
       try{ localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); }catch(e){}
-      // Reset for next scan pair
+
       rackScanState = {};
     }
     focusScan(); return;
@@ -1903,7 +1867,7 @@ function completeOrder(order, scannedTracking){
   setFb('✓  '+order.tracking+'  ·  '+(order.skus||[]).map(function(s){return s.sku+'×'+s.qty;}).join(', '),'var(--gn)');
   clearErr(); bpDone(); flash('ok');
 
-  // Reset state
+
   activeOrder=null; verifySkus=[];
   setPackState('idle');
 
@@ -1915,7 +1879,6 @@ function completeOrder(order, scannedTracking){
     orders.filter(function(o){return o.status==='done';}).length+' / '+orders.length+' done';
   focusScan();
 }
-
 
 function flash(t){ var el=document.getElementById('active-card'); el.classList.add(t); setTimeout(function(){el.classList.remove(t);},320); }
 function setErr(m){ var b=document.getElementById('err-bar'); b.textContent=m; b.classList.add('show'); }
@@ -1929,9 +1892,6 @@ function fmtMs(ms){
   return s<60?s+'s':Math.floor(s/60)+'m '+(s%60)+'s';
 }
 
-// ══════════════════════════════════════════
-// RENDER ACTIVE
-// ══════════════════════════════════════════
 function renderActiveCard(){
   var acTop=document.getElementById('ac-top');
   var acTrack=document.getElementById('ac-track');
@@ -1960,7 +1920,7 @@ function renderActiveCard(){
   var o=activeOrder;
   var col=cc(o.carrier);
 
-  // Header: carrier + tracking
+
   acTop.innerHTML='<span class="bdg" style="color:'+col+';border-color:'+col+';">'+o.carrier+'</span>'
     +' <span style="color:var(--td);font-size:10px;">'+(o.dest||'')+'</span>'
     +(o.shelf?'<span style="color:var(--am);font-size:10px;margin-left:8px;">📦 '+o.shelf+'</span>':'');
@@ -1969,7 +1929,7 @@ function renderActiveCard(){
   acDest.innerHTML='';
 
   if(packState==='verify-items'){
-    // Show item checklist — group by SKU
+
     var grouped={};
     verifySkus.forEach(function(v){
       if(!grouped[v.sku]) grouped[v.sku]={total:0,scanned:0};
@@ -1990,7 +1950,7 @@ function renderActiveCard(){
       }).join('')
       +'</div>';
   } else if(packState==='scan-label'){
-    // All items verified — show label prompt
+
     checklist.innerHTML='<div class="label-prompt">'
       +'<div style="font-size:11px;letter-spacing:2px;color:var(--gn);margin-bottom:6px;">✓ ALL ITEMS VERIFIED</div>'
       +'<div style="font-size:16px;font-weight:700;color:var(--cy);">Now scan the shipping label</div>'
@@ -2000,7 +1960,6 @@ function renderActiveCard(){
 }
 
 function renderActive(){ renderActiveCard(); }
-
 
 function renderQueue(){
   var qEl=document.getElementById('queue');
@@ -2020,7 +1979,7 @@ function renderQueue(){
     +'<span style="color:var(--gn);">'+done.length+'/'+show.length+' done</span>'
     +'</div>';
 
-  // Pending orders first
+
   html+=pending.map(function(o){
     var col=cc(o.carrier);
     var assignedP=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
@@ -2034,7 +1993,7 @@ function renderQueue(){
       +'</div>';
   }).join('');
 
-  // Done orders below
+
   if(done.length){
     html+='<div style="font-size:8px;letter-spacing:2px;color:var(--td);padding:6px 2px 2px;">── COMPLETED ──</div>';
     html+=done.map(function(o){
@@ -2054,7 +2013,6 @@ function renderQueue(){
   qEl.innerHTML=html;
 }
 
-
 function fmtTime(ms){
   if(!ms) return '—';
   var s=Math.round(ms/1000);
@@ -2064,9 +2022,6 @@ function fmtTime(ms){
   return Math.floor(m/60)+'h '+(m%60)+'m';
 }
 
-// ══════════════════════════════════════════
-// RENDER DASH
-// ══════════════════════════════════════════
 function renderDash(){
   var tot=orders.length, don=orders.filter(function(o){return o.status==='done';}).length;
   var rem=tot-don, pct=tot?Math.round((don/tot)*100):0;
@@ -2083,7 +2038,7 @@ function renderDash(){
   if(dPtx) dPtx.textContent=don+'/'+tot;
   if(dBar) dBar.style.width=pct+'%';
 
-  // Packer leaderboard
+
   var lbEl=document.getElementById('d-packers');
   if(lbEl){
     if(!packers.length){
@@ -2113,7 +2068,7 @@ function renderDash(){
     }
   }
 
-  // Carriers breakdown
+
   var carEl=document.getElementById('d-car');
   if(carEl){
     var cars=[...new Set(orders.map(function(o){return o.carrier;}))].sort();
@@ -2132,7 +2087,7 @@ function renderDash(){
     }).join('');
   }
 
-  // Orders table
+
   var tEl=document.getElementById('d-orders-table');
   if(tEl){
     tEl.innerHTML='<tr><th>TRACKING</th><th>CARRIER</th><th>SKU</th><th>SHELF</th><th>ASSIGNED</th><th>STATUS</th></tr>'
@@ -2151,22 +2106,19 @@ function renderDash(){
   }
 }
 
-// ══════════════════════════════════════════
-// RENDER PAYROLL
-// ══════════════════════════════════════════
 function renderPayroll(){
   var now=Date.now();
 
   var dateEl=document.getElementById('pr-date');
   if(dateEl) dateEl.textContent=shiftDate;
 
-  // Show any packer who has clocked in or scanned packages today
+
   var activePackers=packers.filter(function(p){
     return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
       orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
   });
 
-  // Update KPI cards
+
   var totalHrs=0, totalOrders=0, activeNow=0;
   var rows=activePackers.map(function(p){
     var ms=0;
@@ -2189,7 +2141,7 @@ function renderPayroll(){
   var oEl=document.getElementById('pr-orders');  if(oEl) oEl.textContent=totalOrders;
   var aEl=document.getElementById('pr-active');  if(aEl) aEl.textContent=activeNow;
 
-  // Time sheet table → pr-sheet
+
   var sheet=document.getElementById('pr-sheet');
   if(!sheet) return;
 
@@ -2210,7 +2162,7 @@ function renderPayroll(){
       var col=packerColor(r.p);
       var sessions=r.p.shiftSessions||[];
       var firstIn='—';
-      // Earliest clock-in: check sessions[0] vs current loginTime
+
       var earliestMs=null;
       if(sessions.length && sessions[0].clockIn) earliestMs=new Date(sessions[0].clockIn).getTime();
       if(r.p.online && r.p.loginTime){
@@ -2245,11 +2197,10 @@ function renderPayroll(){
     +'</tr></table>';
 
 
-  // Wire payroll action buttons
   sheet.querySelectorAll('[data-pr-clockout]').forEach(function(btn){
     btn.addEventListener('click',function(){
       var p=packers.find(function(pk){return pk.id===btn.dataset.prClockout;});
-      if(p) loginPacker(p.id); // loginPacker handles clock-out when p.online
+      if(p) loginPacker(p.id);
       renderPayroll();
     });
   });
@@ -2266,7 +2217,7 @@ function renderPayroll(){
     });
   });
 
-  // Session log → pr-log (every individual clock-in/out)
+
   var log=document.getElementById('pr-log');
   if(!log) return;
   var allSessions=[];
@@ -2297,9 +2248,6 @@ function renderPayroll(){
     }).join('')+'</table>';
 }
 
-// ══════════════════════════════════════════
-// EXPORT PAYROLL CSV
-// ══════════════════════════════════════════
 function exportPayrollCSV(){
   var now=Date.now();
   var activePackers=packers.filter(function(p){
@@ -2330,15 +2278,12 @@ function exportPayrollCSV(){
   var blob=new Blob([csv],{type:'text/csv'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
-  a.href=url; a.download='ISCM-Payroll-'+shiftDate.replace(/\//g,'-')+'.csv';
+  a.href=url; a.download='ISCM-Payroll-'+shiftDate.replace(/[^\w-]/g,'-')+'.csv';
   document.body.appendChild(a); a.click();
   setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
   pm('✓ Payroll CSV exported.');
 }
 
-// ══════════════════════════════════════════
-// RENDER FLOOR DISPLAY
-// ══════════════════════════════════════════
 function renderFloor(){
   var rem=orders.filter(function(o){return o.status==='pending';}).length;
   var don=orders.filter(function(o){return o.status==='done';}).length;
@@ -2364,13 +2309,10 @@ function renderFloor(){
   }
 }
 
-// ══════════════════════════════════════════
-// PRINT PACKER ID CARDS
-// ══════════════════════════════════════════
 function printPackerCards(){
   if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
 
-  // ── PRINT CSS: 4x6 label, CR80 badge centered, pure black ──
+
   var printCss=
     '*{box-sizing:border-box;margin:0;padding:0;}'
     +'@page{size:4in 6in;margin:0;}'
@@ -2387,12 +2329,12 @@ function printPackerCards(){
     +'.ic-svg svg{width:80%;height:auto;max-height:18pt;display:block;margin:0 auto;}'
     +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}';
 
-  // ── BUILD PEOPLE LIST ──
+
   var allPeople=[];
   managers.forEach(function(m){ allPeople.push({person:m,role:'MANAGER'}); });
   packers.forEach(function(p){ allPeople.push({person:p,role:'PACKER'}); });
 
-  // ── PREVIEW STYLE ──
+
   var existing=document.getElementById('card-print-overlay');
   if(existing) existing.remove();
   var st=document.getElementById('ic-style');
@@ -2416,12 +2358,12 @@ function printPackerCards(){
 
   var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
 
-  // ── BUILD OVERLAY VIA createElement (zero string escaping issues) ──
+
   var ov=document.createElement('div');
   ov.id='card-print-overlay';
   ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);overflow-y:auto;padding:28px 20px;';
 
-  // Header bar
+
   var hdr=document.createElement('div');
   hdr.style.cssText='max-width:980px;margin:0 auto 8px;display:flex;align-items:center;justify-content:space-between;';
   hdr.innerHTML=
@@ -2435,7 +2377,7 @@ function printPackerCards(){
     +'</div>';
   ov.appendChild(hdr);
 
-  // Cards grid
+
   var grid=document.createElement('div');
   grid.style.cssText='max-width:980px;margin:0 auto;display:flex;flex-wrap:wrap;gap:20px;';
 
@@ -2462,12 +2404,12 @@ function printPackerCards(){
         +'<div class="icpv-id">'+item.person.id+'</div>'
       +'</div>';
 
-    // Individual print button
+
     var btn=document.createElement('button');
     btn.textContent='🖨 PRINT';
     btn.style.cssText='padding:4px 14px;font-size:9px;letter-spacing:1px;background:'+col+';color:#fff;border:none;cursor:pointer;font-family:inherit;border-radius:4px;';
 
-    // Direct onclick — no event delegation needed
+
     (function(capturedItem){
       card.onclick=function(){ doPrintCard(capturedItem, printCss); };
       btn.onclick =function(){ doPrintCard(capturedItem, printCss); };
@@ -2491,7 +2433,7 @@ function printPackerCards(){
     });
   };
 
-  // Store for external access
+
   window._icPrintData={people:allPeople, css:printCss};
 }
 
@@ -2514,7 +2456,7 @@ function buildCardHtml(item){
 
 function doPrintCard(item, css){
   var html=buildCardHtml(item);
-  // Build full page and print using a blob URL — avoids popup blockers on GitHub Pages
+
   var fullHtml='<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+html+'</body></html>';
   try{
     var blob=new Blob([fullHtml],{type:'text/html'});
@@ -2524,7 +2466,7 @@ function doPrintCard(item, css){
     w.onload=function(){ w.print(); setTimeout(function(){ w.close(); URL.revokeObjectURL(url); },1500); };
     setTimeout(function(){ if(w&&!w.closed){ try{w.print();}catch(e){} } URL.revokeObjectURL(url); },1000);
   }catch(e){
-    // Fallback: document.write
+
     var w2=window.open('','_blank','width=420,height=640');
     if(!w2){ pm('⚠ Pop-up blocked.'); return; }
     w2.document.open(); w2.document.write(fullHtml); w2.document.close();
@@ -2532,7 +2474,6 @@ function doPrintCard(item, css){
   }
 }
 
-// Legacy aliases kept for compatibility
 function icCardHtml(item){ return buildCardHtml(item); }
 function icPrintWindow(css,html){ doPrintCard({person:{id:'',name:''},role:''}, css); }
 function printSingleCard(pid,role){
@@ -2547,11 +2488,6 @@ function printAllCards(){
   });
 }
 
-
-
-// ══════════════════════════════════════════
-// PRINT PICK LISTS
-// ══════════════════════════════════════════
 function printPickLists(){
   var shiftPackers=packers.filter(isOnShift);
   if(!shiftPackers.length){alert('No ON SHIFT packers. Add packers and set them ON SHIFT first.');return;}
@@ -2589,11 +2525,8 @@ function printPickLists(){
   if(plOv) plOv.classList.add('show');
 }
 
-// ══════════════════════════════════════════
-// PRINT VIA IFRAME (no popup, works on GitHub Pages)
-// ══════════════════════════════════════════
 function printViaIframe(css, bodyHtml){
-  // Use window.open — more reliable than iframe on hosted pages
+
   var w = window.open('', '_blank', 'width=800,height=600');
   if(!w){
     pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.');
@@ -2609,17 +2542,13 @@ function printViaIframe(css, bodyHtml){
       setTimeout(function(){ w.close(); }, 1500);
     }, 400);
   };
-  // Fallback if onload already fired
+
   setTimeout(function(){
     if(w && !w.closed){
       try{ w.focus(); w.print(); }catch(e){}
     }
   }, 800);
 }
-// ══════════════════════════════════════════
-// MICROSOFT EXCEL — MSAL.js (Official SDK)
-// OneDrive for Business via Microsoft Graph
-// ══════════════════════════════════════════
 
 var _msalInstance  = null;
 var _msalToken     = null;
@@ -2654,6 +2583,15 @@ function excelSaveConfig(){
   excelUpdateUI();
 }
 
+function ensureMsal(cb){
+  if(typeof msal !== 'undefined'){ cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js';
+  s.onload = cb;
+  s.onerror = function(){ pm('✗ Failed to load Microsoft auth library. Check your connection.'); };
+  document.head.appendChild(s);
+}
+
 function msalInit(){
   if(!_msalCfg.clientId) return;
   try{
@@ -2686,7 +2624,8 @@ function excelUpdateUI(){
   }
 }
 
-function excelConnect(){
+function excelConnect(){ ensureMsal(function(){ _excelConnectInner(); }); }
+async function _excelConnectInner(){
   var m = document.getElementById('excel-setup-modal');
   if(m) m.remove();
   var redirectUri = window.location.origin + window.location.pathname;
@@ -2731,7 +2670,7 @@ function excelConnect(){
   document.getElementById('ms-signin-btn').onclick = msSignIn;
 }
 
-function msSignIn(){
+async function msSignIn(){
   var clientId = (document.getElementById('ms-client-id')||{}).value||'';
   var tenantId = (document.getElementById('ms-tenant-id')||{}).value||'organizations';
   var filename = (document.getElementById('ms-filename')||{}).value||'';
@@ -2746,13 +2685,13 @@ function msSignIn(){
   _msalCfg.tenantId = tenantId.trim()||'organizations';
   _excelSheet = sheet.trim()||'Warehub Payroll';
 
-  // Ensure filename has .xlsx
+
   var fname = filename.trim();
   if(!fname.toLowerCase().endsWith('.xlsx')) fname += '.xlsx';
   sessionStorage.setItem('warehub_excel_pending_file', fname);
   excelSaveConfig();
 
-  // Init MSAL with provided config
+
   msalInit();
   if(!_msalInstance){ setMsg('⚠ MSAL failed to initialize. Check Client ID format.','var(--rd)'); return; }
 
@@ -2776,7 +2715,7 @@ async function msFindFile(fname, msgEl){
   try{
     setMsg('⟳ Looking for "'+fname+'" on OneDrive…');
 
-    // Strategy 1: direct path
+
     var r1 = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+'?$select=id,name',
       {headers:{Authorization:'Bearer '+_msalToken}}
@@ -2790,7 +2729,7 @@ async function msFindFile(fname, msgEl){
       return;
     }
 
-    // Strategy 2: search
+
     setMsg('⟳ Searching OneDrive…');
     var r2 = await fetch(
       'https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(fname)+'\')?$select=id,name&$top=10',
@@ -2806,7 +2745,7 @@ async function msFindFile(fname, msgEl){
       return;
     }
 
-    // Strategy 3: create the file
+
     setMsg('⟳ File not found — creating "'+fname+'" on OneDrive…');
     var created = await msCreateExcelFile(fname, msgEl);
     if(created){
@@ -2824,8 +2763,8 @@ async function msCreateExcelFile(fname, msgEl){
   try{
     setMsg('⟳ Creating "'+fname+'" on OneDrive…');
 
-    // Real minimal xlsx with Warehub Payroll + Vehicle Log sheets pre-created
-    var b64='UEsDBBQAAAAIABWrblxGx01IlQAAAM0AAAAQAAAAZG9jUHJvcHMvYXBwLnhtbE3PTQvCMAwG4L9SdreZih6kDkQ9ip68zy51hbYpbYT67+0EP255ecgboi6JIia2mEXxLuRtMzLHDUDWI/o+y8qhiqHke64x3YGMsRoPpB8eA8OibdeAhTEMOMzit7Dp1C5GZ3XPlkJ3sjpRJsPiWDQ6sScfq9wcChDneiU+ixNLOZcrBf+LU8sVU57mym/8ZAW/B7oXUEsDBBQAAAAIABWrblw49VMi7gAAACsCAAARAAAAZG9jUHJvcHMvY29yZS54bWzNksFqwzAMhl9l+J4ocUIPJs2lY6cNBits7GZktTWLHWNrJH37JVmbMrYH2NHS70+fQA0GhX2k59gHimwp3Y2u80lh2IoTc1AACU/kdMqnhJ+ahz46zdMzHiFo/NBHAlkUG3DE2mjWMAOzsBJF2xhUGElzHy94gys+fMZugRkE6siR5wRlXoJo54nhPHYN3AAzjCm69F0gsxKX6p/YpQPikhyTXVPDMORDteSmHUp4e3p8WdbNrE+sPdL0K1nF50BbcZ38Wu3u9w+ilYXcZEWVlfVelkrWqq7eZ9cffjdh1xt7sP/Y+CrYNvDrLtovUEsDBBQAAAAIABWrblyZXJwjEAYAAJwnAAATAAAAeGwvdGhlbWUvdGhlbWUxLnhtbO1aW3PaOBR+76/QeGf2bQvGNoG2tBNzaXbbtJmE7U4fhRFYjWx5ZJGEf79HNhDLlg3tkk26mzwELOn7zkVH5+g4efPuLmLohoiU8nhg2S/b1ru3L97gVzIkEUEwGaev8MAKpUxetVppAMM4fckTEsPcgosIS3gUy9Zc4FsaLyPW6rTb3VaEaWyhGEdkYH1eLGhA0FRRWm9fILTlHzP4FctUjWWjARNXQSa5iLTy+WzF/NrePmXP6TodMoFuMBtYIH/Ob6fkTlqI4VTCxMBqZz9Wa8fR0kiAgsl9lAW6Sfaj0xUIMg07Op1YznZ89sTtn4zK2nQ0bRrg4/F4OLbL0otwHATgUbuewp30bL+kQQm0o2nQZNj22q6RpqqNU0/T933f65tonAqNW0/Ta3fd046Jxq3QeA2+8U+Hw66JxqvQdOtpJif9rmuk6RZoQkbj63oSFbXlQNMgAFhwdtbM0gOWXin6dZQa2R273UFc8FjuOYkR/sbFBNZp0hmWNEZynZAFDgA3xNFMUHyvQbaK4MKS0lyQ1s8ptVAaCJrIgfVHgiHF3K/99Ze7yaQzep19Os5rlH9pqwGn7bubz5P8c+jkn6eT101CznC8LAnx+yNbYYcnbjsTcjocZ0J8z/b2kaUlMs/v+QrrTjxnH1aWsF3Pz+SejHIju932WH32T0duI9epwLMi15RGJEWfyC265BE4tUkNMhM/CJ2GmGpQHAKkCTGWoYb4tMasEeATfbe+CMjfjYj3q2+aPVehWEnahPgQRhrinHPmc9Fs+welRtH2Vbzco5dYFQGXGN80qjUsxdZ4lcDxrZw8HRMSzZQLBkGGlyQmEqk5fk1IE/4rpdr+nNNA8JQvJPpKkY9psyOndCbN6DMawUavG3WHaNI8ev4F+Zw1ChyRGx0CZxuzRiGEabvwHq8kjpqtwhErQj5iGTYacrUWgbZxqYRgWhLG0XhO0rQR/FmsNZM+YMjszZF1ztaRDhGSXjdCPmLOi5ARvx6GOEqa7aJxWAT9nl7DScHogstm/bh+htUzbCyO90fUF0rkDyanP+kyNAejmlkJvYRWap+qhzQ+qB4yCgXxuR4+5Xp4CjeWxrxQroJ7Af/R2jfCq/iCwDl/Ln3Ppe+59D2h0rc3I31nwdOLW95GblvE+64x2tc0LihjV3LNyMdUr5Mp2DmfwOz9aD6e8e362SSEr5pZLSMWkEuBs0EkuPyLyvAqxAnoZFslCctU02U3ihKeQhtu6VP1SpXX5a+5KLg8W+Tpr6F0PizP+Txf57TNCzNDt3JL6raUvrUmOEr0scxwTh7LDDtnPJIdtnegHTX79l125COlMFOXQ7gaQr4Dbbqd3Do4npiRuQrTUpBvw/npxXga4jnZBLl9mFdt59jR0fvnwVGwo+88lh3HiPKiIe6hhpjPw0OHeXtfmGeVxlA0FG1srCQsRrdguNfxLBTgZGAtoAeDr1EC8lJVYDFbxgMrkKJ8TIxF6HDnl1xf49GS49umZbVuryl3GW0iUjnCaZgTZ6vK3mWxwVUdz1Vb8rC+aj20FU7P/lmtyJ8MEU4WCxJIY5QXpkqi8xlTvucrScRVOL9FM7YSlxi84+bHcU5TuBJ2tg8CMrm7Oal6ZTFnpvLfLQwJLFuIWRLiTV3t1eebnK56Inb6l3fBYPL9cMlHD+U751/0XUOufvbd4/pukztITJx5xREBdEUCI5UcBhYXMuRQ7pKQBhMBzZTJRPACgmSmHICY+gu98gy5KRXOrT45f0Usg4ZOXtIlEhSKsAwFIRdy4+/vk2p3jNf6LIFthFQyZNUXykOJwT0zckPYVCXzrtomC4Xb4lTNuxq+JmBLw3punS0n/9te1D20Fz1G86OZ4B6zh3OberjCRaz/WNYe+TLfOXDbOt4DXuYTLEOkfsF9ioqAEativrqvT/klnDu0e/GBIJv81tuk9t3gDHzUq1qlZCsRP0sHfB+SBmOMW/Q0X48UYq2msa3G2jEMeYBY8wyhZjjfh0WaGjPVi6w5jQpvQdVA5T/b1A1o9g00HJEFXjGZtjaj5E4KPNz+7w2wwsSO4e2LvwFQSwMEFAAAAAgAFatuXFOg9KxqAQAADQMAABgAAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWx9U9tOwzAM/ZUoH7AMpAFCbSU2mOABMTEBz1nrrtGSuDguhb8n6S4CadtTbeec42uzHmkTGgAW3876kMuGub1VKpQNOB1G2IKPLzWS0xxdWqvQEuhqIDmrLsfjK+W08bLIhtiCigw7tsbDgkTonNP0MwWLfS4v5D7watYNp4AqslavYQn81i4oeuqgUhkHPhj0gqDO5d3F7XzAD4B3A334Y4vUyQpxk5ynKpfjVBBYKDkp6Pj5ghlYm4RiGZ87TXlImYh/7b36fOg99rLSAWZoP0zFTS5vpKig1p3lV+wfYdfP5FDgvWZdZIS9oNRnkZXJSLkjzvg0nyVTjJuYiIsIh0xxLCD5qtzhp6fwC11ugI4wZqcYj9hROEK4P5ciruYY5+EUZ2ax3Ignf4QzP8956fg/ScXZ7fexHWY6lGdNa+ODsFBHsfHoeiIFbYe/dRjb4dBWyIxuMJt4r0AJEN9rRN47afeHP6D4BVBLAwQUAAAACAAVq25ck4qkwIEBAAB5AwAAGAAAAHhsL3dvcmtzaGVldHMvc2hlZXQyLnhtbHWTyU7DMBCGX8XyCS64ILEIJZGgLOUAqoqAs9tMGgsvYTwh8PaM00UVSk6ZGf/fLB4n6wJ+xhqAxI+zPuayJmqulYqrGpyOJ6EBzydVQKeJXVyr2CDosoecVWeTyYVy2nhZZH1sjkUWWrLGwxxFbJ3T+HsLNnS5PJW7wMKsa0oBVWSNXsMr0FszR/bUPktpHPhoghcIVS5vTq9nvb4XvBvo4oEt0iTLED6T81TmcpIaAgsrShk0f75hCtamRNzG1zan3JdM4KG9y/7Qz86zLHWEabAfpqQ6l1dSlFDp1tIidDPYznO+b/BOky4yDJ3ANGeRrZKRarPO+HQ/r4QcN1yICpZDpogbSL5abfW3o3rkeXCAmI4SEMl4na5jALsbxxqN1OJQd/dj0AKYGCrzMFqmxb41ceSMPx4gH8fIZ2MhDgCzMeAl0H9A8Z52u98sLj3KZ41r46OwUHGiycnluRS4WfTGodD0j3oZiILrzZr/DcAk4PMqcKmtk97Z/m8r/gBQSwMEFAAAAAgAFatuXHzzo9xRAgAA9gkAAA0AAAB4bC9zdHlsZXMueG1s3VbbitswEP0V4Q+ok5g1cUnyUENgoS0Luw99VWI5EejiyvKS9Os7Izl2s6tZKH2rTfDMHJ25G2fT+6sSz2chPLtoZfptdva++5zn/fEsNO8/2U4YQFrrNPegulPed07wpkeSVvlqsShzzaXJdhsz6L32PTvawfhttsjy3aa1ZrYss2iAo1wL9srVNqu5kgcnw1mupbpG8woNR6usYx5SEUgGS/8rwsuoYZajHy2NdWjMY4Tw6MGpVGpKYJVFw27Tce+FM3tQAicY30FslF+uHWRwcvy6XD1kMyE8IMjBuka4uzqjabdRovVAcPJ0xqe3XY6g91aD0Eh+soaHHG6MUQC3R6HUM47oR3vn+9Ky2OvHBtvMsNSbCAmNYnQTFfT/p7fo+5/dsk6+Wv9lgGpM0H8O1osnJ1p5CfqlvY8/hQ6J3EWfrAyXY5t9x51Tswt2GKTy0ozaWTaNMO9qA/eeH2Cp7/zD+Ua0fFD+ZQK32Sx/E40cdDWdesKyxlOz/BVnuCynzYRY0jTiIpp6VN3pEEQGAkQdLyS8RfbhSiMUJ2JpBDEqDpUBxYksKs7/VM+arCdiVG7rJLImOWuSE1kppA43FSfNqeBKV1pVRVGWVEfrOplBTfWtLPGX9kblhgwqDkb6u17T06Y35OM9oGb60YZQldKbSFVK9xqRdN+QUVXpaVNxkEFNgdodjJ+OgzuV5hQFTpXKjXqDaaSqKAR3Mb2jZUl0p8Q7PR/qLSmKqkojiKUzKAoKwbeRRqgMMAcKKYrwHXzzPcpv36l8/qe3+w1QSwMEFAAAAAgAFatuXJeKuxzAAAAAEwIAAAsAAABfcmVscy8ucmVsc52SuW7DMAxAf8XQnjAH0CGIM2XxFgT5AVaiD9gSBYpFnb+v2qVxkAsZeT08EtweaUDtOKS2i6kY/RBSaVrVuAFItiWPac6RQq7ULB41h9JARNtjQ7BaLD5ALhlmt71kFqdzpFeIXNedpT3bL09Bb4CvOkxxQmlISzMO8M3SfzL38ww1ReVKI5VbGnjT5f524EnRoSJYFppFydOiHaV/Hcf2kNPpr2MitHpb6PlxaFQKjtxjJYxxYrT+NYLJD+x+AFBLAwQUAAAACAAVq25cuN3t+1EBAAC9AgAADwAAAHhsL3dvcmtib29rLnhtbLVS0WrDMAz8FeMPWNKwFVaavqxsK5StrKN7dhKlEbWtIDvt2q+fnRBWGIy97EnWSZzvzp6fiA8F0UF8Gm1dLhvv21mSuLIBo9wNtWDDpCY2yoeW94lrGVTlGgBvdJKl6TQxCq1czEeuDSfXDXkoPZINYAR2CCf3PY+tOKLDAjX6cy77swYpDFo0eIEql6kUrqHTMzFeyHqltyWT1rmcDIMdsMfyB7yNIt9V4XrEq+JNBSG5nKaBsEZ2vt/o+VXQeISwPHSdp0fUHnipPDwxdS3afaQJLpIrG30OYx1CnPFfYqS6xhKWVHYGrB9yZNBRoHUNtk4Kqwzk8kMxNF0hNuoczUVn4apVNbj0Qd5VZjzDMOBV1Qv9P1E7aLDUINa0vxKU/SIo65Mb46qgRgvVSyBzAQ9PV25YxNIby27vJvfhiTqtHwL2atekqjH98ecsvgBQSwMEFAAAAAgAFatuXI33LFq0AAAAiQIAABoAAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsc8WSTQqDMBBGrxJygI7a0kVRV924LV4g6PiD0YTMlOrta3WhgS66ka7CNyHvezCJH6gVt2agprUkxl4PlMiG2d4AqGiwV3QyFof5pjKuVzxHV4NVRadqhCgIruD2DJnGe6bIJ4u/EE1VtQXeTfHsceAvYHgZ11GDyFLkytXIiYRRb2OC5QhPM1mKrEyky8pQwr+FIk8oOlCIeNJIm82avfrzgfU8v8WtfYnr0N/J5eMA3s9L31BLAwQUAAAACAAVq25cbqckvB4BAABXBAAAEwAAAFtDb250ZW50X1R5cGVzXS54bWzFlM9OwzAMxl+lynVqMnbggNZdgCvswAuE1l2j5p9ib3Rvj9tuk0CjYioSl0aN7e/n+IuyfjtGwKxz1mMhGqL4oBSWDTiNMkTwHKlDcpr4N+1U1GWrd6BWy+W9KoMn8JRTryE26yeo9d5S9tzxNprgC5HAosgex8SeVQgdozWlJo6rg6++UfITQXLlkIONibjgBKGuEvrIz4BT3esBUjIVZFud6EU7zlKdVUhHCyinJa70GOralFCFcu+4RGJMoCtsAMhZOYoupsnEE4bxezebP8hMATlzm0JEdizB7bizJX11HlkIEpnpI16ILD37fNC7XUH1SzaP9yOkdvAD1bDMn/FXjy/6N/ax+sc+3kNo//qq96t02vgzXw3vyeYTUEsBAhQDFAAAAAgAFatuXEbHTUiVAAAAzQAAABAAAAAAAAAAAAAAAIABAAAAAGRvY1Byb3BzL2FwcC54bWxQSwECFAMUAAAACAAVq25cOPVTIu4AAAArAgAAEQAAAAAAAAAAAAAAgAHDAAAAZG9jUHJvcHMvY29yZS54bWxQSwECFAMUAAAACAAVq25cmVycIxAGAACcJwAAEwAAAAAAAAAAAAAAgAHgAQAAeGwvdGhlbWUvdGhlbWUxLnhtbFBLAQIUAxQAAAAIABWrblxToPSsagEAAA0DAAAYAAAAAAAAAAAAAACAgSEIAAB4bC93b3Jrc2hlZXRzL3NoZWV0MS54bWxQSwECFAMUAAAACAAVq25ck4qkwIEBAAB5AwAAGAAAAAAAAAAAAAAAgIHBCQAAeGwvd29ya3NoZWV0cy9zaGVldDIueG1sUEsBAhQDFAAAAAgAFatuXHzzo9xRAgAA9gkAAA0AAAAAAAAAAAAAAIABeAsAAHhsL3N0eWxlcy54bWxQSwECFAMUAAAACAAVq25cl4q7HMAAAAATAgAACwAAAAAAAAAAAAAAgAH0DQAAX3JlbHMvLnJlbHNQSwECFAMUAAAACAAVq25cuN3t+1EBAAC9AgAADwAAAAAAAAAAAAAAgAHdDgAAeGwvd29ya2Jvb2sueG1sUEsBAhQDFAAAAAgAFatuXI33LFq0AAAAiQIAABoAAAAAAAAAAAAAAIABWxAAAHhsL19yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsBAhQDFAAAAAgAFatuXG6nJLweAQAAVwQAABMAAAAAAAAAAAAAAIABRxEAAFtDb250ZW50X1R5cGVzXS54bWxQSwUGAAAAAAoACgCEAgAAlhIAAAAA';
+
+var b64='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';
     var binary=atob(b64);
     var bytes=new Uint8Array(binary.length);
     for(var i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
@@ -2865,12 +2804,12 @@ async function msEnsureSheet(){
   if(!_msalToken||!_excelFileId) return;
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   try{
-    // Get existing sheets
+
     var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
     var sd=await sr.json();
     var existing=(sd.value||[]).map(function(s){return s.name;});
 
-    // Create sheet if it doesn't exist
+
     if(!existing.includes(_excelSheet)){
       await fetch(base+'/worksheets',{
         method:'POST',
@@ -2879,7 +2818,7 @@ async function msEnsureSheet(){
       });
     }
 
-    // Check if header row already exists
+
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')?$select=values',
       {headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
@@ -2896,7 +2835,7 @@ async function excelSavePayroll(){
   if(!_msalToken||!_msalInstance){ pm('⚠ Not signed in. Click Connect Excel first.'); return; }
   if(!_excelFileId){ pm('⚠ No file selected. Click Connect Excel first.'); return; }
 
-  // Silently refresh token before saving
+
   try{
     var accounts = _msalInstance.getAllAccounts();
     if(accounts.length){
@@ -2953,7 +2892,7 @@ async function excelSavePayroll(){
     } else {
       var errData=await wr.json();
       var errMsg=(errData.error&&errData.error.message)||('HTTP '+wr.status);
-      // 401 = token expired, offer reconnect
+
       if(wr.status===401||wr.status===403){
         pm('⚠ Token expired or access denied. Click ⊞ CONNECT EXCEL to sign in again.');
         _msalToken=null; sessionStorage.removeItem('warehub_ms_token'); excelUpdateUI();
@@ -2972,7 +2911,6 @@ async function excelSavePayroll(){
   }
 }
 
-
 function fmPlay(url){
   var frame=document.getElementById('fm-frame');
   if(!frame) return;
@@ -2986,9 +2924,7 @@ function fmQ(q){
   frame.src='https://www.youtube.com/results?search_query='+encodeURIComponent(q);
   frame.style.display='block';
 }
-// ══════════════════════════════════════════
-// DEV PANEL
-// ══════════════════════════════════════════
+
 function devLoad(){
   try{
     var data=JSON.parse(localStorage.getItem('warehub_devpanel')||'{}');
@@ -2997,10 +2933,10 @@ function devLoad(){
     });
     var notes=document.getElementById('dev-custom-notes');
     if(notes&&data.custom_notes) notes.value=data.custom_notes;
-    // Show redirect URI
+
     var redir=document.getElementById('dev-azure-redirect');
     if(redir) redir.textContent=window.location.origin+window.location.pathname;
-    // Sync worker URL from AI proxy setting
+
     var workerUrl=localStorage.getItem('warehub_ai_proxy')||'';
     var workerEl=document.getElementById('dev-worker-url');
     if(workerEl&&workerUrl&&workerEl.textContent.includes('anthropic-proxy.imluoai')) workerEl.textContent=workerUrl;
@@ -3051,8 +2987,6 @@ function devRender(){
   devLoad();
 }
 
-
-
 var vehicleTrips = [];
 
 function vehicleLoad(){
@@ -3068,10 +3002,10 @@ function vehiclePopulateDrivers(){
   if(!sel) return;
   var cur=sel.value;
   sel.innerHTML='<option value="">— select driver —</option>';
-  // Add managers first, then packers
+
   managers.forEach(function(m){ sel.innerHTML+='<option value="'+m.name+'">'+m.name+' (Manager)</option>'; });
   packers.forEach(function(p){ sel.innerHTML+='<option value="'+p.name+'">'+p.name+'</option>'; });
-  // Also allow custom entry
+
   sel.innerHTML+='<option value="__other__">Other (type below)…</option>';
   if(cur) sel.value=cur;
 }
@@ -3080,7 +3014,7 @@ function vehicleSetNow(fieldId){
   var el=document.getElementById(fieldId);
   if(!el) return;
   var now=new Date();
-  // datetime-local format: YYYY-MM-DDTHH:MM
+
   var pad=function(n){return n<10?'0'+n:n;};
   el.value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'T'+pad(now.getHours())+':'+pad(now.getMinutes());
 }
@@ -3118,7 +3052,7 @@ function vehicleAddTrip(){
     notes: notes
   };
 
-  vehicleTrips.unshift(trip); // newest first
+  vehicleTrips.unshift(trip);
   vehicleSave();
   vehicleClearForm();
   renderVehicleLog();
@@ -3150,13 +3084,13 @@ function renderVehicleStats(){
   if(!el) return;
   var totalTrips=vehicleTrips.length;
   var totalMiles=vehicleTrips.reduce(function(s,t){return s+(t.miles||0);},0);
-  // Trips this month
+
   var now=new Date();
   var thisMonth=vehicleTrips.filter(function(t){
     var d=new Date(t.date);
     return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
   }).length;
-  // Most frequent driver
+
   var driverCount={};
   vehicleTrips.forEach(function(t){driverCount[t.driver]=(driverCount[t.driver]||0)+1;});
   var topDriver=Object.keys(driverCount).sort(function(a,b){return driverCount[b]-driverCount[a];})[0]||'—';
@@ -3235,7 +3169,7 @@ function vehicleExportCSV(){
   var rows=vehicleTrips.map(function(t){
     var dur='';
     if(t.departure&&t.returned){var ms=new Date(t.returned)-new Date(t.departure);if(ms>0) dur=Math.round(ms/60000);}
-    return [t.date,t.driver,t.destination,t.departure,t.returned||'',dur,t.miles!==null?t.miles.toFixed(1):'',t.notes].map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');
+      return [t.date,t.driver,t.destination,t.departure,t.returned||'',dur,t.miles!==null?t.miles.toFixed(1):'',t.notes];
   });
   var csv=[hdr.join(',')].concat(rows).join('\n');
   var a=document.createElement('a');
@@ -3246,7 +3180,7 @@ function vehicleExportCSV(){
 
 async function vehicleSaveExcel(){
   if(!_msalToken || !_excelFileId){
-    // Make sure MSAL is initialized with saved config before opening modal
+
     if(_msalCfg.clientId && !_msalInstance) msalInit();
     excelConnect();
     return;
@@ -3256,9 +3190,9 @@ async function vehicleSaveExcel(){
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   pm('⟳ Saving vehicle log to Excel…');
   try{
-    // Ensure sheet exists with header
+
     await msEnsureVehicleSheet();
-    // Get row count
+
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var existing=(rd.rowCount&&!rd.error)?rd.rowCount:0;
@@ -3294,7 +3228,7 @@ async function msEnsureVehicleSheet(){
         body:JSON.stringify({name:sheet})
       });
     }
-    // Write header if sheet is empty
+
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')?$select=values',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
@@ -3305,10 +3239,6 @@ async function msEnsureVehicleSheet(){
     }
   }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
 }
-
-// ══════════════════════════════════════════
-// GOOGLE MAPS PLACES AUTOCOMPLETE
-// ══════════════════════════════════════════
 
 var _gmapsLoaded = false;
 var _gmapsKey    = 'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw';
@@ -3402,29 +3332,29 @@ function vehMapSearch(){
 
   document.getElementById('veh-map-close').onclick = function(){ modal.remove(); };
 
-  // Close on backdrop click
+
   modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
 
-  // Search function using Places Text Search
+
   function doSearch(){
     var query = document.getElementById('veh-map-search-input').value.trim();
     if(!query) return;
     var resultsEl = document.getElementById('veh-map-results');
     resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">⟳ Searching…</div>';
 
-    // Always show embedded map for the search query immediately
+
     var iframe = document.getElementById('veh-map-iframe');
     var placeholder = document.getElementById('veh-map-placeholder');
     if(iframe && placeholder){
       var embedQ = encodeURIComponent(query);
       iframe.src = 'https://www.google.com/maps/embed/v1/search?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+embedQ+'&zoom=13';
       placeholder.style.display='none';
-      // Show USE THIS ADDRESS immediately with the searched query
+
       document.getElementById('veh-map-selected').textContent = '📍 '+query;
       var useBtn = document.getElementById('veh-map-use-btn');
       if(useBtn){
         useBtn.style.display='block';
-        // Wire it to use the raw query if no place selected yet
+
         useBtn.onclick = function(){
           var addr = selectedPlace ? (selectedPlace.formatted_address||selectedPlace.name) : query;
           document.getElementById('veh-dest').value = addr;
@@ -3440,10 +3370,10 @@ function vehMapSearch(){
       }
     }
 
-    // Also do Places text search for click-to-fill if Maps API loaded
+
     if(typeof google === 'undefined' || !google.maps || !google.maps.places){
       resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">Map shown above. Click USE THIS ADDRESS after finding your destination.</div>';
-      // Pre-fill the address field with the query so user can proceed
+
       document.getElementById('veh-map-selected').textContent = '📍 '+query;
       document.getElementById('veh-map-use-btn').style.display='block';
       document.getElementById('veh-map-modal').querySelector('#veh-map-use-btn').onclick = function(){
@@ -3487,7 +3417,7 @@ function vehMapSearch(){
           placeholder.style.display='none';
           var label = place.name+(place.formatted_address?'  —  '+place.formatted_address:'');
           document.getElementById('veh-map-selected').textContent = '📍 '+label;
-          // Update USE THIS ADDRESS to use this specific place
+
           var useBtn = document.getElementById('veh-map-use-btn');
           if(useBtn){
             useBtn.style.display='block';
@@ -3516,22 +3446,12 @@ function vehMapSearch(){
   });
   setTimeout(function(){ document.getElementById('veh-map-search-input').focus(); },100);
 
-  // Use address button
-  // USE THIS ADDRESS onclick is set dynamically in doSearch
+
+
 }
 
-function gmapsShowSetup(){ vehMapSearch(); } // alias kept for compatibility
+function gmapsShowSetup(){ vehMapSearch(); }
 
-
-
-
-
-
-// ══════════════════════════════════════════
-// RACK MAP
-// ══════════════════════════════════════════
-
-// Zone center coordinates on SVG (for route drawing)
 var RACK_CENTERS = {
   'C-1': {x:154, y:81},
   'R3':  {x:98, y:221},
@@ -3550,11 +3470,10 @@ var RACK_INFO = {
   'C-1': {type:'GROUND PALLET', color:'#dd6b20'}
 };
 
-// Normalise shelf code to match zone IDs
 function rackNormalise(shelf){
   if(!shelf) return '';
   var s = shelf.toString().trim().toUpperCase();
-  // Handle variants: r1→R1, w-1→W1, 10-1-1, a1→A-1
+
   s = s.replace(/^R(\d)$/,  'R$1');
   s = s.replace(/^W(\d)$/,  'W$1');
   s = s.replace(/^A(\d)$/,  'A-$1');
@@ -3564,21 +3483,21 @@ function rackNormalise(shelf){
 }
 
 function spotClick(spotId){
-  // Deactivate previous spot
+
   document.querySelectorAll('.rack-spot.active').forEach(function(el){
     el.classList.remove('active');
   });
 
-  // Activate clicked spot
+
   var el = document.getElementById('spot-'+spotId);
   if(el) el.classList.add('active');
 
-  // Determine zone
+
   var zoneId   = spotId.replace(/-\d+$/, '');
   var zoneInfo = RACK_INFO[zoneId] || {type:'STORAGE', color:'var(--cy)'};
   var color    = zoneInfo.color;
 
-  // ── Build info panel ──
+
   var panel = document.getElementById('rack-info-panel');
   var title = document.getElementById('rack-info-title');
   var type  = document.getElementById('rack-info-type');
@@ -3590,11 +3509,11 @@ function spotClick(spotId){
   title.textContent     = spotId;
   type.textContent      = zoneInfo.type;
 
-  // ── Check inventory CSV data (future connection) ──
+
   var invData = window._inventoryData || {};
   var invItem = invData[spotId.toUpperCase()] || invData[spotId] || null;
 
-  // ── Check current orders at this spot ──
+
   var spotOrders = orders.filter(function(o){
     var shelf = (o.shelf||'').trim().toUpperCase();
     var sid   = spotId.toUpperCase();
@@ -3603,7 +3522,7 @@ function spotClick(spotId){
 
   var html = '';
 
-  // ── Inventory section (shows when CSV is loaded) ──
+
   if(invItem){
     var skus = invItem.skus||[];
     html +=
@@ -3641,7 +3560,7 @@ function spotClick(spotId){
       +'</div>';
   }
 
-  // ── Orders section ──
+
   html += '<div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">ORDERS AT '+spotId+'</div>';
 
   if(!spotOrders.length){
@@ -3671,7 +3590,7 @@ function spotClick(spotId){
     });
   }
 
-  // ── Import CSV hint (only when no inventory loaded) ──
+
   if(!invItem){
     html += '<div style="margin-top:12px;padding:8px;background:var(--bg);border:1px dashed var(--bdr);font-size:9px;color:var(--td);text-align:center;">'
            +'📦 Import an inventory CSV to display goods stored at each location'
@@ -3681,9 +3600,8 @@ function spotClick(spotId){
   body.innerHTML = html;
 }
 
-
 function rackHighlightSpots(){
-  // Color all spots based on order status
+
   document.querySelectorAll('.rack-spot').forEach(function(el){
     el.classList.remove('has-orders','done');
   });
@@ -3697,10 +3615,9 @@ function rackHighlightSpots(){
   });
 }
 
-
   rackClearHighlight();
   rackHighlight(zoneId);
-  // Show info panel
+
   var info = RACK_INFO[zoneId]||{type:'STORAGE ZONE',color:'var(--cy)'};
   var panel = document.getElementById('rack-info-panel');
   var title = document.getElementById('rack-info-title');
@@ -3712,7 +3629,7 @@ function rackHighlightSpots(){
   title.textContent = zoneId;
   type.textContent  = info.type;
 
-  // Find orders assigned to this shelf
+
   var norm = zoneId.toLowerCase().replace(/-/g,'');
   var zoneOrders = orders.filter(function(o){
     var shelf = (o.shelf||'').toLowerCase().replace(/-/g,'');
@@ -3747,7 +3664,7 @@ function rackHighlight(zoneId){
     rect.setAttribute('stroke','#0af');
     rect.setAttribute('stroke-width','3');
     rect.setAttribute('fill-opacity','1');
-    // Pulse animation
+
     rect.style.filter='drop-shadow(0 0 8px #0af)';
   }
 }
@@ -3766,7 +3683,7 @@ function rackClearHighlight(){
       : info.color === '#dd6b20' ? '#ed8936'
       : '#f6e05e');
   });
-  // Clear all spot highlight classes
+
   document.querySelectorAll('.rack-spot').forEach(function(el){
     el.classList.remove('has-orders','done','active');
   });
@@ -3783,16 +3700,16 @@ function rackSearch(val){
   if(!val.trim()) return;
   var norm = rackNormalise(val.trim());
 
-  // Check if it's a spot ID (has more than one dash segment e.g. B-1-5, R1-3)
+
   var spotEl = document.getElementById('spot-'+norm);
   if(spotEl){
     spotClick(norm);
-    // Scroll spot into view
+
     spotEl.scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
 
-  // Zone-level search
+
   var found = RACK_CENTERS[norm];
   if(found){
     rackClick(norm);
@@ -3805,7 +3722,7 @@ function rackSearch(val){
 
 function rackShowPickRoute(){
   rackClearHighlight();
-  // Get all pending orders with shelf locations
+
   var pending = orders.filter(function(o){
     return o.status==='pending' && o.shelf;
   });
@@ -3814,11 +3731,11 @@ function rackShowPickRoute(){
     return;
   }
 
-  // Group by zone
+
   var zoneMap = {};
   pending.forEach(function(o){
     var norm = rackNormalise(o.shelf);
-    // Match to known zones
+
     var zoneId = Object.keys(RACK_CENTERS).find(function(k){
       var s = norm.replace(/-/g,'').toLowerCase();
       var z = k.replace(/-/g,'').toLowerCase();
@@ -3836,21 +3753,21 @@ function rackShowPickRoute(){
     return;
   }
 
-  // Optimal route: sort by Y position (top→bottom) then X (left→right)
-  // This matches a natural walking path through the warehouse
+
+
   zones.sort(function(a,b){
     var ca=RACK_CENTERS[a], cb=RACK_CENTERS[b];
-    // Group into rows by Y proximity (±60px = same row)
+
     var rowA=Math.round(ca.y/80), rowB=Math.round(cb.y/80);
     if(rowA!==rowB) return rowA-rowB;
-    // Serpentine: even rows left→right, odd rows right→left
+
     return rowA%2===0 ? ca.x-cb.x : cb.x-ca.x;
   });
 
-  // Highlight each zone on the route
+
   zones.forEach(function(z){ rackHighlight(z); });
 
-  // Draw route polyline
+
   var points = zones.map(function(z){
     var c = RACK_CENTERS[z];
     return c.x+','+c.y;
@@ -3863,7 +3780,7 @@ function rackShowPickRoute(){
   rp.style.display='block';
   ra.style.display='block';
 
-  // Show route steps panel
+
   var panel = document.getElementById('rack-route-panel');
   var steps = document.getElementById('rack-route-steps');
   panel.style.display='block';
@@ -3884,16 +3801,7 @@ function rackShowPickRoute(){
   }).join('');
 }
 
-
-// ══════════════════════════════════════════
-// INVENTORY CSV — Rack Map Data Source
-// ══════════════════════════════════════════
-// Expected CSV format:
-// LOCATION,SKU,DESCRIPTION,QTY,UNIT,NOTES
-// R1-01,SKU-001,Widget A,24,PCS,
-// B-1-05,SKU-002,Widget B,12,BOX,Fragile
-
-window._inventoryData = {};  // keyed by location e.g. "R1-01"
+window._inventoryData = {};
 
 function inventoryLoadCSV(text){
   var lines = text.trim().split('\n');
@@ -3909,7 +3817,7 @@ function inventoryLoadCSV(text){
     var loc  = cols[locIdx].trim().toUpperCase();
     var item = { skus:[] };
 
-    // Read up to 5 SKU slots
+
     for(var s=1;s<=5;s++){
       var skuIdx  = headers.indexOf('SKU_'+s);
       var nameIdx = headers.indexOf('PRODUCT_NAME_'+s);
@@ -3925,7 +3833,7 @@ function inventoryLoadCSV(text){
       }
     }
 
-    // Extra fields
+
     var supIdx  = headers.indexOf('SUPPLIER');
     var updIdx  = headers.indexOf('LAST_UPDATED');
     var noteIdx = headers.indexOf('NOTES');
@@ -3933,7 +3841,7 @@ function inventoryLoadCSV(text){
     if(updIdx>=0)  item.lastUpdated = (cols[updIdx]||'').trim();
     if(noteIdx>=0) item.notes       = (cols[noteIdx]||'').trim();
 
-    // Also support legacy single-SKU format
+
     var singleSkuIdx = headers.indexOf('SKU');
     if(!item.skus.length && singleSkuIdx>=0 && cols[singleSkuIdx]){
       item.skus.push({
@@ -3953,7 +3861,7 @@ function inventoryLoadCSV(text){
 }
 
 function rackHighlightInventory(){
-  // Show which spots have inventory data
+
   document.querySelectorAll('.rack-spot').forEach(function(el){
     var sid = el.id.replace('spot-','').toUpperCase();
     if(window._inventoryData[sid]){
@@ -3974,12 +3882,8 @@ function inventoryTriggerUpload(){
   inp.click();
 }
 
-
-// ══════════════════════════════════════════
-// RACK MAP — SCAN GUN MODE
-// ══════════════════════════════════════════
-var _rackScanMode = 'off';      // 'off' | 'locate' | 'assign'
-var _rackAssignSpot = null;     // spot selected for assign mode
+var _rackScanMode = 'off';
+var _rackAssignSpot = null;
 
 function rackSetScanMode(mode){
   _rackScanMode = mode;
@@ -3992,7 +3896,7 @@ function rackSetScanMode(mode){
   var btnA   = document.getElementById('rack-smode-assign');
   var btnOff = document.getElementById('rack-smode-off');
 
-  // Reset button styles
+
   [btnL, btnA, btnOff].forEach(function(b){ if(b) b.className='btn'; });
 
   if(mode==='off'){
@@ -4026,11 +3930,11 @@ function rackDoScan(val){
   var hint   = document.getElementById('rack-scan-hint');
   var sku    = val.trim().toUpperCase();
 
-  // ── LOCATE MODE: find which spot(s) contain this SKU ──
+
   if(_rackScanMode==='locate'){
     var found = [];
 
-    // Search inventory data
+
     var inv = window._inventoryData || {};
     Object.keys(inv).forEach(function(loc){
       var item = inv[loc];
@@ -4043,7 +3947,7 @@ function rackDoScan(val){
       }
     });
 
-    // Also search current orders
+
     orders.forEach(function(o){
       if(o.skus){
         o.skus.forEach(function(s){
@@ -4059,7 +3963,7 @@ function rackDoScan(val){
       return;
     }
 
-    // Highlight all found spots
+
     rackClearHighlight();
     found.forEach(function(f){
       var el = document.getElementById('spot-'+f.loc);
@@ -4073,18 +3977,18 @@ function rackDoScan(val){
             +(f.qty?' · '+f.qty+(f.unit?' '+f.unit:''):'')+'</div>';
         }).join('');
 
-    // Click the first found spot to show its panel
+
     if(found[0]) spotClick(found[0].loc);
     hint.textContent = '✓ Scan another SKU to locate it.';
     return;
   }
 
-  // ── ASSIGN MODE: link a SKU to the selected spot ──
+
   if(_rackScanMode==='assign'){
-    // If no spot selected yet, try to interpret val as a location
+
     var activeSpot = document.querySelector('.rack-spot.active');
     if(!activeSpot){
-      // Maybe they scanned the spot label first
+
       var spotEl = document.getElementById('spot-'+sku);
       if(spotEl){
         spotEl.classList.add('active');
@@ -4100,12 +4004,12 @@ function rackDoScan(val){
 
     var spotId = activeSpot.id.replace('spot-','');
 
-    // Assign to inventory data
+
     var inv = window._inventoryData || {};
     if(!inv[spotId]) inv[spotId] = {skus:[]};
     if(!inv[spotId].skus) inv[spotId].skus = [];
 
-    // Check if SKU already exists at this spot
+
     var existing = inv[spotId].skus.find(function(s){ return s.sku.toUpperCase()===sku; });
     if(existing){
       result.innerHTML='<span style="color:var(--am);">⚠ '+sku+' already at '+spotId+'.</span>';
@@ -4114,7 +4018,7 @@ function rackDoScan(val){
       window._inventoryData = inv;
       activeSpot.classList.add('has-orders');
       result.innerHTML='<span style="color:var(--gn);">✓ '+sku+' assigned to '+spotId+'.</span>';
-      spotClick(spotId);  // refresh info panel
+      spotClick(spotId);
     }
 
     hint.textContent='📍 ASSIGN — Click another spot or scan next SKU.';
@@ -4123,20 +4027,19 @@ function rackDoScan(val){
   }
 }
 
-// Auto-focus rack scan input when rack map tab is open and gun scans
 function rackScanIntercept(e){
   if(_rackScanMode==='off') return;
   var inp = document.getElementById('rack-scan-input');
   if(!inp || document.activeElement===inp) return;
-  // If a printable key is pressed while rack scan is active, redirect to scan input
+
   if(e.key && e.key.length===1 && !e.ctrlKey && !e.altKey && !e.metaKey){
     inp.focus();
   }
 }
 document.addEventListener('keydown', rackScanIntercept);
 
-document.addEventListener('DOMContentLoaded',function(){
-  // Load saved inventory
+document.addEventListener('DOMContentLoaded',function(){try{
+
   try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
   loadStaff();
   excelLoadConfig();
@@ -4149,12 +4052,12 @@ document.addEventListener('DOMContentLoaded',function(){
   showLoginOrPack();
   gv('import');
 
-  // Nav tabs — also wired via onclick in HTML, this is backup
+
   document.querySelectorAll('.tab').forEach(function(tab){
     tab.addEventListener('click',function(){ gv(this.dataset.view); });
   });
 
-  // Drop zone
+
   var dz=document.getElementById('dz');
   if(dz){
     dz.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over');});
@@ -4173,13 +4076,13 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  // Pack station login scan
+
   var loginIn=document.getElementById('login-scan-in');
   if(loginIn) loginIn.addEventListener('keydown',function(e){
     if(e.key==='Enter'){ var v=this.value.trim().toUpperCase(); if(v) loginPacker(v); }
   });
 
-  // Scan input (tracking / FNSKU)
+
   var scanIn=document.getElementById('scan-in');
   if(scanIn){
     var scanTimer=null;
@@ -4190,7 +4093,7 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  // Switch packer
+
   var cpSwitch=document.getElementById('cp-switch');
   if(cpSwitch) cpSwitch.addEventListener('click',function(){
     currentPacker=null; saveStaff();
@@ -4202,7 +4105,7 @@ document.addEventListener('DOMContentLoaded',function(){
     setTimeout(function(){ var el=document.getElementById('login-scan-in'); if(el){el.value='';el.focus();} },50);
   });
 
-  // Auto-focus scan/login on keypress when Pack Station is active
+
   document.addEventListener('keydown',function(e){
     if(e.ctrlKey||e.metaKey||e.altKey) return;
     var packView=document.getElementById('view-pack');
@@ -4214,14 +4117,14 @@ document.addEventListener('DOMContentLoaded',function(){
     } else if(e.target.id!=='scan-in'){ focusScan(); }
   });
 
-  // Auto-refresh every 10s
+
   setInterval(function(){
     if(document.getElementById('view-dash').classList.contains('on')) renderDash();
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
     if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
   },10000);
 
-  // ── Packers tab ──
+
   var addMgrBtn=document.getElementById('add-mgr-btn');
   if(addMgrBtn) addMgrBtn.addEventListener('click', addManager);
   var addPackerBtn=document.getElementById('add-packer-btn');
@@ -4233,7 +4136,7 @@ document.addEventListener('DOMContentLoaded',function(){
   var printPicklistBtn=document.getElementById('print-picklist-btn');
   if(printPicklistBtn) printPicklistBtn.addEventListener('click', printPickLists);
 
-  // Enter key on staff input fields
+
   ['new-packer-name','new-packer-id'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.addEventListener('keydown',function(e){ if(e.key==='Enter') addPacker(); });
@@ -4243,7 +4146,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if(el) el.addEventListener('keydown',function(e){ if(e.key==='Enter') addManager(); });
   });
 
-  // ── Import tab ──
+
   var clearBtn=document.getElementById('clear-btn');
   if(clearBtn) clearBtn.addEventListener('click',function(){
     if(confirm('Clear ALL orders? This cannot be undone.')){
@@ -4267,15 +4170,16 @@ document.addEventListener('DOMContentLoaded',function(){
   var skuSortBtn=document.getElementById('print-sku-sort-btn');
   if(skuSortBtn) skuSortBtn.addEventListener('click', printSkuSort);
 
-  // ── Payroll tab ──
+
   var csvBtn=document.getElementById('export-csv-btn');
   if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
+}catch(e){console.error("[Warehub init]",e);}
 });
 </script>
 
   <!-- ── Vehicle Log ── -->
-  <div id="view-vehicle" class="view">
-    <div style="width:100%;padding:0 0 20px;">
+  <div id="view-vehicle" class="view" style="padding:16px 18px;">
+    <div style="width:100%;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -4364,8 +4268,8 @@ document.addEventListener('DOMContentLoaded',function(){
 
 
   <!-- ══ RACK MAP ══ -->
-  <div id="view-rackmap" class="view">
-    <div style="max-width:600px;margin:0 auto;padding:0 0 20px;">
+  <div id="view-rackmap" class="view" style="padding:16px 18px;">
+    <div style="max-width:600px;margin:0 auto;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
@@ -4411,193 +4315,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
       <!-- Map container -->
       <div style="background:var(--sur);border:1px solid var(--bdr);padding:12px;display:flex;justify-content:center;">
-        <svg id="rack-svg" viewBox="55 25 620 645" xmlns="http://www.w3.org/2000/svg"
-          style="width:100%;max-width:560px;height:auto;display:block;font-family:Arial,sans-serif;">
-          <defs>
-            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
-              <polygon points="0 0,8 3,0 6" fill="#0af"/>
-            </marker>
-            <pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="8" stroke="#555" stroke-width="1.5"/>
-            </pattern>
-          </defs>
-
-          <!-- OUTER WALL -->
-          <rect x="60" y="40" width="580" height="600" fill="#161616" stroke="#666" stroke-width="3" rx="2"/>
-
-          <!-- DOCK DOORS -->
-          <rect x="155" y="37" width="60" height="7" fill="#161616" stroke="none"/>
-          <line x1="155" y1="40" x2="155" y2="46" stroke="#888" stroke-width="2"/>
-          <line x1="215" y1="40" x2="215" y2="46" stroke="#888" stroke-width="2"/>
-          <text x="185" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-1</text>
-          <rect x="248" y="37" width="60" height="7" fill="#161616" stroke="none"/>
-          <line x1="248" y1="40" x2="248" y2="46" stroke="#888" stroke-width="2"/>
-          <line x1="308" y1="40" x2="308" y2="46" stroke="#888" stroke-width="2"/>
-          <text x="278" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-2</text>
-          <rect x="340" y="37" width="90" height="7" fill="#161616" stroke="none"/>
-          <line x1="340" y1="40" x2="340" y2="46" stroke="#888" stroke-width="2"/>
-          <line x1="430" y1="40" x2="430" y2="46" stroke="#888" stroke-width="2"/>
-          <text x="385" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-3</text>
-
-          <!-- OFFICE / RESTROOM bottom-right -->
-          <rect x="416" y="434" width="218" height="198" fill="#1e1e1e" stroke="#555" stroke-width="1.5"/>
-          <text x="525" y="518" text-anchor="middle" fill="#555" font-size="12" font-weight="700">OFFICE /</text>
-          <text x="525" y="536" text-anchor="middle" fill="#555" font-size="12" font-weight="700">RESTROOM</text>
-
-          <!-- AISLE between R2 and R1 -->
-          <rect x="197" y="128" width="30" height="376" fill="#0d0d0d" opacity="0.8"/>
-          <text x="212" y="318" text-anchor="middle" fill="#2d2d2d" font-size="7"
-            transform="rotate(-90,212,318)">AISLE</text>
-
-          <!-- ENTRANCE -->
-          <text x="340" y="655" text-anchor="middle" fill="#444" font-size="9" letter-spacing="2">ENTRANCE / EXIT  (SOUTH)</text>
-          <line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/>
-
-          <!-- COMPASS -->
-          <g transform="translate(628,628)">
-            <circle cx="0" cy="0" r="16" fill="none" stroke="#444" stroke-width="1.5"/>
-            <text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text>
-            <polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/>
-          </g>
-          </g>
-          </g>
-        </g>
-
-          <!-- R3  Red -->
-          <g id="zone-R3" class="rack-zone" onclick="rackClick(&apos;R3&apos;)" style="cursor:pointer;">
-            <rect x="68" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-          
-        
-        
-        
-          <g id="spot-R3-01" class="rack-spot" onclick="spotClick('R3-01')" style="cursor:pointer;"><rect x="72.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-01</text></g>
-          <g id="spot-R3-02" class="rack-spot" onclick="spotClick('R3-02')" style="cursor:pointer;"><rect x="72.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-02</text></g>
-          <g id="spot-R3-03" class="rack-spot" onclick="spotClick('R3-03')" style="cursor:pointer;"><rect x="72.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-03</text></g>
-          <g id="spot-R3-04" class="rack-spot" onclick="spotClick('R3-04')" style="cursor:pointer;"><rect x="72.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-04</text></g>
-          <g id="spot-R3-05" class="rack-spot" onclick="spotClick('R3-05')" style="cursor:pointer;"><rect x="72.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-05</text></g>
-          <g id="spot-R3-06" class="rack-spot" onclick="spotClick('R3-06')" style="cursor:pointer;"><rect x="72.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-06</text></g>
-          <g id="spot-R3-07" class="rack-spot" onclick="spotClick('R3-07')" style="cursor:pointer;"><rect x="72.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-07</text></g>
-          <g id="spot-R3-08" class="rack-spot" onclick="spotClick('R3-08')" style="cursor:pointer;"><rect x="72.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-08</text></g>
-        </g>
-
-          <!-- R2  Red -->
-          <g id="zone-R2" class="rack-zone" onclick="rackClick(&apos;R2&apos;)" style="cursor:pointer;">
-            <rect x="137" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-          
-        
-        
-        
-          <g id="spot-R2-01" class="rack-spot" onclick="spotClick('R2-01')" style="cursor:pointer;"><rect x="141.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-01</text></g>
-          <g id="spot-R2-02" class="rack-spot" onclick="spotClick('R2-02')" style="cursor:pointer;"><rect x="141.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-02</text></g>
-          <g id="spot-R2-03" class="rack-spot" onclick="spotClick('R2-03')" style="cursor:pointer;"><rect x="141.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-03</text></g>
-          <g id="spot-R2-04" class="rack-spot" onclick="spotClick('R2-04')" style="cursor:pointer;"><rect x="141.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-04</text></g>
-          <g id="spot-R2-05" class="rack-spot" onclick="spotClick('R2-05')" style="cursor:pointer;"><rect x="141.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-05</text></g>
-          <g id="spot-R2-06" class="rack-spot" onclick="spotClick('R2-06')" style="cursor:pointer;"><rect x="141.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-06</text></g>
-          <g id="spot-R2-07" class="rack-spot" onclick="spotClick('R2-07')" style="cursor:pointer;"><rect x="141.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-07</text></g>
-          <g id="spot-R2-08" class="rack-spot" onclick="spotClick('R2-08')" style="cursor:pointer;"><rect x="141.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-08</text></g>
-        </g>
-
-          <!-- R1  Red  TALL  (no gap to B-1) -->
-          <g id="zone-R1" class="rack-zone" onclick="rackClick(&apos;R1&apos;)" style="cursor:pointer;">
-            <rect x="227" y="128" width="60" height="313" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-          
-        
-        
-        
-          <g id="spot-R1-01" class="rack-spot" onclick="spotClick('R1-01')" style="cursor:pointer;"><rect x="231.0" y="417.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="429.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-01</text></g>
-          <g id="spot-R1-02" class="rack-spot" onclick="spotClick('R1-02')" style="cursor:pointer;"><rect x="231.0" y="397.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="409.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-02</text></g>
-          <g id="spot-R1-03" class="rack-spot" onclick="spotClick('R1-03')" style="cursor:pointer;"><rect x="231.0" y="377.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="388.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-03</text></g>
-          <g id="spot-R1-04" class="rack-spot" onclick="spotClick('R1-04')" style="cursor:pointer;"><rect x="231.0" y="356.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="368.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-04</text></g>
-          <g id="spot-R1-05" class="rack-spot" onclick="spotClick('R1-05')" style="cursor:pointer;"><rect x="231.0" y="336.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="348.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-05</text></g>
-          <g id="spot-R1-06" class="rack-spot" onclick="spotClick('R1-06')" style="cursor:pointer;"><rect x="231.0" y="316.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="327.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-06</text></g>
-          <g id="spot-R1-07" class="rack-spot" onclick="spotClick('R1-07')" style="cursor:pointer;"><rect x="231.0" y="295.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="307.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-07</text></g>
-          <g id="spot-R1-08" class="rack-spot" onclick="spotClick('R1-08')" style="cursor:pointer;"><rect x="231.0" y="275.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="287.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-08</text></g>
-          <g id="spot-R1-09" class="rack-spot" onclick="spotClick('R1-09')" style="cursor:pointer;"><rect x="231.0" y="255.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="266.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-09</text></g>
-          <g id="spot-R1-10" class="rack-spot" onclick="spotClick('R1-10')" style="cursor:pointer;"><rect x="231.0" y="234.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="246.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-10</text></g>
-          <g id="spot-R1-11" class="rack-spot" onclick="spotClick('R1-11')" style="cursor:pointer;"><rect x="231.0" y="214.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="226.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-11</text></g>
-          <g id="spot-R1-12" class="rack-spot" onclick="spotClick('R1-12')" style="cursor:pointer;"><rect x="231.0" y="194.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="205.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-12</text></g>
-          <g id="spot-R1-13" class="rack-spot" onclick="spotClick('R1-13')" style="cursor:pointer;"><rect x="231.0" y="173.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="185.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-13</text></g>
-          <g id="spot-R1-14" class="rack-spot" onclick="spotClick('R1-14')" style="cursor:pointer;"><rect x="231.0" y="153.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="165.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-14</text></g>
-          <g id="spot-R1-15" class="rack-spot" onclick="spotClick('R1-15')" style="cursor:pointer;"><rect x="231.0" y="133.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="144.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-15</text></g>
-        </g>
-
-          <!-- B-1  Blue  (touches R1) -->
-          <g id="zone-B-1" class="rack-zone" onclick="rackClick(&apos;B-1&apos;)" style="cursor:pointer;">
-            <rect x="289" y="128" width="60" height="313" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/>
-          
-        
-        
-        
-          <g id="spot-B-1-01" class="rack-spot" onclick="spotClick('B-1-01')" style="cursor:pointer;"><rect x="293.0" y="422.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="431.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-01</text></g>
-          <g id="spot-B-1-02" class="rack-spot" onclick="spotClick('B-1-02')" style="cursor:pointer;"><rect x="293.0" y="407.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="416.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-02</text></g>
-          <g id="spot-B-1-03" class="rack-spot" onclick="spotClick('B-1-03')" style="cursor:pointer;"><rect x="293.0" y="392.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="401.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-03</text></g>
-          <g id="spot-B-1-04" class="rack-spot" onclick="spotClick('B-1-04')" style="cursor:pointer;"><rect x="293.0" y="377.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="386.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-04</text></g>
-          <g id="spot-B-1-05" class="rack-spot" onclick="spotClick('B-1-05')" style="cursor:pointer;"><rect x="293.0" y="361.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="370.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-05</text></g>
-          <g id="spot-B-1-06" class="rack-spot" onclick="spotClick('B-1-06')" style="cursor:pointer;"><rect x="293.0" y="346.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="355.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-06</text></g>
-          <g id="spot-B-1-07" class="rack-spot" onclick="spotClick('B-1-07')" style="cursor:pointer;"><rect x="293.0" y="331.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="340.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-07</text></g>
-          <g id="spot-B-1-08" class="rack-spot" onclick="spotClick('B-1-08')" style="cursor:pointer;"><rect x="293.0" y="316.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="325.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-08</text></g>
-          <g id="spot-B-1-09" class="rack-spot" onclick="spotClick('B-1-09')" style="cursor:pointer;"><rect x="293.0" y="300.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="309.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-09</text></g>
-          <g id="spot-B-1-10" class="rack-spot" onclick="spotClick('B-1-10')" style="cursor:pointer;"><rect x="293.0" y="285.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="294.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-10</text></g>
-          <g id="spot-B-1-11" class="rack-spot" onclick="spotClick('B-1-11')" style="cursor:pointer;"><rect x="293.0" y="270.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="279.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-11</text></g>
-          <g id="spot-B-1-12" class="rack-spot" onclick="spotClick('B-1-12')" style="cursor:pointer;"><rect x="293.0" y="255.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="264.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-12</text></g>
-          <g id="spot-B-1-13" class="rack-spot" onclick="spotClick('B-1-13')" style="cursor:pointer;"><rect x="293.0" y="239.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="248.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-13</text></g>
-          <g id="spot-B-1-14" class="rack-spot" onclick="spotClick('B-1-14')" style="cursor:pointer;"><rect x="293.0" y="224.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="233.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-14</text></g>
-          <g id="spot-B-1-15" class="rack-spot" onclick="spotClick('B-1-15')" style="cursor:pointer;"><rect x="293.0" y="209.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="218.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-15</text></g>
-          <g id="spot-B-1-16" class="rack-spot" onclick="spotClick('B-1-16')" style="cursor:pointer;"><rect x="293.0" y="194.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="203.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-16</text></g>
-          <g id="spot-B-1-17" class="rack-spot" onclick="spotClick('B-1-17')" style="cursor:pointer;"><rect x="293.0" y="178.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="187.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-17</text></g>
-          <g id="spot-B-1-18" class="rack-spot" onclick="spotClick('B-1-18')" style="cursor:pointer;"><rect x="293.0" y="163.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="172.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-18</text></g>
-          <g id="spot-B-1-19" class="rack-spot" onclick="spotClick('B-1-19')" style="cursor:pointer;"><rect x="293.0" y="148.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="157.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-19</text></g>
-          <g id="spot-B-1-20" class="rack-spot" onclick="spotClick('B-1-20')" style="cursor:pointer;"><rect x="293.0" y="133.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="142.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-20</text></g>
-        </g>
-
-          <!-- A-1  Magenta  right=R1 left, extends to south wall -->
-          <g id="zone-A-1" class="rack-zone" onclick="rackClick(&apos;A-1&apos;)" style="cursor:pointer;">
-            <rect x="68" y="389" width="129" height="180" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
-        
-          <g id="spot-A-1-01" class="rack-spot" onclick="spotClick('A-1-01')" style="cursor:pointer;"><rect x="163.8" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-01</text></g>
-          <g id="spot-A-1-02" class="rack-spot" onclick="spotClick('A-1-02')" style="cursor:pointer;"><rect x="133.5" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-02</text></g>
-          <g id="spot-A-1-03" class="rack-spot" onclick="spotClick('A-1-03')" style="cursor:pointer;"><rect x="103.2" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-03</text></g>
-          <g id="spot-A-1-04" class="rack-spot" onclick="spotClick('A-1-04')" style="cursor:pointer;"><rect x="73.0" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-04</text></g>
-          <g id="spot-A-1-05" class="rack-spot" onclick="spotClick('A-1-05')" style="cursor:pointer;"><rect x="163.8" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-05</text></g>
-          <g id="spot-A-1-06" class="rack-spot" onclick="spotClick('A-1-06')" style="cursor:pointer;"><rect x="133.5" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-06</text></g>
-          <g id="spot-A-1-07" class="rack-spot" onclick="spotClick('A-1-07')" style="cursor:pointer;"><rect x="103.2" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-07</text></g>
-          <g id="spot-A-1-08" class="rack-spot" onclick="spotClick('A-1-08')" style="cursor:pointer;"><rect x="73.0" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-08</text></g>
-          <g id="spot-A-1-09" class="rack-spot" onclick="spotClick('A-1-09')" style="cursor:pointer;"><rect x="163.8" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-09</text></g>
-          <g id="spot-A-1-10" class="rack-spot" onclick="spotClick('A-1-10')" style="cursor:pointer;"><rect x="133.5" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-10</text></g>
-          <g id="spot-A-1-11" class="rack-spot" onclick="spotClick('A-1-11')" style="cursor:pointer;"><rect x="103.2" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-11</text></g>
-          <g id="spot-A-1-12" class="rack-spot" onclick="spotClick('A-1-12')" style="cursor:pointer;"><rect x="73.0" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-12</text></g>
-          <g id="spot-A-1-13" class="rack-spot" onclick="spotClick('A-1-13')" style="cursor:pointer;"><rect x="163.8" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-13</text></g>
-          <g id="spot-A-1-14" class="rack-spot" onclick="spotClick('A-1-14')" style="cursor:pointer;"><rect x="133.5" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-14</text></g>
-          <g id="spot-A-1-15" class="rack-spot" onclick="spotClick('A-1-15')" style="cursor:pointer;"><rect x="103.2" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-15</text></g>
-          <g id="spot-A-1-16" class="rack-spot" onclick="spotClick('A-1-16')" style="cursor:pointer;"><rect x="73.0" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-16</text></g>
-          <g id="spot-A-1-17" class="rack-spot" onclick="spotClick('A-1-17')" style="cursor:pointer;"><rect x="163.8" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-17</text></g>
-          <g id="spot-A-1-18" class="rack-spot" onclick="spotClick('A-1-18')" style="cursor:pointer;"><rect x="133.5" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-18</text></g>
-          <g id="spot-A-1-19" class="rack-spot" onclick="spotClick('A-1-19')" style="cursor:pointer;"><rect x="103.2" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-19</text></g>
-          <g id="spot-A-1-20" class="rack-spot" onclick="spotClick('A-1-20')" style="cursor:pointer;"><rect x="73.0" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-20</text></g>
-        </g>
-
-          <!-- C-1 Orange · 3 rows × 4 cols · 9 spots -->
-          <g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;">
-            <rect x="117" y="44" width="80" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
-          
-            <g id="spot-C-1-01" class="rack-spot" onclick="spotClick('C-1-01')" style="cursor:pointer;"><rect x="121.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-01</text></g>
-            <g id="spot-C-1-02" class="rack-spot" onclick="spotClick('C-1-02')" style="cursor:pointer;"><rect x="139.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-02</text></g>
-            <g id="spot-C-1-03" class="rack-spot" onclick="spotClick('C-1-03')" style="cursor:pointer;"><rect x="158.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-03</text></g>
-            <g id="spot-C-1-04" class="rack-spot" onclick="spotClick('C-1-04')" style="cursor:pointer;"><rect x="176.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-04</text></g>
-            <g id="spot-C-1-05" class="rack-spot" onclick="spotClick('C-1-05')" style="cursor:pointer;"><rect x="121.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-05</text></g>
-            <g id="spot-C-1-06" class="rack-spot" onclick="spotClick('C-1-06')" style="cursor:pointer;"><rect x="139.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-06</text></g>
-            <g id="spot-C-1-07" class="rack-spot" onclick="spotClick('C-1-07')" style="cursor:pointer;"><rect x="158.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-07</text></g>
-            <g id="spot-C-1-08" class="rack-spot" onclick="spotClick('C-1-08')" style="cursor:pointer;"><rect x="176.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-08</text></g>
-            <g id="spot-C-1-09" class="rack-spot" onclick="spotClick('C-1-09')" style="cursor:pointer;"><rect x="121.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-09</text></g>
-            <g id="spot-C-1-10" class="rack-spot" onclick="spotClick('C-1-10')" style="cursor:pointer;"><rect x="139.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-10</text></g>
-            <g id="spot-C-1-11" class="rack-spot" onclick="spotClick('C-1-11')" style="cursor:pointer;"><rect x="158.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-11</text></g>
-            <g id="spot-C-1-12" class="rack-spot" onclick="spotClick('C-1-12')" style="cursor:pointer;"><rect x="176.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-12</text></g>
-          </g>
-          <!-- PICK ROUTE -->
-          <polyline id="rack-route-path"  points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/>
-          <polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/>
-
-        </svg>
+        <svg id="rack-svg" viewBox="55 25 620 645" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:560px;height:auto;display:block;font-family:Arial,sans-serif;"><defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#0af"/></marker><pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#555" stroke-width="1.5"/></pattern></defs><!-- OUTER WALL --><rect x="60" y="40" width="580" height="600" fill="#161616" stroke="#666" stroke-width="3" rx="2"/><!-- DOCK DOORS --><rect x="155" y="37" width="60" height="7" fill="#161616" stroke="none"/><line x1="155" y1="40" x2="155" y2="46" stroke="#888" stroke-width="2"/><line x1="215" y1="40" x2="215" y2="46" stroke="#888" stroke-width="2"/><text x="185" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-1</text><rect x="248" y="37" width="60" height="7" fill="#161616" stroke="none"/><line x1="248" y1="40" x2="248" y2="46" stroke="#888" stroke-width="2"/><line x1="308" y1="40" x2="308" y2="46" stroke="#888" stroke-width="2"/><text x="278" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-2</text><rect x="340" y="37" width="90" height="7" fill="#161616" stroke="none"/><line x1="340" y1="40" x2="340" y2="46" stroke="#888" stroke-width="2"/><line x1="430" y1="40" x2="430" y2="46" stroke="#888" stroke-width="2"/><text x="385" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-3</text><!-- OFFICE / RESTROOM bottom-right --><rect x="416" y="434" width="218" height="198" fill="#1e1e1e" stroke="#555" stroke-width="1.5"/><text x="525" y="518" text-anchor="middle" fill="#555" font-size="12" font-weight="700">OFFICE /</text><text x="525" y="536" text-anchor="middle" fill="#555" font-size="12" font-weight="700">RESTROOM</text><!-- AISLE between R2 and R1 --><rect x="197" y="128" width="30" height="376" fill="#0d0d0d" opacity="0.8"/><text x="212" y="318" text-anchor="middle" fill="#2d2d2d" font-size="7" transform="rotate(-90,212,318)">AISLE</text><!-- ENTRANCE --><text x="340" y="655" text-anchor="middle" fill="#444" font-size="9" letter-spacing="2">ENTRANCE / EXIT (SOUTH)</text><line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/><!-- COMPASS --><g transform="translate(628,628)"><circle cx="0" cy="0" r="16" fill="none" stroke="#444" stroke-width="1.5"/><text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text><polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/></g></g></g></g><!-- R3 Red --><g id="zone-R3" class="rack-zone" onclick="rackClick(&apos;R3&apos;)" style="cursor:pointer;"><rect x="68" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R3-01" class="rack-spot" onclick="spotClick('R3-01')" style="cursor:pointer;"><rect x="72.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-01</text></g><g id="spot-R3-02" class="rack-spot" onclick="spotClick('R3-02')" style="cursor:pointer;"><rect x="72.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-02</text></g><g id="spot-R3-03" class="rack-spot" onclick="spotClick('R3-03')" style="cursor:pointer;"><rect x="72.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-03</text></g><g id="spot-R3-04" class="rack-spot" onclick="spotClick('R3-04')" style="cursor:pointer;"><rect x="72.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-04</text></g><g id="spot-R3-05" class="rack-spot" onclick="spotClick('R3-05')" style="cursor:pointer;"><rect x="72.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-05</text></g><g id="spot-R3-06" class="rack-spot" onclick="spotClick('R3-06')" style="cursor:pointer;"><rect x="72.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-06</text></g><g id="spot-R3-07" class="rack-spot" onclick="spotClick('R3-07')" style="cursor:pointer;"><rect x="72.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-07</text></g><g id="spot-R3-08" class="rack-spot" onclick="spotClick('R3-08')" style="cursor:pointer;"><rect x="72.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-08</text></g></g><!-- R2 Red --><g id="zone-R2" class="rack-zone" onclick="rackClick(&apos;R2&apos;)" style="cursor:pointer;"><rect x="137" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R2-01" class="rack-spot" onclick="spotClick('R2-01')" style="cursor:pointer;"><rect x="141.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-01</text></g><g id="spot-R2-02" class="rack-spot" onclick="spotClick('R2-02')" style="cursor:pointer;"><rect x="141.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-02</text></g><g id="spot-R2-03" class="rack-spot" onclick="spotClick('R2-03')" style="cursor:pointer;"><rect x="141.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-03</text></g><g id="spot-R2-04" class="rack-spot" onclick="spotClick('R2-04')" style="cursor:pointer;"><rect x="141.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-04</text></g><g id="spot-R2-05" class="rack-spot" onclick="spotClick('R2-05')" style="cursor:pointer;"><rect x="141.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-05</text></g><g id="spot-R2-06" class="rack-spot" onclick="spotClick('R2-06')" style="cursor:pointer;"><rect x="141.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-06</text></g><g id="spot-R2-07" class="rack-spot" onclick="spotClick('R2-07')" style="cursor:pointer;"><rect x="141.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-07</text></g><g id="spot-R2-08" class="rack-spot" onclick="spotClick('R2-08')" style="cursor:pointer;"><rect x="141.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-08</text></g></g><!-- R1 Red TALL (no gap to B-1) --><g id="zone-R1" class="rack-zone" onclick="rackClick(&apos;R1&apos;)" style="cursor:pointer;"><rect x="227" y="128" width="60" height="313" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R1-01" class="rack-spot" onclick="spotClick('R1-01')" style="cursor:pointer;"><rect x="231.0" y="417.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="429.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-01</text></g><g id="spot-R1-02" class="rack-spot" onclick="spotClick('R1-02')" style="cursor:pointer;"><rect x="231.0" y="397.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="409.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-02</text></g><g id="spot-R1-03" class="rack-spot" onclick="spotClick('R1-03')" style="cursor:pointer;"><rect x="231.0" y="377.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="388.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-03</text></g><g id="spot-R1-04" class="rack-spot" onclick="spotClick('R1-04')" style="cursor:pointer;"><rect x="231.0" y="356.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="368.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-04</text></g><g id="spot-R1-05" class="rack-spot" onclick="spotClick('R1-05')" style="cursor:pointer;"><rect x="231.0" y="336.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="348.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-05</text></g><g id="spot-R1-06" class="rack-spot" onclick="spotClick('R1-06')" style="cursor:pointer;"><rect x="231.0" y="316.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="327.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-06</text></g><g id="spot-R1-07" class="rack-spot" onclick="spotClick('R1-07')" style="cursor:pointer;"><rect x="231.0" y="295.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="307.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-07</text></g><g id="spot-R1-08" class="rack-spot" onclick="spotClick('R1-08')" style="cursor:pointer;"><rect x="231.0" y="275.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="287.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-08</text></g><g id="spot-R1-09" class="rack-spot" onclick="spotClick('R1-09')" style="cursor:pointer;"><rect x="231.0" y="255.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="266.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-09</text></g><g id="spot-R1-10" class="rack-spot" onclick="spotClick('R1-10')" style="cursor:pointer;"><rect x="231.0" y="234.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="246.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-10</text></g><g id="spot-R1-11" class="rack-spot" onclick="spotClick('R1-11')" style="cursor:pointer;"><rect x="231.0" y="214.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="226.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-11</text></g><g id="spot-R1-12" class="rack-spot" onclick="spotClick('R1-12')" style="cursor:pointer;"><rect x="231.0" y="194.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="205.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-12</text></g><g id="spot-R1-13" class="rack-spot" onclick="spotClick('R1-13')" style="cursor:pointer;"><rect x="231.0" y="173.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="185.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-13</text></g><g id="spot-R1-14" class="rack-spot" onclick="spotClick('R1-14')" style="cursor:pointer;"><rect x="231.0" y="153.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="165.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-14</text></g><g id="spot-R1-15" class="rack-spot" onclick="spotClick('R1-15')" style="cursor:pointer;"><rect x="231.0" y="133.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="144.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-15</text></g></g><!-- B-1 Blue (touches R1) --><g id="zone-B-1" class="rack-zone" onclick="rackClick(&apos;B-1&apos;)" style="cursor:pointer;"><rect x="289" y="128" width="60" height="313" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/><g id="spot-B-1-01" class="rack-spot" onclick="spotClick('B-1-01')" style="cursor:pointer;"><rect x="293.0" y="422.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="431.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-01</text></g><g id="spot-B-1-02" class="rack-spot" onclick="spotClick('B-1-02')" style="cursor:pointer;"><rect x="293.0" y="407.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="416.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-02</text></g><g id="spot-B-1-03" class="rack-spot" onclick="spotClick('B-1-03')" style="cursor:pointer;"><rect x="293.0" y="392.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="401.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-03</text></g><g id="spot-B-1-04" class="rack-spot" onclick="spotClick('B-1-04')" style="cursor:pointer;"><rect x="293.0" y="377.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="386.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-04</text></g><g id="spot-B-1-05" class="rack-spot" onclick="spotClick('B-1-05')" style="cursor:pointer;"><rect x="293.0" y="361.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="370.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-05</text></g><g id="spot-B-1-06" class="rack-spot" onclick="spotClick('B-1-06')" style="cursor:pointer;"><rect x="293.0" y="346.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="355.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-06</text></g><g id="spot-B-1-07" class="rack-spot" onclick="spotClick('B-1-07')" style="cursor:pointer;"><rect x="293.0" y="331.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="340.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-07</text></g><g id="spot-B-1-08" class="rack-spot" onclick="spotClick('B-1-08')" style="cursor:pointer;"><rect x="293.0" y="316.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="325.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-08</text></g><g id="spot-B-1-09" class="rack-spot" onclick="spotClick('B-1-09')" style="cursor:pointer;"><rect x="293.0" y="300.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="309.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-09</text></g><g id="spot-B-1-10" class="rack-spot" onclick="spotClick('B-1-10')" style="cursor:pointer;"><rect x="293.0" y="285.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="294.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-10</text></g><g id="spot-B-1-11" class="rack-spot" onclick="spotClick('B-1-11')" style="cursor:pointer;"><rect x="293.0" y="270.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="279.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-11</text></g><g id="spot-B-1-12" class="rack-spot" onclick="spotClick('B-1-12')" style="cursor:pointer;"><rect x="293.0" y="255.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="264.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-12</text></g><g id="spot-B-1-13" class="rack-spot" onclick="spotClick('B-1-13')" style="cursor:pointer;"><rect x="293.0" y="239.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="248.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-13</text></g><g id="spot-B-1-14" class="rack-spot" onclick="spotClick('B-1-14')" style="cursor:pointer;"><rect x="293.0" y="224.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="233.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-14</text></g><g id="spot-B-1-15" class="rack-spot" onclick="spotClick('B-1-15')" style="cursor:pointer;"><rect x="293.0" y="209.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="218.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-15</text></g><g id="spot-B-1-16" class="rack-spot" onclick="spotClick('B-1-16')" style="cursor:pointer;"><rect x="293.0" y="194.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="203.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-16</text></g><g id="spot-B-1-17" class="rack-spot" onclick="spotClick('B-1-17')" style="cursor:pointer;"><rect x="293.0" y="178.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="187.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-17</text></g><g id="spot-B-1-18" class="rack-spot" onclick="spotClick('B-1-18')" style="cursor:pointer;"><rect x="293.0" y="163.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="172.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-18</text></g><g id="spot-B-1-19" class="rack-spot" onclick="spotClick('B-1-19')" style="cursor:pointer;"><rect x="293.0" y="148.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="157.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-19</text></g><g id="spot-B-1-20" class="rack-spot" onclick="spotClick('B-1-20')" style="cursor:pointer;"><rect x="293.0" y="133.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="142.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-20</text></g></g><!-- A-1 Magenta right=R1 left, extends to south wall --><g id="zone-A-1" class="rack-zone" onclick="rackClick(&apos;A-1&apos;)" style="cursor:pointer;"><rect x="68" y="389" width="129" height="180" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/><g id="spot-A-1-01" class="rack-spot" onclick="spotClick('A-1-01')" style="cursor:pointer;"><rect x="163.8" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-01</text></g><g id="spot-A-1-02" class="rack-spot" onclick="spotClick('A-1-02')" style="cursor:pointer;"><rect x="133.5" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-02</text></g><g id="spot-A-1-03" class="rack-spot" onclick="spotClick('A-1-03')" style="cursor:pointer;"><rect x="103.2" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-03</text></g><g id="spot-A-1-04" class="rack-spot" onclick="spotClick('A-1-04')" style="cursor:pointer;"><rect x="73.0" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-04</text></g><g id="spot-A-1-05" class="rack-spot" onclick="spotClick('A-1-05')" style="cursor:pointer;"><rect x="163.8" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-05</text></g><g id="spot-A-1-06" class="rack-spot" onclick="spotClick('A-1-06')" style="cursor:pointer;"><rect x="133.5" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-06</text></g><g id="spot-A-1-07" class="rack-spot" onclick="spotClick('A-1-07')" style="cursor:pointer;"><rect x="103.2" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-07</text></g><g id="spot-A-1-08" class="rack-spot" onclick="spotClick('A-1-08')" style="cursor:pointer;"><rect x="73.0" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-08</text></g><g id="spot-A-1-09" class="rack-spot" onclick="spotClick('A-1-09')" style="cursor:pointer;"><rect x="163.8" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-09</text></g><g id="spot-A-1-10" class="rack-spot" onclick="spotClick('A-1-10')" style="cursor:pointer;"><rect x="133.5" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-10</text></g><g id="spot-A-1-11" class="rack-spot" onclick="spotClick('A-1-11')" style="cursor:pointer;"><rect x="103.2" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-11</text></g><g id="spot-A-1-12" class="rack-spot" onclick="spotClick('A-1-12')" style="cursor:pointer;"><rect x="73.0" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-12</text></g><g id="spot-A-1-13" class="rack-spot" onclick="spotClick('A-1-13')" style="cursor:pointer;"><rect x="163.8" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-13</text></g><g id="spot-A-1-14" class="rack-spot" onclick="spotClick('A-1-14')" style="cursor:pointer;"><rect x="133.5" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-14</text></g><g id="spot-A-1-15" class="rack-spot" onclick="spotClick('A-1-15')" style="cursor:pointer;"><rect x="103.2" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-15</text></g><g id="spot-A-1-16" class="rack-spot" onclick="spotClick('A-1-16')" style="cursor:pointer;"><rect x="73.0" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-16</text></g><g id="spot-A-1-17" class="rack-spot" onclick="spotClick('A-1-17')" style="cursor:pointer;"><rect x="163.8" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-17</text></g><g id="spot-A-1-18" class="rack-spot" onclick="spotClick('A-1-18')" style="cursor:pointer;"><rect x="133.5" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-18</text></g><g id="spot-A-1-19" class="rack-spot" onclick="spotClick('A-1-19')" style="cursor:pointer;"><rect x="103.2" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-19</text></g><g id="spot-A-1-20" class="rack-spot" onclick="spotClick('A-1-20')" style="cursor:pointer;"><rect x="73.0" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-20</text></g></g><!-- C-1 Orange · 3 rows × 4 cols · 9 spots --><g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;"><rect x="117" y="44" width="80" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/><g id="spot-C-1-01" class="rack-spot" onclick="spotClick('C-1-01')" style="cursor:pointer;"><rect x="121.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-01</text></g><g id="spot-C-1-02" class="rack-spot" onclick="spotClick('C-1-02')" style="cursor:pointer;"><rect x="139.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-02</text></g><g id="spot-C-1-03" class="rack-spot" onclick="spotClick('C-1-03')" style="cursor:pointer;"><rect x="158.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-03</text></g><g id="spot-C-1-04" class="rack-spot" onclick="spotClick('C-1-04')" style="cursor:pointer;"><rect x="176.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-04</text></g><g id="spot-C-1-05" class="rack-spot" onclick="spotClick('C-1-05')" style="cursor:pointer;"><rect x="121.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-05</text></g><g id="spot-C-1-06" class="rack-spot" onclick="spotClick('C-1-06')" style="cursor:pointer;"><rect x="139.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-06</text></g><g id="spot-C-1-07" class="rack-spot" onclick="spotClick('C-1-07')" style="cursor:pointer;"><rect x="158.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-07</text></g><g id="spot-C-1-08" class="rack-spot" onclick="spotClick('C-1-08')" style="cursor:pointer;"><rect x="176.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-08</text></g><g id="spot-C-1-09" class="rack-spot" onclick="spotClick('C-1-09')" style="cursor:pointer;"><rect x="121.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-09</text></g><g id="spot-C-1-10" class="rack-spot" onclick="spotClick('C-1-10')" style="cursor:pointer;"><rect x="139.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-10</text></g><g id="spot-C-1-11" class="rack-spot" onclick="spotClick('C-1-11')" style="cursor:pointer;"><rect x="158.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-11</text></g><g id="spot-C-1-12" class="rack-spot" onclick="spotClick('C-1-12')" style="cursor:pointer;"><rect x="176.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-12</text></g></g><!-- PICK ROUTE --><polyline id="rack-route-path" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/><polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/></svg>
       </div>
 
       <!-- Info panel -->
@@ -4622,7 +4340,7 @@ document.addEventListener('DOMContentLoaded',function(){
   </div>
 
   <!-- ══ DEV PANEL ══ -->
-  <div id="view-devpanel" class="view">
+  <div id="view-devpanel" class="view" style="padding:16px 18px;">
     <div style="width:100%;padding:0 0 20px;">
 
       <!-- Header -->
