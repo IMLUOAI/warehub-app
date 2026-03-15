@@ -167,7 +167,24 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 @keyframes shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
 
 
-#fm-btn{position:fixed;bottom:74px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
+.dev-section{background:var(--sur);border:1px solid var(--bdr);margin-bottom:12px;}
+.dev-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.5px;user-select:none;}
+.dev-section-hdr:hover{background:var(--bg);}
+.dev-section-body{padding:16px;border-top:1px solid var(--bdr);}
+.dev-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.dev-field{display:flex;flex-direction:column;gap:4px;}
+.dev-field.dev-wide{grid-column:1/-1;}
+.dev-label{font-size:8px;letter-spacing:2px;color:var(--td);font-weight:700;}
+.dev-link{font-size:11px;color:var(--cy);text-decoration:none;word-break:break-all;}
+.dev-link:hover{text-decoration:underline;}
+.dev-code{font-size:10px;color:#0af;background:var(--bg);padding:4px 8px;font-family:monospace;word-break:break-all;}
+.dev-note{font-size:10px;color:var(--tx);line-height:1.6;}
+.dev-editable{font-size:10px;color:var(--tx);background:var(--bg);border:1px solid var(--bdr);padding:5px 8px;outline:none;font-family:monospace;word-break:break-all;}
+.dev-editable:focus{border-color:var(--cy);}
+.dev-chevron{font-size:12px;transition:transform .2s;}
+.dev-section.collapsed .dev-section-body{display:none;}
+.dev-section.collapsed .dev-chevron{transform:rotate(-90deg);}
+@media(max-width:600px){.dev-grid{grid-template-columns:1fr;}}bottom:74px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
 #fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:300px;background:var(--sur);border:1px solid var(--bdr);padding:14px;flex-direction:column;box-shadow:0 4px 24px #0008;}
 
 #ai-btn{position:fixed;bottom:20px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:20px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 16px #6366f166;}
@@ -205,6 +222,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
     <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
     <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
+    <button class="tab" data-view="devpanel" onclick="gv('devpanel')">⚙ Dev Panel</button>
   </div>
 </div>
 
@@ -547,6 +565,7 @@ function gv(name){
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
   if(name==='rackmap'){ rackClearHighlight(); }
+  if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); }
@@ -2872,8 +2891,71 @@ function fmQ(q){
   frame.style.display='block';
 }
 // ══════════════════════════════════════════
-// VEHICLE LOG
+// DEV PANEL
 // ══════════════════════════════════════════
+function devLoad(){
+  try{
+    var data=JSON.parse(localStorage.getItem('warehub_devpanel')||'{}');
+    document.querySelectorAll('[data-key]').forEach(function(el){
+      if(data[el.dataset.key]) el.textContent=data[el.dataset.key];
+    });
+    var notes=document.getElementById('dev-custom-notes');
+    if(notes&&data.custom_notes) notes.value=data.custom_notes;
+    // Show redirect URI
+    var redir=document.getElementById('dev-azure-redirect');
+    if(redir) redir.textContent=window.location.origin+window.location.pathname;
+    // Sync worker URL from AI proxy setting
+    var workerUrl=localStorage.getItem('warehub_ai_proxy')||'';
+    var workerEl=document.getElementById('dev-worker-url');
+    if(workerEl&&workerUrl&&workerEl.textContent.includes('anthropic-proxy.imluoai')) workerEl.textContent=workerUrl;
+  }catch(e){}
+}
+
+function devSave(){
+  try{
+    var data={};
+    document.querySelectorAll('[data-key]').forEach(function(el){
+      data[el.dataset.key]=el.textContent.trim();
+    });
+    var notes=document.getElementById('dev-custom-notes');
+    if(notes) data.custom_notes=notes.value;
+    localStorage.setItem('warehub_devpanel',JSON.stringify(data));
+    pm('✓ Dev panel notes saved.');
+  }catch(e){ pm('✗ Save failed: '+e.message); }
+}
+
+function devExport(){
+  devSave();
+  var lines=['WAREHUB APP — DEVELOPER REFERENCE','Generated: '+new Date().toLocaleString(),'',''];
+  document.querySelectorAll('.dev-section').forEach(function(sec){
+    var hdr=sec.querySelector('.dev-section-hdr span:first-child');
+    if(hdr) lines.push('=== '+hdr.textContent+' ===');
+    sec.querySelectorAll('.dev-field').forEach(function(f){
+      var lbl=f.querySelector('.dev-label');
+      var val=f.querySelector('.dev-link,.dev-code,.dev-note,.dev-editable');
+      if(lbl&&val) lines.push(lbl.textContent+': '+(val.href||val.textContent).trim());
+    });
+    lines.push('');
+  });
+  var notes=document.getElementById('dev-custom-notes');
+  if(notes&&notes.value){ lines.push('=== CUSTOM NOTES ==='); lines.push(notes.value); }
+  var blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='warehub-dev-reference.txt';
+  a.click();
+}
+
+function devToggle(hdr){
+  var section=hdr.closest('.dev-section');
+  section.classList.toggle('collapsed');
+}
+
+function devRender(){
+  devLoad();
+}
+
+
 
 var vehicleTrips = [];
 
@@ -3932,6 +4014,137 @@ document.addEventListener('DOMContentLoaded',function(){
       <div id="rack-route-panel" style="display:none;background:var(--sur);border:1px solid var(--cy);margin-top:12px;padding:16px;">
         <div style="font-size:10px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">🚶 OPTIMAL PICK ROUTE</div>
         <div id="rack-route-steps" style="font-size:11px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ DEV PANEL ══ -->
+  <div id="view-devpanel" class="view">
+    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">DEVELOPER REFERENCE</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">App Config &amp; Service Registry</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">All connected services, accounts, and fix guides for Warehub</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-c" onclick="devSave()" style="font-size:9px;">💾 SAVE NOTES</button>
+          <button class="btn" onclick="devExport()" style="font-size:9px;">⬇ EXPORT</button>
+        </div>
+      </div>
+
+      <!-- ── SECTION: GitHub ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>🐙 GitHub — Source Code &amp; Deployment</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">REPO URL</div><a href="https://github.com/imluoai/warehub-app" target="_blank" class="dev-link">https://github.com/imluoai/warehub-app</a></div>
+            <div class="dev-field"><div class="dev-label">LIVE APP (GitHub Pages)</div><a href="https://imluoai.github.io/warehub-app/" target="_blank" class="dev-link">https://imluoai.github.io/warehub-app/</a></div>
+            <div class="dev-field"><div class="dev-label">DEPLOY COMMAND</div><code class="dev-code">git add index.html &amp;&amp; git commit -m "update" &amp;&amp; git push</code></div>
+            <div class="dev-field"><div class="dev-label">BRANCH</div><code class="dev-code">main</code></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX BUGS</div><div class="dev-note">Edit index.html locally → git push → GitHub Pages auto-deploys in ~1 min. Hard refresh browser (Ctrl+Shift+R) after deploy.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Microsoft Azure / Excel ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>🟦 Microsoft Azure — Excel Online Integration</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">AZURE PORTAL</div><a href="https://portal.azure.com" target="_blank" class="dev-link">portal.azure.com</a></div>
+            <div class="dev-field"><div class="dev-label">APP REGISTRATION NAME</div><div id="dev-azure-appname" class="dev-editable" contenteditable="true" data-key="azure_appname">Warehub</div></div>
+            <div class="dev-field"><div class="dev-label">CLIENT ID</div><div id="dev-azure-clientid" class="dev-editable" contenteditable="true" data-key="azure_clientid">Paste Client ID here</div></div>
+            <div class="dev-field"><div class="dev-label">TENANT ID</div><div id="dev-azure-tenantid" class="dev-editable" contenteditable="true" data-key="azure_tenantid">Paste Tenant ID here</div></div>
+            <div class="dev-field"><div class="dev-label">REDIRECT URI (must match Azure)</div><code id="dev-azure-redirect" class="dev-code">—</code></div>
+            <div class="dev-field"><div class="dev-label">EXCEL FILE NAME</div><div id="dev-azure-filename" class="dev-editable" contenteditable="true" data-key="azure_filename">ISCM Warehub 2026.xlsx</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">REQUIRED API PERMISSIONS</div><div class="dev-note">Files.ReadWrite · Sites.ReadWrite.All · User.Read — all with Admin Consent granted</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO RECONNECT EXCEL</div><div class="dev-note">Payroll tab → ⊞ CONNECT EXCEL → sign in. Token expires after ~1hr — just reconnect. If "Failed to fetch", check API permissions in Azure portal.</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX TOKEN EXPIRED</div><div class="dev-note">Payroll → ⚙ gear icon → DISCONNECT → CONNECT EXCEL → sign in again.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Google Maps ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>🗺 Google Maps — Vehicle Destination Search</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">GOOGLE CLOUD CONSOLE</div><a href="https://console.cloud.google.com" target="_blank" class="dev-link">console.cloud.google.com</a></div>
+            <div class="dev-field"><div class="dev-label">API KEY (hardcoded)</div><code class="dev-code">AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw</code></div>
+            <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps Embed API · Maps JavaScript API · Places API</div></div>
+            <div class="dev-field"><div class="dev-label">KEY RESTRICTIONS</div><div class="dev-note">Restricted to: https://imluoai.github.io/*</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX MAP NOT LOADING</div><div class="dev-note">Go to Google Cloud Console → APIs &amp; Services → Library → ensure all 3 APIs above are enabled. Check key restrictions include your GitHub Pages URL.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Anthropic / AI ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>🤖 Anthropic Claude — AI Assistant</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">ANTHROPIC CONSOLE</div><a href="https://console.anthropic.com" target="_blank" class="dev-link">console.anthropic.com</a></div>
+            <div class="dev-field"><div class="dev-label">MODEL USED</div><code class="dev-code">claude-sonnet-4-20250514</code></div>
+            <div class="dev-field"><div class="dev-label">API KEY LOCATION</div><div class="dev-note">Stored in Cloudflare Worker as secret variable ANTHROPIC_KEY (never exposed in browser)</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX AI NOT RESPONDING</div><div class="dev-note">1. Check Cloudflare Worker is deployed and Access policy is OFF · 2. Click 🤖 → ⚙ SETUP → TEST button · 3. Check ANTHROPIC_KEY secret is set in Worker variables · 4. Verify worker URL saved in app matches deployed worker</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Cloudflare Worker ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>☁ Cloudflare Worker — AI Proxy</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">CLOUDFLARE DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
+            <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">anthropic-proxy</code></div>
+            <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://anthropic-proxy.imluoai.workers.dev/</div></div>
+            <div class="dev-field"><div class="dev-label">SECRET VARIABLE NAME</div><code class="dev-code">ANTHROPIC_KEY</code></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO UPDATE WORKER CODE</div><div class="dev-note">dash.cloudflare.com → Workers &amp; Pages → anthropic-proxy → Edit Code → select all → paste new code → Deploy. Must have Access policy DISABLED (Settings → Access is OFF).</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX CORS ERROR</div><div class="dev-note">Worker code must include Access-Control-Allow-Origin: * on ALL responses including OPTIONS preflight. Redeploy worker with latest code from 🤖 → ⚙ SETUP.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: OMP / Lingxing ERP ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>📦 Lingxing ERP / OMP — Order Source</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <div class="dev-grid">
+            <div class="dev-field"><div class="dev-label">OMP WMS URL</div><a href="https://omp.xlms.com/wms/outbound/parcel" target="_blank" class="dev-link">omp.xlms.com/wms/outbound/parcel</a></div>
+            <div class="dev-field"><div class="dev-label">INTEGRATION METHOD</div><div class="dev-note">Daily PDF export from OMP → drag &amp; drop into Warehub Import tab</div></div>
+            <div class="dev-field"><div class="dev-label">LABEL FORMAT</div><div class="dev-note">GOFO SN-D2D ECO — text-based PDF, one label per page</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO IMPORT ORDERS</div><div class="dev-note">In OMP → export shipping labels as PDF → go to Warehub Import tab → drag PDF onto drop zone. App auto-detects carrier, SKU, shelf, tracking number per label.</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">SUPPORTED CARRIERS</div><div class="dev-note">FedEx · UPS · USPS · GOFO · SWIFT · SpeedX · Uniuni</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SECTION: Custom Notes ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)">
+          <span>📝 Custom Notes &amp; Reminders</span><span class="dev-chevron">▾</span>
+        </div>
+        <div class="dev-section-body">
+          <textarea id="dev-custom-notes" placeholder="Add your own notes, passwords, reminders, or anything else here…" style="width:100%;box-sizing:border-box;min-height:140px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:10px;font-size:11px;font-family:inherit;resize:vertical;outline:none;"></textarea>
+          <div style="font-size:9px;color:var(--td);margin-top:6px;">⚠ Stored in localStorage on this device only. Do not store passwords here if others use this device.</div>
+        </div>
       </div>
 
     </div>
