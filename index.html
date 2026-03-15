@@ -1,95 +1,4 @@
-<!DOC
-  <!-- ── Vehicle Log ── -->
-  <div id="view-vehicle" class="view">
-    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">VEHICLE LOG</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">Daily Usage Record</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · Company Vehicle</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;">📊 SAVE TO EXCEL</button>
-        </div>
-      </div>
-
-      <!-- New Trip Form -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:14px;">NEW TRIP ENTRY</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DRIVER</div>
-            <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— select driver —</option>
-            </select>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
-            <div style="position:relative;">
-              <div style="display:flex;gap:6px;">
-                <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" onkeydown="if(event.key==='Enter')vehicleAddTrip();"/>
-                <button onclick="vehMapSearch()" style="padding:4px 10px;font-size:12px;background:#4285f4;border:none;color:#fff;cursor:pointer;white-space:nowrap;" title="Search address on map">🔍</button>
-              </div>
-              <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DEPARTURE TIME</div>
-            <div style="display:flex;gap:6px;">
-              <input id="veh-depart" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-              <button onclick="vehicleSetNow('veh-depart')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TIME</div>
-            <div style="display:flex;gap:6px;">
-              <input id="veh-return" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-              <button onclick="vehicleSetNow('veh-return')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER START (mi)</div>
-            <input id="veh-odo-start" type="number" onkeydown="if(event.key==='Enter')vehicleAddTrip();" placeholder="e.g. 45230" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER END (mi)</div>
-            <input id="veh-odo-end" type="number" onkeydown="if(event.key==='Enter')vehicleAddTrip();" placeholder="e.g. 45265" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-        </div>
-        <div style="margin-bottom:12px;">
-          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">PURPOSE / NOTES</div>
-          <textarea id="veh-notes" placeholder="Purpose of trip, items picked up, fuel filled, any incidents…" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:60px;"></textarea>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div id="veh-form-msg" style="font-size:10px;color:var(--am);"></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn" onclick="vehicleClearForm()" style="font-size:9px;">✕ CLEAR</button>
-            <button class="btn btn-c" onclick="vehicleAddTrip()" style="font-size:9px;">+ LOG TRIP</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stats bar -->
-      <div id="veh-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
-
-      <!-- Trip log table -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
-          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">TRIP HISTORY</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input id="veh-filter" placeholder="Filter by driver or destination…" oninput="renderVehicleLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:200px;"/>
-            <button class="btn" onclick="if(confirm('Delete ALL trip records? This cannot be undone.')){{vehicleTrips=[];vehicleSave();renderVehicleLog();renderVehicleStats();}}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
-          </div>
-        </div>
-        <div id="veh-log" style="overflow-x:auto;"></div>
-      </div>
-
-    </div>
-  </div>
-TYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -3272,6 +3181,25 @@ function vehMapSearch(){
       var embedQ = encodeURIComponent(query);
       iframe.src = 'https://www.google.com/maps/embed/v1/search?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+embedQ+'&zoom=13';
       placeholder.style.display='none';
+      // Show USE THIS ADDRESS immediately with the searched query
+      document.getElementById('veh-map-selected').textContent = '📍 '+query;
+      var useBtn = document.getElementById('veh-map-use-btn');
+      if(useBtn){
+        useBtn.style.display='block';
+        // Wire it to use the raw query if no place selected yet
+        useBtn.onclick = function(){
+          var addr = selectedPlace ? (selectedPlace.formatted_address||selectedPlace.name) : query;
+          document.getElementById('veh-dest').value = addr;
+          var linkEl = document.getElementById('veh-dest-map-link');
+          if(linkEl){
+            var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addr);
+            linkEl.style.display='block';
+            linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:#4285f4;text-decoration:none;font-size:9px;">📍 View on Google Maps</a>';
+          }
+          modal.remove();
+          pm('✓ Destination set: '+addr);
+        };
+      }
     }
 
     // Also do Places text search for click-to-fill if Maps API loaded
@@ -3321,7 +3249,23 @@ function vehMapSearch(){
           placeholder.style.display='none';
           var label = place.name+(place.formatted_address?'  —  '+place.formatted_address:'');
           document.getElementById('veh-map-selected').textContent = '📍 '+label;
-          document.getElementById('veh-map-use-btn').style.display='block';
+          // Update USE THIS ADDRESS to use this specific place
+          var useBtn = document.getElementById('veh-map-use-btn');
+          if(useBtn){
+            useBtn.style.display='block';
+            useBtn.onclick = function(){
+              var finalAddr = place.formatted_address||place.name;
+              document.getElementById('veh-dest').value = finalAddr;
+              var linkEl = document.getElementById('veh-dest-map-link');
+              if(linkEl){
+                var mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(finalAddr)+'&query_place_id='+place.place_id;
+                linkEl.style.display='block';
+                linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:#4285f4;text-decoration:none;font-size:9px;">📍 View on Google Maps</a>';
+              }
+              modal.remove();
+              pm('✓ Destination set: '+finalAddr);
+            };
+          }
         };
         resultsEl.appendChild(row);
       });
@@ -3335,19 +3279,7 @@ function vehMapSearch(){
   setTimeout(function(){ document.getElementById('veh-map-search-input').focus(); },100);
 
   // Use address button
-  document.getElementById('veh-map-use-btn').onclick = function(){
-    if(!selectedPlace) return;
-    var addr = selectedPlace.formatted_address || selectedPlace.name;
-    document.getElementById('veh-dest').value = addr;
-    var linkEl = document.getElementById('veh-dest-map-link');
-    if(linkEl){
-      var mapsUrl = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addr)+'&query_place_id='+selectedPlace.place_id;
-      linkEl.style.display='block';
-      linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:#4285f4;text-decoration:none;font-size:9px;">📍 View on Google Maps</a>';
-    }
-    modal.remove();
-    pm('✓ Destination set: '+addr);
-  };
+  // USE THIS ADDRESS onclick is set dynamically in doSearch
 }
 
 function gmapsShowSetup(){ vehMapSearch(); } // alias kept for compatibility
@@ -3706,9 +3638,99 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
+  <!-- ── Vehicle Log ── -->
+  <div id="view-vehicle" class="view">
+    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">VEHICLE LOG</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Daily Usage Record</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · Company Vehicle</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;">⬇ EXPORT CSV</button>
+          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;">📊 SAVE TO EXCEL</button>
+        </div>
+      </div>
+
+      <!-- New Trip Form -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:14px;">NEW TRIP ENTRY</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DRIVER</div>
+            <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— select driver —</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
+            <div style="display:flex;gap:6px;">
+              <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <button onclick="vehMapSearch()" style="padding:4px 10px;font-size:12px;background:#4285f4;border:none;color:#fff;cursor:pointer;" title="Search on map">🔍</button>
+            </div>
+            <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DEPARTURE TIME</div>
+            <div style="display:flex;gap:6px;">
+              <input id="veh-depart" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <button onclick="vehicleSetNow('veh-depart')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TIME</div>
+            <div style="display:flex;gap:6px;">
+              <input id="veh-return" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+              <button onclick="vehicleSetNow('veh-return')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER START (mi)</div>
+            <input id="veh-odo-start" type="number" placeholder="e.g. 45230" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER END (mi)</div>
+            <input id="veh-odo-end" type="number" placeholder="e.g. 45265" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">PURPOSE / NOTES</div>
+          <textarea id="veh-notes" placeholder="Purpose of trip, items picked up, fuel filled, any incidents…" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:60px;"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div id="veh-form-msg" style="font-size:10px;color:var(--am);"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="vehicleClearForm()" style="font-size:9px;">✕ CLEAR</button>
+            <button class="btn btn-c" onclick="vehicleAddTrip()" style="font-size:9px;">+ LOG TRIP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div id="veh-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
+
+      <!-- Trip log table -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">TRIP HISTORY</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="veh-filter" placeholder="Filter by driver or destination…" oninput="renderVehicleLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:200px;"/>
+            <button class="btn" onclick="if(confirm('Delete ALL trip records?')){vehicleTrips=[];vehicleSave();renderVehicleLog();renderVehicleStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="veh-log" style="overflow-x:auto;"></div>
+      </div>
+
+    </div>
+  </div>
+
+
   <!-- ══ RACK MAP ══ -->
   <div id="view-rackmap" class="view">
-    <div style="padding:0 0 20px;">
+    <div style="max-width:600px;margin:0 auto;padding:0 0 20px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
@@ -3732,10 +3754,9 @@ document.addEventListener('DOMContentLoaded',function(){
         </div>
 
       <!-- Map container -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:12px;">
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:12px;display:flex;justify-content:center;">
         <svg id="rack-svg" viewBox="55 25 620 645" xmlns="http://www.w3.org/2000/svg"
-          style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;">
-          <!-- outer wall: x=60 y=40 w=580 h=600, compass at 628,628, text at y=655 -->
+          style="width:100%;max-width:560px;height:auto;display:block;font-family:Arial,sans-serif;">
           <defs>
             <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
               <polygon points="0 0,8 3,0 6" fill="#0af"/>
@@ -4042,3 +4063,4 @@ function aiDoActions(actions){
 }
 </script>
 </body>
+</html>
