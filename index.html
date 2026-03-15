@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
 <title>WAREHUB — Double Sided ISCM LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -14,23 +14,23 @@
   --rd:#ff3d5a;--pu:#c77dff;--dim:#2a3f5f;
   --tx:#e8f0fe;--td:#4a6080;
 }
-*{box-sizing:border-box;margin:0;padding:0;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;}
-body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:13px;height:100%;overflow:hidden;}
+body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:clamp(11px,1.5vw,13px);height:100%;overflow:hidden;}
 
 /* ── HEADER ── */
-#hdr{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:48px;border-bottom:1px solid var(--bdr);background:var(--sur);min-width:0;gap:8px;}
+#hdr{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;height:auto;min-height:44px;flex-wrap:wrap;border-bottom:1px solid var(--bdr);background:var(--sur);min-width:0;gap:8px;}
 #logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
 #dot{width:7px;height:7px;border-radius:50%;background:var(--bdr);margin-right:8px;transition:all .4s;}
 #dot.live{background:var(--gn);box-shadow:0 0 8px var(--gn);}
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
-.tabs{display:flex;gap:1px;overflow-x:auto;flex-shrink:1;min-width:0;scrollbar-width:none;}
+.tabs{display:flex;gap:1px;overflow-x:auto;flex-shrink:1;min-width:0;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 .tab{padding:5px 10px;font-size:9px;letter-spacing:1.5px;border:1px solid var(--bdr);cursor:pointer;font-family:inherit;white-space:nowrap;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;}
 .tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
 
 /* ── LAYOUT ── */
 #app{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:0;}
-.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow-y:auto;overflow-x:hidden;}
+.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 .view.on{display:flex;}
 
 /* ── SHARED ── */
@@ -52,7 +52,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #debug-box{display:none;margin-top:10px;}
 
 /* ── MANAGER: PACKER SETUP ── */
-#mgr-wrap{display:grid;grid-template-columns:340px 1fr;gap:12px;flex:1;min-height:0;overflow:hidden;}
+#mgr-wrap{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:12px;flex:1;min-height:0;overflow:hidden;}
 #packer-panel{display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
 .packer-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--bdr);}
 .packer-row.online{border-color:var(--gn);}
@@ -64,7 +64,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #assign-panel{display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
 .order-assign-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--bdr);}
 .oar-track{font-size:11px;color:var(--cy);font-weight:600;flex:1;}
-.oar-dest{font-size:10px;color:var(--td);min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oar-dest{font-size:10px;color:var(--td);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .oar-skus{font-size:9px;color:var(--td);}
 .packer-select{background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:4px 7px;font-size:10px;font-family:inherit;outline:none;min-width:100px;}
 .packer-select:focus{border-color:var(--cy);}
@@ -73,7 +73,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 /* Packer login overlay */
 #packer-login{position:absolute;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 #packer-login.hide{display:none;}
-#login-scan-in{width:320px;background:var(--sur);border:2px solid var(--cy);color:var(--tx);padding:12px 16px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:2px;}
+#login-scan-in{width:min(320px,90vw);background:var(--sur);border:2px solid var(--cy);color:var(--tx);padding:12px 16px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:2px;}
 #login-scan-in:focus{border-color:var(--gn);}
 #login-msg{font-size:11px;color:var(--td);min-height:16px;}
 #current-packer-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--sur);border:1px solid var(--bdr);}
@@ -83,7 +83,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #cp-switch{font-size:9px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--dim);color:var(--td);cursor:pointer;background:transparent;font-family:inherit;}
 #cp-switch:hover{border-color:var(--cy);color:var(--cy);}
 
-#pack-wrap{display:grid;grid-template-columns:1fr 300px;gap:10px;flex:1;min-height:0;overflow:hidden;}
+#pack-wrap{display:grid;grid-template-columns:1fr minmax(220px,300px);gap:10px;flex:1;min-height:0;overflow:hidden;}
 #left-col{display:flex;flex-direction:column;gap:8px;overflow:hidden;}
 #active-card{background:var(--sur);border:2px solid var(--cy);padding:18px;position:relative;transition:border-color .12s,background .12s;flex-shrink:0;}
 #active-card.ok{background:#00ff8814;border-color:var(--gn);}
@@ -106,7 +106,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #scan-row{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--sur);border:1px solid var(--bdr);flex-shrink:0;}
 #scan-in{flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 11px;font-size:13px;font-family:inherit;outline:none;letter-spacing:1px;}
 #scan-in:focus{border-color:var(--cy);}
-#scan-fb{font-size:10px;color:var(--td);text-align:right;min-width:180px;}
+#scan-fb{font-size:10px;color:var(--td);text-align:right;min-width:0;flex-shrink:1;}
 
 /* Queue */
 #queue{overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
@@ -184,25 +184,65 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 .dev-chevron{font-size:12px;transition:transform .2s;}
 .dev-section.collapsed .dev-section-body{display:none;}
 .dev-section.collapsed .dev-chevron{transform:rotate(-90deg);}
-@media(max-width:600px){.dev-grid{grid-template-columns:1fr;}}
-#fm-btn{position:fixed;bottom:74px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
-#fm-btn:hover{transform:scale(1.08);}
-#fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:300px;background:var(--sur);border:1px solid var(--bdr);padding:14px;display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}bottom:74px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:var(--cy);color:#000;font-size:18px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0008;}
-#fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:300px;background:var(--sur);border:1px solid var(--bdr);padding:14px;flex-direction:column;box-shadow:0 4px 24px #0008;}
+/* ── Floating Buttons ── */
+#fm-btn{position:fixed!important;bottom:74px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:var(--cy)!important;color:#000!important;font-size:18px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 12px #0008;transition:transform .15s;padding:0!important;}
+#fm-btn:hover{transform:scale(1.08)!important;}
+#fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:min(300px,92vw);background:var(--sur);border:1px solid var(--bdr);padding:14px;display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
+#ai-btn{position:fixed!important;bottom:20px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:#6366f1!important;color:#fff!important;font-size:20px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 16px #6366f166;transition:transform .15s;padding:0!important;}
+#ai-btn:hover{transform:scale(1.08)!important;}
+#ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:min(340px,95vw);height:min(480px,70vh);background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
 
-#ai-btn{position:fixed;bottom:20px;right:20px;z-index:9999;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:20px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 16px #6366f166;}
-#ai-btn:hover{transform:scale(1.08);}
-#ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:340px;height:480px;background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
-#ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
-#ai-msgs .ai-msg-user{background:#6366f122;border:1px solid #6366f144;padding:8px 10px;font-size:11px;color:var(--tx);align-self:flex-end;max-width:85%;border-radius:8px 8px 2px 8px;line-height:1.5;}
-#ai-msgs .ai-msg-ai{background:var(--bg);border:1px solid var(--bdr);padding:8px 10px;font-size:11px;color:var(--tx);align-self:flex-start;max-width:90%;border-radius:8px 8px 8px 2px;line-height:1.5;}
-#ai-msgs .ai-msg-sys{font-size:9px;color:var(--td);text-align:center;letter-spacing:1px;}
-#ai-input-row{display:flex;gap:6px;padding:10px;border-top:1px solid var(--bdr);}
-#ai-input{flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 10px;font-size:11px;font-family:inherit;outline:none;resize:none;height:36px;max-height:80px;}
-#ai-send{padding:7px 12px;background:#6366f1;border:none;color:#fff;cursor:pointer;font-size:12px;font-family:inherit;}
-#ai-key-row{display:flex;gap:6px;padding:0 10px 8px;flex-wrap:wrap;}
-#ai-key-row button{font-size:8px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;border-radius:3px;white-space:nowrap;}
-#ai-key-row button:hover{border-color:#6366f1;color:#6366f1;}
+/* ══ RESPONSIVE ══ */
+
+/* MacBook / large tablet landscape (≤1280px) */
+@media(max-width:1280px){
+  .tab{padding:4px 8px;font-size:8.5px;letter-spacing:1px;}
+}
+
+/* iPad landscape / small laptop (≤1024px) */
+@media(max-width:1024px){
+  #hdr{padding:0 8px;gap:6px;}
+  .tab{padding:4px 7px;font-size:8px;letter-spacing:0.8px;}
+  .view{padding:12px 14px;}
+  #ai-panel{width:min(320px,92vw);}
+  #fm-panel{width:min(280px,92vw)!important;}
+}
+
+/* iPad portrait / large phone landscape (≤768px) */
+@media(max-width:768px){
+  body{font-size:12px;}
+  #logo{font-size:14px;}
+  .tab{padding:4px 6px;font-size:7.5px;letter-spacing:0.5px;}
+  .view{padding:10px;}
+  #packer-grid,#dash-grid,#payroll-grid{grid-template-columns:1fr!important;}
+  .fp-card{min-width:80px;padding:8px 10px;}
+  .fc{min-width:70px;}
+  #fbar{width:95vw!important;}
+  #ai-panel{width:95vw!important;right:2.5vw!important;left:2.5vw!important;}
+  #fm-panel{width:92vw!important;right:4vw!important;}
+  .dev-grid{grid-template-columns:1fr!important;}
+  .rack-map-header{flex-direction:column;align-items:flex-start;}
+}
+
+/* Phone portrait (≤480px) */
+@media(max-width:480px){
+  body{font-size:11px;}
+  #logo{font-size:12px;letter-spacing:2px;}
+  .tab{padding:3px 5px;font-size:7px;letter-spacing:0;}
+  .view{padding:8px 6px;}
+  .btn{padding:5px 8px;font-size:8px;}
+  #hdr{min-height:40px;}
+  #ai-panel{width:96vw!important;right:2vw!important;left:2vw!important;bottom:80px!important;border-radius:8px;}
+  #fm-panel{width:92vw!important;right:4vw!important;}
+  .fp-card,.fc{min-width:60px;font-size:9px;}
+}
+
+/* Very small phones (≤360px) */
+@media(max-width:360px){
+  .tab{padding:2px 4px;font-size:6.5px;}
+  #logo{font-size:11px;}
+}
+#6366f1;}
 </style>
 </head>
 <body>
@@ -214,7 +254,7 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
       <span id="logo">WAREHUB</span>
       <span style="font-size:8px;letter-spacing:3px;color:var(--td);font-family:'Share Tech Mono',monospace;">DOUBLE SIDED ISCM LLC</span>
     </div>
-    <span id="badge">NO DATA</span>
+    <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
   </div>
   <div class="tabs">
     <button class="tab on"  data-view="import"   onclick="gv('import')">Import</button>
@@ -567,7 +607,7 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
-  if(name==='rackmap'){ rackClearHighlight(); }
+  if(name==='rackmap'){ rackClearHighlight(); if(orders.length) rackHighlightSpots(); }
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
@@ -3470,7 +3510,71 @@ function rackNormalise(shelf){
   return s;
 }
 
-function rackClick(zoneId){
+function spotClick(spotId){
+  // Clear previous active spot
+  document.querySelectorAll('.rack-spot.active').forEach(function(el){ el.classList.remove('active'); });
+  var el = document.getElementById('spot-'+spotId);
+  if(el) el.classList.add('active');
+
+  // Show info panel for this specific spot
+  var info = document.getElementById('rack-info-panel');
+  var title = document.getElementById('rack-info-title');
+  var type  = document.getElementById('rack-info-type');
+  var ordersEl = document.getElementById('rack-info-orders');
+
+  // Determine parent zone
+  var zoneId = spotId.replace(/-\d+$/, '');  // e.g. B-1-5 → B-1, R1-3 → R1
+  var zoneInfo = RACK_INFO[zoneId]||{type:'STORAGE',color:'var(--cy)'};
+
+  info.style.display='block';
+  info.style.borderColor = zoneInfo.color;
+  title.style.color = zoneInfo.color;
+  title.textContent = spotId;
+  type.textContent  = zoneInfo.type + ' — LOCATION '+spotId;
+
+  // Find orders at this exact spot
+  var spotOrders = orders.filter(function(o){
+    var shelf = (o.shelf||'').trim().toUpperCase();
+    var sid   = spotId.toUpperCase();
+    return shelf === sid || shelf === sid.replace(/-/g,'') || shelf.endsWith('-'+sid.split('-').pop());
+  });
+
+  if(!spotOrders.length){
+    ordersEl.innerHTML = '<span style="color:var(--td);font-size:11px;">No orders currently at '+spotId+'.</span>';
+  } else {
+    var pending = spotOrders.filter(function(o){return o.status==='pending';});
+    var done    = spotOrders.filter(function(o){return o.status==='done';});
+    ordersEl.innerHTML =
+      '<div style="font-size:10px;letter-spacing:1px;color:var(--td);margin-bottom:8px;">'
+      +spotOrders.length+' ORDER(S) · '+pending.length+' PENDING · '+done.length+' DONE</div>'
+      +spotOrders.map(function(o){
+        var packer=(o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null);
+        var packerName=packer?packer.name:'Unassigned';
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);gap:8px;">'
+          +'<span style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-12)+'</span>'
+          +'<span style="font-size:10px;color:var(--td);">'+o.skus+'</span>'
+          +'<span style="font-size:10px;color:var(--cy);">'+packerName+'</span>'
+          +'<span style="font-size:9px;padding:1px 6px;background:'+(o.status==='done'?'#38a16922':'#e53e3e22')+';color:'+(o.status==='done'?'var(--gn)':'var(--rd)')+';">'+o.status.toUpperCase()+'</span>'
+          +'</div>';
+      }).join('');
+  }
+
+function rackHighlightSpots(){
+  // Color all spots based on order status
+  document.querySelectorAll('.rack-spot').forEach(function(el){
+    el.classList.remove('has-orders','done');
+  });
+  orders.forEach(function(o){
+    var shelf = (o.shelf||'').trim().toUpperCase();
+    if(!shelf) return;
+    var el = document.getElementById('spot-'+shelf);
+    if(!el) return;
+    if(o.status==='done') el.classList.add('done');
+    else el.classList.add('has-orders');
+  });
+}
+
+
   rackClearHighlight();
   rackHighlight(zoneId);
   // Show info panel
@@ -3531,7 +3635,6 @@ function rackClearHighlight(){
     rect.setAttribute('stroke-width','2');
     rect.setAttribute('fill-opacity','0.85');
     rect.style.filter='';
-    // Restore original stroke color
     var id = rect.parentElement.id.replace('zone-','');
     var info = RACK_INFO[id];
     if(info) rect.setAttribute('stroke', info.color === '#e53e3e' ? '#fc8181'
@@ -3541,9 +3644,12 @@ function rackClearHighlight(){
       : info.color === '#dd6b20' ? '#ed8936'
       : '#f6e05e');
   });
+  // Clear all spot highlight classes
+  document.querySelectorAll('.rack-spot').forEach(function(el){
+    el.classList.remove('has-orders','done','active');
+  });
   document.getElementById('rack-info-panel').style.display='none';
   document.getElementById('rack-route-panel').style.display='none';
-  // Hide route
   var rp=document.getElementById('rack-route-path');
   var ra=document.getElementById('rack-route-arrow');
   if(rp) rp.style.display='none';
@@ -3554,14 +3660,23 @@ function rackSearch(val){
   rackClearHighlight();
   if(!val.trim()) return;
   var norm = rackNormalise(val.trim());
-  // Try exact match first, then partial
+
+  // Check if it's a spot ID (has more than one dash segment e.g. B-1-5, R1-3)
+  var spotEl = document.getElementById('spot-'+norm);
+  if(spotEl){
+    spotClick(norm);
+    // Scroll spot into view
+    spotEl.scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+
+  // Zone-level search
   var found = RACK_CENTERS[norm];
   if(found){
     rackClick(norm);
   } else {
-    // Partial match
     var keys = Object.keys(RACK_CENTERS);
-    var match = keys.find(function(k){ return k.startsWith(norm) || norm.startsWith(k); });
+    var match = keys.find(function(k){ return k.startsWith(norm)||norm.startsWith(k); });
     if(match) rackClick(match);
   }
 }
@@ -3785,7 +3900,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   <!-- ── Vehicle Log ── -->
   <div id="view-vehicle" class="view">
-    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
+    <div style="width:100%;padding:0 0 20px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -3928,9 +4043,6 @@ document.addEventListener('DOMContentLoaded',function(){
           <line x1="430" y1="40" x2="430" y2="46" stroke="#888" stroke-width="2"/>
           <text x="385" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-3</text>
 
-          <!-- HATCHED AREA left of C-1 -->
-          <rect x="68" y="44" width="100" height="100" fill="url(#hatch)" opacity="0.35"/>
-
           <!-- OFFICE / RESTROOM bottom-right -->
           <rect x="416" y="434" width="218" height="198" fill="#1e1e1e" stroke="#555" stroke-width="1.5"/>
           <text x="525" y="518" text-anchor="middle" fill="#555" font-size="12" font-weight="700">OFFICE /</text>
@@ -3951,49 +4063,140 @@ document.addEventListener('DOMContentLoaded',function(){
             <text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text>
             <polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/>
           </g>
-
-          <!-- C-1  Orange -->
-          <g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;">
-            <rect x="111" y="48" width="86" height="66" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
-            <text x="154" y="78" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">C-1</text>
-            <text x="154" y="95" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Ground Pallet</text>
           </g>
+          </g>
+        </g>
 
           <!-- R3  Red -->
           <g id="zone-R3" class="rack-zone" onclick="rackClick(&apos;R3&apos;)" style="cursor:pointer;">
             <rect x="68" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="98" y="215" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R3</text>
-            <text x="98" y="230" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
-          </g>
+          
+        
+        
+        
+          <g id="spot-R3-01" class="rack-spot" onclick="spotClick('R3-01')" style="cursor:pointer;"><rect x="72.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-01</text></g>
+          <g id="spot-R3-02" class="rack-spot" onclick="spotClick('R3-02')" style="cursor:pointer;"><rect x="72.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-02</text></g>
+          <g id="spot-R3-03" class="rack-spot" onclick="spotClick('R3-03')" style="cursor:pointer;"><rect x="72.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-03</text></g>
+          <g id="spot-R3-04" class="rack-spot" onclick="spotClick('R3-04')" style="cursor:pointer;"><rect x="72.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-04</text></g>
+          <g id="spot-R3-05" class="rack-spot" onclick="spotClick('R3-05')" style="cursor:pointer;"><rect x="72.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-05</text></g>
+          <g id="spot-R3-06" class="rack-spot" onclick="spotClick('R3-06')" style="cursor:pointer;"><rect x="72.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-06</text></g>
+          <g id="spot-R3-07" class="rack-spot" onclick="spotClick('R3-07')" style="cursor:pointer;"><rect x="72.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-07</text></g>
+          <g id="spot-R3-08" class="rack-spot" onclick="spotClick('R3-08')" style="cursor:pointer;"><rect x="72.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-08</text></g>
+        </g>
 
           <!-- R2  Red -->
           <g id="zone-R2" class="rack-zone" onclick="rackClick(&apos;R2&apos;)" style="cursor:pointer;">
             <rect x="137" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="167" y="215" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R2</text>
-            <text x="167" y="230" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
-          </g>
+          
+        
+        
+        
+          <g id="spot-R2-01" class="rack-spot" onclick="spotClick('R2-01')" style="cursor:pointer;"><rect x="141.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-01</text></g>
+          <g id="spot-R2-02" class="rack-spot" onclick="spotClick('R2-02')" style="cursor:pointer;"><rect x="141.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-02</text></g>
+          <g id="spot-R2-03" class="rack-spot" onclick="spotClick('R2-03')" style="cursor:pointer;"><rect x="141.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-03</text></g>
+          <g id="spot-R2-04" class="rack-spot" onclick="spotClick('R2-04')" style="cursor:pointer;"><rect x="141.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-04</text></g>
+          <g id="spot-R2-05" class="rack-spot" onclick="spotClick('R2-05')" style="cursor:pointer;"><rect x="141.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-05</text></g>
+          <g id="spot-R2-06" class="rack-spot" onclick="spotClick('R2-06')" style="cursor:pointer;"><rect x="141.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-06</text></g>
+          <g id="spot-R2-07" class="rack-spot" onclick="spotClick('R2-07')" style="cursor:pointer;"><rect x="141.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-07</text></g>
+          <g id="spot-R2-08" class="rack-spot" onclick="spotClick('R2-08')" style="cursor:pointer;"><rect x="141.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-08</text></g>
+        </g>
 
           <!-- R1  Red  TALL  (no gap to B-1) -->
           <g id="zone-R1" class="rack-zone" onclick="rackClick(&apos;R1&apos;)" style="cursor:pointer;">
             <rect x="227" y="128" width="60" height="313" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="257" y="278" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R1</text>
-            <text x="257" y="295" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
-          </g>
+          
+        
+        
+        
+          <g id="spot-R1-01" class="rack-spot" onclick="spotClick('R1-01')" style="cursor:pointer;"><rect x="231.0" y="417.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="429.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-01</text></g>
+          <g id="spot-R1-02" class="rack-spot" onclick="spotClick('R1-02')" style="cursor:pointer;"><rect x="231.0" y="397.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="409.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-02</text></g>
+          <g id="spot-R1-03" class="rack-spot" onclick="spotClick('R1-03')" style="cursor:pointer;"><rect x="231.0" y="377.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="388.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-03</text></g>
+          <g id="spot-R1-04" class="rack-spot" onclick="spotClick('R1-04')" style="cursor:pointer;"><rect x="231.0" y="356.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="368.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-04</text></g>
+          <g id="spot-R1-05" class="rack-spot" onclick="spotClick('R1-05')" style="cursor:pointer;"><rect x="231.0" y="336.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="348.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-05</text></g>
+          <g id="spot-R1-06" class="rack-spot" onclick="spotClick('R1-06')" style="cursor:pointer;"><rect x="231.0" y="316.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="327.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-06</text></g>
+          <g id="spot-R1-07" class="rack-spot" onclick="spotClick('R1-07')" style="cursor:pointer;"><rect x="231.0" y="295.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="307.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-07</text></g>
+          <g id="spot-R1-08" class="rack-spot" onclick="spotClick('R1-08')" style="cursor:pointer;"><rect x="231.0" y="275.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="287.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-08</text></g>
+          <g id="spot-R1-09" class="rack-spot" onclick="spotClick('R1-09')" style="cursor:pointer;"><rect x="231.0" y="255.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="266.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-09</text></g>
+          <g id="spot-R1-10" class="rack-spot" onclick="spotClick('R1-10')" style="cursor:pointer;"><rect x="231.0" y="234.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="246.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-10</text></g>
+          <g id="spot-R1-11" class="rack-spot" onclick="spotClick('R1-11')" style="cursor:pointer;"><rect x="231.0" y="214.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="226.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-11</text></g>
+          <g id="spot-R1-12" class="rack-spot" onclick="spotClick('R1-12')" style="cursor:pointer;"><rect x="231.0" y="194.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="205.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-12</text></g>
+          <g id="spot-R1-13" class="rack-spot" onclick="spotClick('R1-13')" style="cursor:pointer;"><rect x="231.0" y="173.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="185.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-13</text></g>
+          <g id="spot-R1-14" class="rack-spot" onclick="spotClick('R1-14')" style="cursor:pointer;"><rect x="231.0" y="153.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="165.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-14</text></g>
+          <g id="spot-R1-15" class="rack-spot" onclick="spotClick('R1-15')" style="cursor:pointer;"><rect x="231.0" y="133.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="144.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-15</text></g>
+        </g>
 
           <!-- B-1  Blue  (touches R1) -->
           <g id="zone-B-1" class="rack-zone" onclick="rackClick(&apos;B-1&apos;)" style="cursor:pointer;">
             <rect x="289" y="128" width="60" height="313" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/>
-            <text x="319" y="278" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">B-1</text>
-            <text x="319" y="295" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pile</text>
-          </g>
+          
+        
+        
+        
+          <g id="spot-B-1-01" class="rack-spot" onclick="spotClick('B-1-01')" style="cursor:pointer;"><rect x="293.0" y="422.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="431.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-01</text></g>
+          <g id="spot-B-1-02" class="rack-spot" onclick="spotClick('B-1-02')" style="cursor:pointer;"><rect x="293.0" y="407.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="416.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-02</text></g>
+          <g id="spot-B-1-03" class="rack-spot" onclick="spotClick('B-1-03')" style="cursor:pointer;"><rect x="293.0" y="392.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="401.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-03</text></g>
+          <g id="spot-B-1-04" class="rack-spot" onclick="spotClick('B-1-04')" style="cursor:pointer;"><rect x="293.0" y="377.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="386.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-04</text></g>
+          <g id="spot-B-1-05" class="rack-spot" onclick="spotClick('B-1-05')" style="cursor:pointer;"><rect x="293.0" y="361.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="370.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-05</text></g>
+          <g id="spot-B-1-06" class="rack-spot" onclick="spotClick('B-1-06')" style="cursor:pointer;"><rect x="293.0" y="346.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="355.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-06</text></g>
+          <g id="spot-B-1-07" class="rack-spot" onclick="spotClick('B-1-07')" style="cursor:pointer;"><rect x="293.0" y="331.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="340.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-07</text></g>
+          <g id="spot-B-1-08" class="rack-spot" onclick="spotClick('B-1-08')" style="cursor:pointer;"><rect x="293.0" y="316.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="325.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-08</text></g>
+          <g id="spot-B-1-09" class="rack-spot" onclick="spotClick('B-1-09')" style="cursor:pointer;"><rect x="293.0" y="300.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="309.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-09</text></g>
+          <g id="spot-B-1-10" class="rack-spot" onclick="spotClick('B-1-10')" style="cursor:pointer;"><rect x="293.0" y="285.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="294.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-10</text></g>
+          <g id="spot-B-1-11" class="rack-spot" onclick="spotClick('B-1-11')" style="cursor:pointer;"><rect x="293.0" y="270.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="279.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-11</text></g>
+          <g id="spot-B-1-12" class="rack-spot" onclick="spotClick('B-1-12')" style="cursor:pointer;"><rect x="293.0" y="255.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="264.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-12</text></g>
+          <g id="spot-B-1-13" class="rack-spot" onclick="spotClick('B-1-13')" style="cursor:pointer;"><rect x="293.0" y="239.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="248.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-13</text></g>
+          <g id="spot-B-1-14" class="rack-spot" onclick="spotClick('B-1-14')" style="cursor:pointer;"><rect x="293.0" y="224.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="233.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-14</text></g>
+          <g id="spot-B-1-15" class="rack-spot" onclick="spotClick('B-1-15')" style="cursor:pointer;"><rect x="293.0" y="209.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="218.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-15</text></g>
+          <g id="spot-B-1-16" class="rack-spot" onclick="spotClick('B-1-16')" style="cursor:pointer;"><rect x="293.0" y="194.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="203.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-16</text></g>
+          <g id="spot-B-1-17" class="rack-spot" onclick="spotClick('B-1-17')" style="cursor:pointer;"><rect x="293.0" y="178.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="187.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-17</text></g>
+          <g id="spot-B-1-18" class="rack-spot" onclick="spotClick('B-1-18')" style="cursor:pointer;"><rect x="293.0" y="163.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="172.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-18</text></g>
+          <g id="spot-B-1-19" class="rack-spot" onclick="spotClick('B-1-19')" style="cursor:pointer;"><rect x="293.0" y="148.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="157.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-19</text></g>
+          <g id="spot-B-1-20" class="rack-spot" onclick="spotClick('B-1-20')" style="cursor:pointer;"><rect x="293.0" y="133.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="142.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-20</text></g>
+        </g>
 
           <!-- A-1  Magenta  right=R1 left, extends to south wall -->
           <g id="zone-A-1" class="rack-zone" onclick="rackClick(&apos;A-1&apos;)" style="cursor:pointer;">
-            <rect x="68" y="389" width="159" height="241" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
-            <text x="147" y="500" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">A-1</text>
-            <text x="147" y="520" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pallet</text>
-          </g>
+            <rect x="68" y="389" width="129" height="180" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
+        
+          <g id="spot-A-1-01" class="rack-spot" onclick="spotClick('A-1-01')" style="cursor:pointer;"><rect x="163.8" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-01</text></g>
+          <g id="spot-A-1-02" class="rack-spot" onclick="spotClick('A-1-02')" style="cursor:pointer;"><rect x="133.5" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-02</text></g>
+          <g id="spot-A-1-03" class="rack-spot" onclick="spotClick('A-1-03')" style="cursor:pointer;"><rect x="103.2" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-03</text></g>
+          <g id="spot-A-1-04" class="rack-spot" onclick="spotClick('A-1-04')" style="cursor:pointer;"><rect x="73.0" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-04</text></g>
+          <g id="spot-A-1-05" class="rack-spot" onclick="spotClick('A-1-05')" style="cursor:pointer;"><rect x="163.8" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-05</text></g>
+          <g id="spot-A-1-06" class="rack-spot" onclick="spotClick('A-1-06')" style="cursor:pointer;"><rect x="133.5" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-06</text></g>
+          <g id="spot-A-1-07" class="rack-spot" onclick="spotClick('A-1-07')" style="cursor:pointer;"><rect x="103.2" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-07</text></g>
+          <g id="spot-A-1-08" class="rack-spot" onclick="spotClick('A-1-08')" style="cursor:pointer;"><rect x="73.0" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-08</text></g>
+          <g id="spot-A-1-09" class="rack-spot" onclick="spotClick('A-1-09')" style="cursor:pointer;"><rect x="163.8" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-09</text></g>
+          <g id="spot-A-1-10" class="rack-spot" onclick="spotClick('A-1-10')" style="cursor:pointer;"><rect x="133.5" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-10</text></g>
+          <g id="spot-A-1-11" class="rack-spot" onclick="spotClick('A-1-11')" style="cursor:pointer;"><rect x="103.2" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-11</text></g>
+          <g id="spot-A-1-12" class="rack-spot" onclick="spotClick('A-1-12')" style="cursor:pointer;"><rect x="73.0" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-12</text></g>
+          <g id="spot-A-1-13" class="rack-spot" onclick="spotClick('A-1-13')" style="cursor:pointer;"><rect x="163.8" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-13</text></g>
+          <g id="spot-A-1-14" class="rack-spot" onclick="spotClick('A-1-14')" style="cursor:pointer;"><rect x="133.5" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-14</text></g>
+          <g id="spot-A-1-15" class="rack-spot" onclick="spotClick('A-1-15')" style="cursor:pointer;"><rect x="103.2" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-15</text></g>
+          <g id="spot-A-1-16" class="rack-spot" onclick="spotClick('A-1-16')" style="cursor:pointer;"><rect x="73.0" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-16</text></g>
+          <g id="spot-A-1-17" class="rack-spot" onclick="spotClick('A-1-17')" style="cursor:pointer;"><rect x="163.8" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-17</text></g>
+          <g id="spot-A-1-18" class="rack-spot" onclick="spotClick('A-1-18')" style="cursor:pointer;"><rect x="133.5" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-18</text></g>
+          <g id="spot-A-1-19" class="rack-spot" onclick="spotClick('A-1-19')" style="cursor:pointer;"><rect x="103.2" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-19</text></g>
+          <g id="spot-A-1-20" class="rack-spot" onclick="spotClick('A-1-20')" style="cursor:pointer;"><rect x="73.0" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-20</text></g>
+        </g>
 
+          <!-- C-1 Orange · 3 rows × 4 cols · 9 spots -->
+          <g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;">
+            <rect x="117" y="44" width="80" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
+          
+            <g id="spot-C-1-01" class="rack-spot" onclick="spotClick('C-1-01')" style="cursor:pointer;"><rect x="121.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-01</text></g>
+            <g id="spot-C-1-02" class="rack-spot" onclick="spotClick('C-1-02')" style="cursor:pointer;"><rect x="139.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-02</text></g>
+            <g id="spot-C-1-03" class="rack-spot" onclick="spotClick('C-1-03')" style="cursor:pointer;"><rect x="158.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-03</text></g>
+            <g id="spot-C-1-04" class="rack-spot" onclick="spotClick('C-1-04')" style="cursor:pointer;"><rect x="176.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-04</text></g>
+            <g id="spot-C-1-05" class="rack-spot" onclick="spotClick('C-1-05')" style="cursor:pointer;"><rect x="121.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-05</text></g>
+            <g id="spot-C-1-06" class="rack-spot" onclick="spotClick('C-1-06')" style="cursor:pointer;"><rect x="139.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-06</text></g>
+            <g id="spot-C-1-07" class="rack-spot" onclick="spotClick('C-1-07')" style="cursor:pointer;"><rect x="158.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-07</text></g>
+            <g id="spot-C-1-08" class="rack-spot" onclick="spotClick('C-1-08')" style="cursor:pointer;"><rect x="176.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-08</text></g>
+            <g id="spot-C-1-09" class="rack-spot" onclick="spotClick('C-1-09')" style="cursor:pointer;"><rect x="121.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-09</text></g>
+            <g id="spot-C-1-10" class="rack-spot" onclick="spotClick('C-1-10')" style="cursor:pointer;"><rect x="139.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-10</text></g>
+            <g id="spot-C-1-11" class="rack-spot" onclick="spotClick('C-1-11')" style="cursor:pointer;"><rect x="158.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-11</text></g>
+            <g id="spot-C-1-12" class="rack-spot" onclick="spotClick('C-1-12')" style="cursor:pointer;"><rect x="176.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-12</text></g>
+          </g>
           <!-- PICK ROUTE -->
           <polyline id="rack-route-path"  points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/>
           <polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/>
@@ -4024,7 +4227,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   <!-- ══ DEV PANEL ══ -->
   <div id="view-devpanel" class="view">
-    <div style="max-width:900px;margin:0 auto;padding:0 0 40px;">
+    <div style="width:100%;padding:0 0 20px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
