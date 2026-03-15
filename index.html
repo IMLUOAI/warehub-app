@@ -2780,21 +2780,38 @@ async function excelSavePayroll(){
   try{
     var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
     await msEnsureSheet();
-    // Find next empty row using usedRange
     var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
-    // If error (empty sheet), start at row 1
     var existingRows=(rd.rowCount&&!rd.error)?rd.rowCount:0;
-    var dataRows=existingRows===0?rows:rows.slice(1); // include header only on first write
+    var dataRows=existingRows===0?rows:rows.slice(1);
     if(!dataRows.length){ pm('✓ Nothing new to save.'); return; }
     var startRow=existingRows+1, endRow=startRow+dataRows.length-1;
     var wr=await fetch(
       base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A'+startRow+':F'+endRow+'\')',
       {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:dataRows})}
     );
-    if(wr.ok){ pm('✓ Saved '+dataRows.length+' row(s) to Excel → "'+_excelSheet+'" tab'); }
-    else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
-  }catch(e){ pm('✗ Save failed: '+e.message); }
+    if(wr.ok){
+      pm('✓ Saved '+dataRows.length+' row(s) to Excel → "'+_excelSheet+'" tab');
+    } else {
+      var errData=await wr.json();
+      var errMsg=(errData.error&&errData.error.message)||('HTTP '+wr.status);
+      // 401 = token expired, offer reconnect
+      if(wr.status===401||wr.status===403){
+        pm('⚠ Token expired or access denied. Click ⊞ CONNECT EXCEL to sign in again.');
+        _msalToken=null; sessionStorage.removeItem('warehub_ms_token'); excelUpdateUI();
+      } else {
+        pm('✗ Excel error ('+wr.status+'): '+errMsg);
+      }
+    }
+  }catch(e){
+    var msg=e.message||String(e);
+    if(msg.includes('fetch')){
+      pm('✗ Network error — check your internet connection. If you just signed in, your token may have expired. Click ⊞ CONNECT EXCEL to reconnect.');
+      _msalToken=null; sessionStorage.removeItem('warehub_ms_token'); excelUpdateUI();
+    } else {
+      pm('✗ Save failed: '+msg);
+    }
+  }
 }
 
 
@@ -3904,6 +3921,7 @@ document.addEventListener('DOMContentLoaded',function(){
       <div style="font-size:8px;color:var(--td);margin-top:1px;">Powered by Claude · knows your shift data</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;">
+      <button onclick="aiShowProxySetup()" style="font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">⚙ SETUP</button>
       <button onclick="aiClear()" style="font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CLEAR</button>
       <button onclick="aiToggle()" style="font-size:12px;background:transparent;border:none;color:var(--td);cursor:pointer;">✕</button>
     </div>
@@ -4005,17 +4023,42 @@ async function aiAsk(text){
   aiAddMsg('user',text);
   var loadDiv=aiAddMsg('ai','⟳ thinking…');
   _aiHistory.push({role:'user',content:aiGetContext()+'\n\nUSER: '+text});
+
+  // Try proxy URL first (user-configured), then direct (works locally, not on GitHub Pages)
+  var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'';
+  var apiUrl = proxyUrl || 'https://api.anthropic.com/v1/messages';
+
   try{
-    var resp=await fetch('https://api.anthropic.com/v1/messages',{
+    var headers = {'Content-Type':'application/json'};
+    // Only add anthropic headers if using direct API (proxy handles auth itself)
+    if(!proxyUrl){
+      headers['anthropic-dangerous-allow-browser'] = 'true';
+    }
+    var resp=await fetch(apiUrl,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:aiSystemPrompt(),messages:_aiHistory})
+      headers:headers,
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:aiSystemPrompt(),
+        messages:_aiHistory
+      })
     });
+    if(!resp.ok){
+      var status=resp.status;
+      if(status===401||status===403){
+        loadDiv.innerHTML='✗ AI auth error ('+status+'). Set up a Cloudflare Worker proxy — click the ⚙ in the AI panel.';
+      } else {
+        loadDiv.innerHTML='✗ API error ('+status+').';
+      }
+      _aiLoading=false; return;
+    }
     var data=await resp.json();
     var reply=(data.content&&data.content[0]&&data.content[0].text)||'⚠ No response.';
     var actionMatch=reply.match(/```json([\s\S]*?)```/);
     var display=reply.replace(/```json[\s\S]*?```/g,'').trim();
-    loadDiv.innerHTML=display.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    loadDiv.innerHTML=display
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
     _aiHistory.push({role:'assistant',content:reply});
     if(_aiHistory.length>20) _aiHistory=_aiHistory.slice(-20);
@@ -4029,10 +4072,56 @@ async function aiAsk(text){
       }catch(e){ console.warn('AI action parse:',e); }
     }
   }catch(e){
-    loadDiv.innerHTML='✗ Error: '+e.message;
+    loadDiv.innerHTML=
+      '<div style="font-size:10px;line-height:1.6;">'
+      +'<strong>⚠ AI blocked by browser CORS</strong><br>'
+      +'GitHub Pages cannot call the Anthropic API directly.<br><br>'
+      +'<strong>Quick fix — Cloudflare Worker proxy (free, 5 min):</strong><br>'
+      +'1. Go to <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--cy);">workers.cloudflare.com</a> → sign up free<br>'
+      +'2. Create Worker → paste the proxy code → deploy<br>'
+      +'3. Click ⚙ in AI panel → paste your Worker URL + Anthropic API key<br><br>'
+      +'<a href="#" onclick="aiShowProxySetup();return false;" style="color:var(--cy);">⚙ Set up proxy now</a>'
+      +'</div>';
   }
   _aiLoading=false;
 }
+
+function aiShowProxySetup(){
+  var existing=document.getElementById('ai-proxy-modal');
+  if(existing){existing.remove();return;}
+  var m=document.createElement('div');
+  m.id='ai-proxy-modal';
+  m.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;';
+  m.innerHTML=
+    '<div style="background:var(--sur);border:1px solid var(--bdr);padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">'
+    +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">WAREHUB AI SETUP</div>'
+    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Set up a free Cloudflare Worker to enable the AI assistant.</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--bdr);padding:12px;margin-bottom:14px;font-size:10px;color:var(--td);line-height:1.9;">'
+    +'<strong style="color:var(--tx);">Step 1</strong> — Go to <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--cy);">workers.cloudflare.com</a> (free account)<br>'
+    +'<strong style="color:var(--tx);">Step 2</strong> — Create Worker → paste this code:<br>'
+    +'<pre style="background:#111;padding:8px;margin:6px 0;font-size:9px;overflow-x:auto;color:#0af;">Paste the Cloudflare Worker proxy code (see instructions above)</pre>'
+    +'<strong style="color:var(--tx);">Step 3</strong> — In Worker Settings → Variables → add: <code style="color:#0af;">ANTHROPIC_KEY</code> = your API key from <a href="https://console.anthropic.com" target="_blank" style="color:var(--cy);">console.anthropic.com</a><br>'
+    +'<strong style="color:var(--tx);">Step 4</strong> — Deploy → copy the Worker URL below'
+    +'</div>'
+    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">YOUR WORKER URL</div>'
+    +'<input id="ai-proxy-url" placeholder="https://warehub-ai.yourname.workers.dev" value="'+(localStorage.getItem('warehub_ai_proxy')||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;font-family:monospace;margin-bottom:14px;outline:none;"/>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
+    +'<button id="ai-proxy-cancel" style="padding:7px 14px;font-size:10px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
+    +'<button id="ai-proxy-save" style="padding:7px 14px;font-size:10px;background:#6366f1;border:none;color:#fff;cursor:pointer;font-family:inherit;">SAVE & TEST →</button>'
+    +'</div></div>';
+  document.body.appendChild(m);
+  document.getElementById('ai-proxy-cancel').onclick=function(){m.remove();};
+  document.getElementById('ai-proxy-save').onclick=function(){
+    var url=document.getElementById('ai-proxy-url').value.trim();
+    if(!url){localStorage.removeItem('warehub_ai_proxy');m.remove();pm('AI proxy cleared.');return;}
+    if(!url.startsWith('http')){pm('⚠ Enter a valid URL.');return;}
+    localStorage.setItem('warehub_ai_proxy',url);
+    m.remove();
+    pm('✓ AI proxy saved! Testing…');
+    aiAsk('Hello, are you working?');
+  };
+}
+
 
 function aiDoActions(actions){
   var results=[];
