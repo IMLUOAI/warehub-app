@@ -30,7 +30,7 @@
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
             <div style="position:relative;">
               <div style="display:flex;gap:6px;">
-                <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+                <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" onkeydown="if(event.key==='Enter')vehicleAddTrip();"/>
                 <button onclick="vehMapSearch()" style="padding:4px 10px;font-size:12px;background:#4285f4;border:none;color:#fff;cursor:pointer;white-space:nowrap;" title="Search address on map">🔍</button>
               </div>
               <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
@@ -52,11 +52,11 @@
           </div>
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER START (mi)</div>
-            <input id="veh-odo-start" type="number" placeholder="e.g. 45230" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+            <input id="veh-odo-start" type="number" onkeydown="if(event.key==='Enter')vehicleAddTrip();" placeholder="e.g. 45230" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
           </div>
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER END (mi)</div>
-            <input id="veh-odo-end" type="number" placeholder="e.g. 45265" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+            <input id="veh-odo-end" type="number" onkeydown="if(event.key==='Enter')vehicleAddTrip();" placeholder="e.g. 45265" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
           </div>
         </div>
         <div style="margin-bottom:12px;">
@@ -106,8 +106,8 @@ TYPE html>
   --tx:#e8f0fe;--td:#4a6080;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;}
-body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:13px;}
+html,body{margin:0;padding:0;}
+body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:13px;height:100%;overflow:hidden;}
 
 /* ── HEADER ── */
 #hdr{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:48px;border-bottom:1px solid var(--bdr);background:var(--sur);min-width:0;gap:8px;}
@@ -120,8 +120,8 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 .tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
 
 /* ── LAYOUT ── */
-#app{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow:hidden;}
+#app{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;height:0;}
+.view{display:none;flex:1;flex-direction:column;padding:16px 18px;overflow-y:auto;overflow-x:hidden;}
 .view.on{display:flex;}
 
 /* ── SHARED ── */
@@ -2303,13 +2303,13 @@ function renderFloor(){
 function printPackerCards(){
   if(!packers.length&&!managers.length){alert('No staff added yet.');return;}
 
+  // ── PRINT CSS: 4x6 label, CR80 badge centered, pure black ──
   var printCss=
     '*{box-sizing:border-box;margin:0;padding:0;}'
     +'@page{size:4in 6in;margin:0;}'
-    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;}'
-    +'.ic-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;}'
-    +'.ic-page:last-child{page-break-after:auto;}'
-    +'.ic{width:3.375in;height:2.125in;border:1.5pt solid #000;display:flex;flex-direction:column;overflow:hidden;background:#fff;}'
+    +'html,body{width:4in;height:6in;background:#fff;font-family:Arial,Helvetica,sans-serif;'
+      +'display:flex;align-items:center;justify-content:center;}'
+    +'.ic{width:3.375in;height:2.125in;border:1.5pt solid #000;display:flex;flex-direction:column;background:#fff;}'
     +'.ic-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4pt 6pt 2pt;}'
     +'.ic-company{font-size:5pt;font-weight:700;color:#000;letter-spacing:2px;text-align:center;margin-bottom:2pt;}'
     +'.ic-init{font-size:22pt;font-weight:900;color:#000;line-height:1;}'
@@ -2320,92 +2320,91 @@ function printPackerCards(){
     +'.ic-svg svg{width:80%;height:auto;max-height:18pt;display:block;margin:0 auto;}'
     +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}';
 
+  // ── BUILD PEOPLE LIST ──
   var allPeople=[];
   managers.forEach(function(m){ allPeople.push({person:m,role:'MANAGER'}); });
   packers.forEach(function(p){ allPeople.push({person:p,role:'PACKER'}); });
 
-  var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
-
-  // Remove existing overlay
+  // ── PREVIEW STYLE ──
   var existing=document.getElementById('card-print-overlay');
   if(existing) existing.remove();
-  var styleTag=document.getElementById('ic-style');
-  if(styleTag) styleTag.remove();
+  var st=document.getElementById('ic-style');
+  if(st) st.remove();
 
-  // Inject preview styles
-  var st=document.createElement('style');
-  st.id='ic-style';
-  st.textContent=[
-    '.icpv-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}',
-    '.icpv{width:270px;height:170px;border-radius:6px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:transform .15s;}',
-    '.icpv:hover{transform:translateY(-3px);}',
-    '.icpv-hdr{flex:0 0 58%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;}',
-    '.icpv-co{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;text-align:center;margin-bottom:3px;}',
-    '.icpv-in{font-size:30px;font-weight:900;color:#fff;line-height:1;}',
-    '.icpv-nm{font-size:11px;font-weight:900;color:#fff;text-align:center;margin-top:3px;}',
-    '.icpv-bod{flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px;gap:3px;}',
-    '.icpv-rl{font-size:6px;font-weight:700;letter-spacing:3px;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.2);}',
-    '.icpv-bc{background:#fff;border-radius:3px;padding:3px;margin-top:3px;width:90%;}',
-    '.icpv-id{font-size:6px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}'
-  ].join('');
-  document.head.appendChild(st);
+  var previewSt=document.createElement('style');
+  previewSt.id='ic-style';
+  previewSt.textContent=
+    '.icpv-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}'
+    +'.icpv{width:270px;height:170px;border-radius:6px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:transform .15s;}'
+    +'.icpv:hover{transform:translateY(-3px);}'
+    +'.icpv-hdr{flex:0 0 58%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;}'
+    +'.icpv-co{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;text-align:center;margin-bottom:3px;}'
+    +'.icpv-in{font-size:28px;font-weight:900;color:#fff;line-height:1;}'
+    +'.icpv-nm{font-size:11px;font-weight:900;color:#fff;text-align:center;margin-top:3px;}'
+    +'.icpv-bod{flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px;gap:3px;}'
+    +'.icpv-rl{font-size:6px;font-weight:700;letter-spacing:3px;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.2);}'
+    +'.icpv-bc{background:#fff;border-radius:3px;padding:3px;margin-top:3px;width:90%;text-align:center;}'
+    +'.icpv-id{font-size:6px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}';
+  document.head.appendChild(previewSt);
 
-  // Build overlay using DOM
+  var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+
+  // ── BUILD OVERLAY VIA createElement (zero string escaping issues) ──
   var ov=document.createElement('div');
   ov.id='card-print-overlay';
   ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);overflow-y:auto;padding:28px 20px;';
 
   // Header bar
-  var header=document.createElement('div');
-  header.style.cssText='max-width:960px;margin:0 auto 20px;display:flex;align-items:center;justify-content:space-between;';
-  header.innerHTML=
+  var hdr=document.createElement('div');
+  hdr.style.cssText='max-width:980px;margin:0 auto 8px;display:flex;align-items:center;justify-content:space-between;';
+  hdr.innerHTML=
     '<div>'
     +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">ID CARDS — DOUBLE SIDED ISCM LLC</div>'
-    +'<div style="font-size:9px;color:#555;margin-top:3px;">CR80 badge (3.375×2.125in) · printed centered on 4×6 thermal label</div>'
+    +'<div style="font-size:9px;color:#555;margin-top:2px;">CR80 badge on 4×6 thermal · black ink · click card or PRINT to print one</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;">'
-    +'<button id="ic-print-all" style="padding:7px 16px;font-size:9px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
-    +'<button id="ic-close" style="padding:7px 12px;font-size:9px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;">✕ CLOSE</button>'
+    +'<button id="ic-print-all" style="padding:6px 14px;font-size:9px;letter-spacing:1px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
+    +'<button id="ic-close" style="padding:6px 12px;font-size:9px;letter-spacing:1px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;">✕ CLOSE</button>'
     +'</div>';
-  ov.appendChild(header);
+  ov.appendChild(hdr);
 
-  var hint=document.createElement('div');
-  hint.style.cssText='max-width:960px;margin:0 auto 16px;font-size:8px;color:#444;';
-  hint.textContent='Click a card or its PRINT button to print one · PRINT ALL sends every card one by one';
-  ov.appendChild(hint);
-
-  // Cards container
+  // Cards grid
   var grid=document.createElement('div');
-  grid.style.cssText='max-width:960px;margin:0 auto;display:flex;flex-wrap:wrap;gap:20px;';
+  grid.style.cssText='max-width:980px;margin:0 auto;display:flex;flex-wrap:wrap;gap:20px;';
 
   allPeople.forEach(function(item,i){
     var col=item.person.color||defaultColors[i%defaultColors.length];
-    var hdr=item.role==='MANAGER'?'linear-gradient(135deg,#b8860b,#8b6914)':'linear-gradient(135deg,'+col+','+col+'bb)';
-    var svg=C128.svg(item.person.id, 2, 36);
+    var hdrBg=item.role==='MANAGER'?'linear-gradient(135deg,#b8860b,#8b6914)':'linear-gradient(135deg,'+col+','+col+'bb)';
+    var barcode=C128.svg(item.person.id,2,36);
 
     var wrap=document.createElement('div');
     wrap.className='icpv-wrap';
 
     var card=document.createElement('div');
     card.className='icpv';
-    card.style.boxShadow='0 6px 24px '+col+'44';
+    card.style.boxShadow='0 6px 20px '+col+'44';
     card.innerHTML=
-      '<div class="icpv-hdr" style="background:'+hdr+';">'
-      +'<div class="icpv-co">DOUBLE SIDED ISCM LLC</div>'
-      +'<div class="icpv-in">'+packerInitial(item.person)+'</div>'
-      +'<div class="icpv-nm">'+item.person.name+'</div>'
+      '<div class="icpv-hdr" style="background:'+hdrBg+';">'
+        +'<div class="icpv-co">DOUBLE SIDED ISCM LLC</div>'
+        +'<div class="icpv-in">'+packerInitial(item.person)+'</div>'
+        +'<div class="icpv-nm">'+item.person.name+'</div>'
       +'</div>'
       +'<div class="icpv-bod">'
-      +'<div class="icpv-rl" style="color:'+col+';border-color:'+col+'44;">'+item.role+'</div>'
-      +'<div class="icpv-bc">'+svg+'</div>'
-      +'<div class="icpv-id">'+item.person.id+'</div>'
+        +'<div class="icpv-rl" style="color:'+col+';border-color:'+col+'44;">'+item.role+'</div>'
+        +'<div class="icpv-bc">'+barcode+'</div>'
+        +'<div class="icpv-id">'+item.person.id+'</div>'
       +'</div>';
 
+    // Individual print button
     var btn=document.createElement('button');
     btn.textContent='🖨 PRINT';
     btn.style.cssText='padding:4px 14px;font-size:9px;letter-spacing:1px;background:'+col+';color:#fff;border:none;cursor:pointer;font-family:inherit;border-radius:4px;';
-    btn.onclick=function(){ printSingleCard(item.person.id, item.role); };
-    card.onclick=function(){ printSingleCard(item.person.id, item.role); };
+
+    // Direct onclick — no event delegation needed
+    (function(capturedItem){
+      card.onclick=function(){ doPrintCard(capturedItem, printCss); };
+      btn.onclick =function(){ doPrintCard(capturedItem, printCss); };
+    })(item);
 
     wrap.appendChild(card);
     wrap.appendChild(btn);
@@ -2419,60 +2418,69 @@ function printPackerCards(){
     ov.remove();
     var s=document.getElementById('ic-style'); if(s) s.remove();
   };
-  document.getElementById('ic-print-all').onclick=function(){ printAllCards(); };
+  document.getElementById('ic-print-all').onclick=function(){
+    allPeople.forEach(function(item,i){
+      setTimeout(function(){ doPrintCard(item, printCss); }, i*800);
+    });
+  };
 
+  // Store for external access
   window._icPrintData={people:allPeople, css:printCss};
 }
 
-function icCardHtml(item){
-  var svg = C128.svg(item.person.id, 2, 32);
-  return '<div class="ic-page">'
-    +'<div class="ic">'
-      +'<div class="ic-top">'
-        +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
-        +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
-        +'<div class="ic-name">'+item.person.name+'</div>'
-        +'<div class="ic-role">'+item.role+'</div>'
-      +'</div>'
-      +'<div class="ic-divider"></div>'
-      +'<div class="ic-bot">'
-        +'<div class="ic-svg">'+svg+'</div>'
-        +'<div class="ic-id">'+item.person.id+'</div>'
-      +'</div>'
+function buildCardHtml(item){
+  var svg=C128.svg(item.person.id,3,80);
+  return '<div class="ic">'
+    +'<div class="ic-top">'
+      +'<div class="ic-company">DOUBLE SIDED ISCM LLC</div>'
+      +'<div class="ic-init">'+packerInitial(item.person)+'</div>'
+      +'<div class="ic-name">'+item.person.name+'</div>'
+      +'<div class="ic-role">'+item.role+'</div>'
     +'</div>'
-  +'</div>';
+    +'<div class="ic-divider"></div>'
+    +'<div class="ic-bot">'
+      +'<div class="ic-svg">'+svg+'</div>'
+      +'<div class="ic-id">'+item.person.id+'</div>'
+    +'</div>'
+    +'</div>';
 }
 
-function icPrintWindow(css, bodyHtml){
-  var w = window.open('', '_blank', 'width=400,height=600');
-  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.'); return; }
-  w.document.open();
-  w.document.write(
-    '<!DOCTYPE html><html><head><meta charset="utf-8">'
-    +'<style>'+css+'</style>'
-    +'</head><body>'+bodyHtml
-    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},1200);},300);}<'+'/scr'+'ipt>'
-    +'</body></html>'
-  );
-  w.document.close();
+function doPrintCard(item, css){
+  var html=buildCardHtml(item);
+  // Build full page and print using a blob URL — avoids popup blockers on GitHub Pages
+  var fullHtml='<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+html+'</body></html>';
+  try{
+    var blob=new Blob([fullHtml],{type:'text/html'});
+    var url=URL.createObjectURL(blob);
+    var w=window.open(url,'_blank','width=420,height=640');
+    if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.'); URL.revokeObjectURL(url); return; }
+    w.onload=function(){ w.print(); setTimeout(function(){ w.close(); URL.revokeObjectURL(url); },1500); };
+    setTimeout(function(){ if(w&&!w.closed){ try{w.print();}catch(e){} } URL.revokeObjectURL(url); },1000);
+  }catch(e){
+    // Fallback: document.write
+    var w2=window.open('','_blank','width=420,height=640');
+    if(!w2){ pm('⚠ Pop-up blocked.'); return; }
+    w2.document.open(); w2.document.write(fullHtml); w2.document.close();
+    setTimeout(function(){ try{w2.focus();w2.print();}catch(e){} setTimeout(function(){w2.close();},1500); },500);
+  }
 }
 
-function printSingleCard(personId, role){
-  if(!window._icPrintData){ pm('⚠ Open the ID card preview first.'); return; }
-  var item = window._icPrintData.people.find(function(x){ return x.person.id===personId && x.role===role; });
-  if(!item){ pm('⚠ Card not found.'); return; }
-  icPrintWindow(window._icPrintData.css, icCardHtml(item));
+// Legacy aliases kept for compatibility
+function icCardHtml(item){ return buildCardHtml(item); }
+function icPrintWindow(css,html){ doPrintCard({person:{id:'',name:''},role:''}, css); }
+function printSingleCard(pid,role){
+  if(!window._icPrintData) return;
+  var item=window._icPrintData.people.find(function(x){return x.person.id===pid&&x.role===role;});
+  if(item) doPrintCard(item, window._icPrintData.css);
 }
-
 function printAllCards(){
-  if(!window._icPrintData){ pm('⚠ Open the ID card preview first.'); return; }
-  // Each card gets its own window/print job — staggered so browser allows popups
-  window._icPrintData.people.forEach(function(item, i){
-    setTimeout(function(){
-      icPrintWindow(window._icPrintData.css, icCardHtml(item));
-    }, i * 900);
+  if(!window._icPrintData) return;
+  window._icPrintData.people.forEach(function(item,i){
+    setTimeout(function(){ doPrintCard(item, window._icPrintData.css); },i*800);
   });
 }
+
+
 
 // ══════════════════════════════════════════
 // PRINT PICK LISTS
@@ -3090,14 +3098,13 @@ function vehicleExportCSV(){
 }
 
 async function vehicleSaveExcel(){
-  // If not connected, open the Connect Excel modal just like Payroll does
-  if(!_msalToken||!_excelFileId){
+  if(!_msalToken || !_excelFileId){
+    // Make sure MSAL is initialized with saved config before opening modal
+    if(_msalCfg.clientId && !_msalInstance) msalInit();
     excelConnect();
-    // After user connects, they can click Save to Excel again
-    pm('⚠ Sign in to Excel first, then click Save to Excel again.');
     return;
   }
-  if(!vehicleTrips.length){pm('⚠ No trips to save.');return;}
+  if(!vehicleTrips.length){ pm('⚠ No trips to save.'); return; }
   var sheet='Vehicle Log';
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   pm('⟳ Saving vehicle log to Excel…');
@@ -3230,7 +3237,7 @@ function vehMapSearch(){
     +'</div>'
     +'<div id="veh-map-results" style="max-height:180px;overflow-y:auto;border-bottom:1px solid var(--bdr);"></div>'
     +'<div id="veh-map-frame-wrap" style="flex:1;min-height:280px;position:relative;">'
-      +'<iframe id="veh-map-iframe" style="width:100%;height:100%;border:none;min-height:280px;" src="about:blank"></iframe>'
+      +'<iframe id="veh-map-iframe" style="width:100%;height:100%;border:none;min-height:280px;" src="about:blank" allow="geolocation" referrerpolicy="no-referrer-when-downgrade" loading="lazy"></iframe>'
       +'<div id="veh-map-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--td);">'
         +'<div style="font-size:32px;">🗺</div>'
         +'<div style="font-size:11px;">Search for a place above to see it on the map</div>'
@@ -3258,10 +3265,38 @@ function vehMapSearch(){
     var resultsEl = document.getElementById('veh-map-results');
     resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">⟳ Searching…</div>';
 
+    // Always show embedded map for the search query immediately
+    var iframe = document.getElementById('veh-map-iframe');
+    var placeholder = document.getElementById('veh-map-placeholder');
+    if(iframe && placeholder){
+      var embedQ = encodeURIComponent(query);
+      iframe.src = 'https://www.google.com/maps/embed/v1/search?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+embedQ+'&zoom=13';
+      placeholder.style.display='none';
+    }
+
+    // Also do Places text search for click-to-fill if Maps API loaded
+    if(typeof google === 'undefined' || !google.maps || !google.maps.places){
+      resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">Map shown above. Click USE THIS ADDRESS after finding your destination.</div>';
+      // Pre-fill the address field with the query so user can proceed
+      document.getElementById('veh-map-selected').textContent = '📍 '+query;
+      document.getElementById('veh-map-use-btn').style.display='block';
+      document.getElementById('veh-map-modal').querySelector('#veh-map-use-btn').onclick = function(){
+        document.getElementById('veh-dest').value = query;
+        var linkEl = document.getElementById('veh-dest-map-link');
+        if(linkEl){
+          linkEl.style.display='block';
+          linkEl.innerHTML='<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(query)+'" target="_blank" style="color:#4285f4;text-decoration:none;font-size:9px;">📍 View on Google Maps</a>';
+        }
+        document.getElementById('veh-map-modal').remove();
+        pm('✓ Destination set: '+query);
+      };
+      return;
+    }
+
     var svc = new google.maps.places.PlacesService(document.createElement('div'));
     svc.textSearch({query: query}, function(results, status){
       if(status !== google.maps.places.PlacesServiceStatus.OK || !results.length){
-        resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">No results found.</div>';
+        resultsEl.innerHTML = '<div style="padding:10px 16px;font-size:11px;color:var(--td);">Map shown above. Type an address or try a different search.</div>';
         return;
       }
       resultsEl.innerHTML = '';
@@ -3278,16 +3313,12 @@ function vehMapSearch(){
         row.addEventListener('mouseleave', function(){ this.style.background=''; });
         row.onclick = function(){
           selectedPlace = place;
-          // Highlight selected
           resultsEl.querySelectorAll('div[data-selected]').forEach(function(el){ el.removeAttribute('data-selected'); el.style.background=''; });
           row.setAttribute('data-selected','1');
           row.style.background='var(--bg)';
-          // Show on map via embed
-          var addr = encodeURIComponent(place.name+' '+place.formatted_address);
-          var iframe = document.getElementById('veh-map-iframe');
+          var addr = encodeURIComponent((place.name||'')+' '+(place.formatted_address||''));
           iframe.src = 'https://www.google.com/maps/embed/v1/place?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+addr+'&zoom=15';
-          document.getElementById('veh-map-placeholder').style.display='none';
-          // Show selected address
+          placeholder.style.display='none';
           var label = place.name+(place.formatted_address?'  —  '+place.formatted_address:'');
           document.getElementById('veh-map-selected').textContent = '📍 '+label;
           document.getElementById('veh-map-use-btn').style.display='block';
@@ -3332,24 +3363,18 @@ function gmapsShowSetup(){ vehMapSearch(); } // alias kept for compatibility
 
 // Zone center coordinates on SVG (for route drawing)
 var RACK_CENTERS = {
-  'C-1':  {x:226, y:89},
-  'R3':   {x:93,  y:255},
-  'R2':   {x:153, y:255},
-  'R1':   {x:213, y:338},
-  'W1':   {x:271, y:319},
-  'W2':   {x:271, y:399},
-  'W3':   {x:271, y:479},
-  'A-1':  {x:153, y:500},
-  'B-1':  {x:358, y:288}
+  'C-1': {x:154, y:81},
+  'R3':  {x:98, y:221},
+  'R2':  {x:167, y:221},
+  'R1':  {x:257, y:284},
+  'B-1': {x:319, y:276},
+  'A-1': {x:147, y:500}
 };
 
 var RACK_INFO = {
   'R1':  {type:'METAL RACKING', color:'#e53e3e'},
   'R2':  {type:'METAL RACKING', color:'#e53e3e'},
   'R3':  {type:'METAL RACKING', color:'#e53e3e'},
-  'W1':  {type:'WOOD RACKING',  color:'#38a169'},
-  'W2':  {type:'WOOD RACKING',  color:'#38a169'},
-  'W3':  {type:'WOOD RACKING',  color:'#38a169'},
   'A-1': {type:'GROUND PALLET', color:'#d53f8c'},
   'B-1': {type:'GROUND PILE — NEW GOODS', color:'#3182ce'},
   'C-1': {type:'GROUND PALLET', color:'#dd6b20'}
@@ -3683,7 +3708,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
   <!-- ══ RACK MAP ══ -->
   <div id="view-rackmap" class="view">
-    <div style="padding:0 0 40px;">
+    <div style="padding:0 0 20px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
@@ -3700,173 +3725,112 @@ document.addEventListener('DOMContentLoaded',function(){
       </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;font-size:9px;">
-        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#e53e3e;border-radius:2px;"></div>Metal Racking (R1/R2/R3)</div>
-        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#38a169;border-radius:2px;"></div>Wood Racking (W1/W2/W3)</div>
-        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#d53f8c;border-radius:2px;"></div>Ground Pallet A-1</div>
-        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#3182ce;border-radius:2px;"></div>Ground Pile B-1 (New Goods)</div>
-        <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#dd6b20;border-radius:2px;"></div>Ground Pallet C-1</div>
-      </div>
+          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#e53e3e;border-radius:2px;"></div>Metal Racking (R1/R2/R3)</div>
+          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#d53f8c;border-radius:2px;"></div>Ground Pallet A-1</div>
+          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#3182ce;border-radius:2px;"></div>Ground Pile B-1 (New Goods)</div>
+          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#dd6b20;border-radius:2px;"></div>Ground Pallet C-1</div>
+        </div>
 
       <!-- Map container -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;display:flex;justify-content:center;align-items:center;">
-        <svg id="rack-svg" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg"
-          style="width:100%;height:auto;max-height:80vh;display:block;">
-
-          <!-- ── DEFS ── -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:12px;">
+        <svg id="rack-svg" viewBox="55 25 620 645" xmlns="http://www.w3.org/2000/svg"
+          style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;">
+          <!-- outer wall: x=60 y=40 w=580 h=600, compass at 628,628, text at y=655 -->
           <defs>
             <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#0af"/>
+              <polygon points="0 0,8 3,0 6" fill="#0af"/>
             </marker>
             <pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
               <line x1="0" y1="0" x2="0" y2="8" stroke="#555" stroke-width="1.5"/>
             </pattern>
           </defs>
 
-          <!-- ── OUTER WAREHOUSE WALL ── -->
+          <!-- OUTER WALL -->
           <rect x="60" y="40" width="580" height="600" fill="#161616" stroke="#666" stroke-width="3" rx="2"/>
 
-          <!-- ── DOCK DOORS (3 openings in top wall) ── -->
-          <!-- Dock 1 -->
+          <!-- DOCK DOORS -->
           <rect x="155" y="37" width="60" height="7" fill="#161616" stroke="none"/>
-          <line x1="155" y1="40" x2="155" y2="44" stroke="#888" stroke-width="2"/>
-          <line x1="215" y1="40" x2="215" y2="44" stroke="#888" stroke-width="2"/>
-          <text x="185" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-1</text>
-
-          <!-- Dock 2 -->
+          <line x1="155" y1="40" x2="155" y2="46" stroke="#888" stroke-width="2"/>
+          <line x1="215" y1="40" x2="215" y2="46" stroke="#888" stroke-width="2"/>
+          <text x="185" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-1</text>
           <rect x="248" y="37" width="60" height="7" fill="#161616" stroke="none"/>
-          <line x1="248" y1="40" x2="248" y2="44" stroke="#888" stroke-width="2"/>
-          <line x1="308" y1="40" x2="308" y2="44" stroke="#888" stroke-width="2"/>
-          <text x="278" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-2</text>
-
-          <!-- Dock 3 -->
+          <line x1="248" y1="40" x2="248" y2="46" stroke="#888" stroke-width="2"/>
+          <line x1="308" y1="40" x2="308" y2="46" stroke="#888" stroke-width="2"/>
+          <text x="278" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-2</text>
           <rect x="340" y="37" width="90" height="7" fill="#161616" stroke="none"/>
-          <line x1="340" y1="40" x2="340" y2="44" stroke="#888" stroke-width="2"/>
-          <line x1="430" y1="40" x2="430" y2="44" stroke="#888" stroke-width="2"/>
-          <text x="385" y="36" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700" letter-spacing="0.5">Dock-3</text>
+          <line x1="340" y1="40" x2="340" y2="46" stroke="#888" stroke-width="2"/>
+          <line x1="430" y1="40" x2="430" y2="46" stroke="#888" stroke-width="2"/>
+          <text x="385" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-3</text>
 
-          <!-- ── HATCHED AREA (left of C-1, near dock) ── -->
-          <rect x="68" y="44" width="80" height="100" fill="url(#hatch)" opacity="0.4"/>
+          <!-- HATCHED AREA left of C-1 -->
+          <rect x="68" y="44" width="100" height="100" fill="url(#hatch)" opacity="0.35"/>
 
-          <!-- ── OFFICE / RESTROOM (bottom-right) ── -->
-          <rect x="416" y="434" width="220" height="198" fill="#1f1f1f" stroke="#555" stroke-width="1.5"/>
-          <text x="526" y="520" text-anchor="middle" fill="#555" font-size="11" font-weight="700">OFFICE /</text>
-          <text x="526" y="537" text-anchor="middle" fill="#555" font-size="11" font-weight="700">RESTROOM</text>
+          <!-- OFFICE / RESTROOM bottom-right -->
+          <rect x="416" y="434" width="218" height="198" fill="#1e1e1e" stroke="#555" stroke-width="1.5"/>
+          <text x="525" y="518" text-anchor="middle" fill="#555" font-size="12" font-weight="700">OFFICE /</text>
+          <text x="525" y="536" text-anchor="middle" fill="#555" font-size="12" font-weight="700">RESTROOM</text>
 
-          <!-- ── AISLE / FLOOR MARKINGS ── -->
-          <line x1="60" y1="434" x2="416" y2="434" stroke="#2a2a2a" stroke-width="1" stroke-dasharray="8,4"/>
-          <line x1="304" y1="40" x2="304" y2="434" stroke="#2a2a2a" stroke-width="1" stroke-dasharray="8,4"/>
+          <!-- AISLE between R2 and R1 -->
+          <rect x="197" y="128" width="30" height="376" fill="#0d0d0d" opacity="0.8"/>
+          <text x="212" y="318" text-anchor="middle" fill="#2d2d2d" font-size="7"
+            transform="rotate(-90,212,318)">AISLE</text>
 
-          <!-- ══════════════════════════════════════
-               C-1  Orange · Ground Pallet
-               PDF: x=198-235, y=216-247
-               SVG: x=179, y=85, w=65, h=44
-          ══════════════════════════════════════ -->
-          <g id="zone-C-1" class="rack-zone" onclick="rackClick('C-1')" style="cursor:pointer;">
-            <rect x="179" y="44" width="95" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
-            <text x="226" y="84" text-anchor="middle" fill="#fff" font-size="20" font-weight="900">C-1</text>
-            <text x="226" y="102" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Ground Pallet</text>
-          </g>
+          <!-- ENTRANCE -->
+          <text x="340" y="655" text-anchor="middle" fill="#444" font-size="9" letter-spacing="2">ENTRANCE / EXIT  (SOUTH)</text>
+          <line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/>
 
-          <!-- ══════════════════════════════════════
-               R3  Red · Metal Racking (leftmost column)
-               PDF: x=187-203, y=201-334
-               SVG: x=160, y=63, w=28, h=190
-          ══════════════════════════════════════ -->
-          <g id="zone-R3" class="rack-zone" onclick="rackClick('R3')" style="cursor:pointer;">
-            <rect x="68" y="148" width="50" height="222" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="93" y="255" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R3</text>
-            <text x="93" y="276" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               R2  Red · Metal Racking (middle column)
-               PDF: x=220-234, y=201-334
-          ══════════════════════════════════════ -->
-          <g id="zone-R2" class="rack-zone" onclick="rackClick('R2')" style="cursor:pointer;">
-            <rect x="128" y="148" width="50" height="222" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="153" y="255" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R2</text>
-            <text x="153" y="276" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               R1  Red · Metal Racking (right column, taller — extends past W zones)
-               PDF: x=252-271, y=201-423
-          ══════════════════════════════════════ -->
-          <g id="zone-R1" class="rack-zone" onclick="rackClick('R1')" style="cursor:pointer;">
-            <rect x="188" y="148" width="50" height="380" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
-            <text x="213" y="330" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">R1</text>
-            <text x="213" y="352" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal Rack</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               W1  Green · Wood Racking (top row)
-               PDF: x=172-232, y=349-363
-          ══════════════════════════════════════ -->
-          <g id="zone-W1" class="rack-zone" onclick="rackClick('W1')" style="cursor:pointer;">
-            <rect x="248" y="284" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
-            <text x="271" y="324" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W1</text>
-            <text x="271" y="340" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               W2  Green · Wood Racking (middle row)
-               PDF: x=172-232, y=380-395
-          ══════════════════════════════════════ -->
-          <g id="zone-W2" class="rack-zone" onclick="rackClick('W2')" style="cursor:pointer;">
-            <rect x="248" y="364" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
-            <text x="271" y="404" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W2</text>
-            <text x="271" y="420" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               W3  Green · Wood Racking (bottom row)
-               PDF: x=172-232, y=412-427
-          ══════════════════════════════════════ -->
-          <g id="zone-W3" class="rack-zone" onclick="rackClick('W3')" style="cursor:pointer;">
-            <rect x="248" y="444" width="46" height="70" fill="#38a169" fill-opacity="0.88" stroke="#68d391" stroke-width="2" rx="3"/>
-            <text x="271" y="484" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">W3</text>
-            <text x="271" y="500" text-anchor="middle" fill="#fff" font-size="7" opacity="0.85">Wood</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               A-1  Magenta · Ground Pallet (large bottom-left)
-               PDF: x=171-229, y=432-532
-          ══════════════════════════════════════ -->
-          <g id="zone-A-1" class="rack-zone" onclick="rackClick('A-1')" style="cursor:pointer;">
-            <rect x="68" y="394" width="170" height="234" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
-            <text x="153" y="500" text-anchor="middle" fill="#fff" font-size="30" font-weight="900">A-1</text>
-            <text x="153" y="526" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pallet</text>
-          </g>
-
-          <!-- ══════════════════════════════════════
-               B-1  Blue · Ground Pile New Goods (tall center)
-               PDF: x=270-284, y=249-459
-          ══════════════════════════════════════ -->
-          <g id="zone-B-1" class="rack-zone" onclick="rackClick('B-1')" style="cursor:pointer;">
-            <rect x="304" y="148" width="108" height="280" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/>
-            <text x="358" y="280" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">B-1</text>
-            <text x="358" y="302" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pile</text>
-            <text x="358" y="316" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">(New Goods)</text>
-          </g>
-
-          <!-- ── COMPASS ── -->
-          <g transform="translate(628,630)">
+          <!-- COMPASS -->
+          <g transform="translate(628,628)">
             <circle cx="0" cy="0" r="16" fill="none" stroke="#444" stroke-width="1.5"/>
             <text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text>
             <polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/>
           </g>
 
-          <!-- ── ENTRANCE label ── -->
-          <text x="340" y="656" text-anchor="middle" fill="#444" font-size="9" letter-spacing="3">ENTRANCE / EXIT</text>
-          <line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/>
-          <line x1="160" y1="638" x2="160" y2="642" stroke="#444" stroke-width="2"/>
-          <line x1="520" y1="638" x2="520" y2="642" stroke="#444" stroke-width="2"/>
+          <!-- C-1  Orange -->
+          <g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;">
+            <rect x="111" y="48" width="86" height="66" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/>
+            <text x="154" y="78" text-anchor="middle" fill="#fff" font-size="16" font-weight="900">C-1</text>
+            <text x="154" y="95" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Ground Pallet</text>
+          </g>
 
-          <!-- ── PICK ROUTE PATH ── -->
-          <polyline id="rack-route-path" points="" fill="none" stroke="#0af" stroke-width="3"
-            stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/>
-          <polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3"
-            stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/>
+          <!-- R3  Red -->
+          <g id="zone-R3" class="rack-zone" onclick="rackClick(&apos;R3&apos;)" style="cursor:pointer;">
+            <rect x="68" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="98" y="215" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R3</text>
+            <text x="98" y="230" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
+          </g>
+
+          <!-- R2  Red -->
+          <g id="zone-R2" class="rack-zone" onclick="rackClick(&apos;R2&apos;)" style="cursor:pointer;">
+            <rect x="137" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="167" y="215" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R2</text>
+            <text x="167" y="230" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
+          </g>
+
+          <!-- R1  Red  TALL  (no gap to B-1) -->
+          <g id="zone-R1" class="rack-zone" onclick="rackClick(&apos;R1&apos;)" style="cursor:pointer;">
+            <rect x="227" y="128" width="60" height="313" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/>
+            <text x="257" y="278" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">R1</text>
+            <text x="257" y="295" text-anchor="middle" fill="#fff" font-size="8" opacity="0.85">Metal</text>
+          </g>
+
+          <!-- B-1  Blue  (touches R1) -->
+          <g id="zone-B-1" class="rack-zone" onclick="rackClick(&apos;B-1&apos;)" style="cursor:pointer;">
+            <rect x="289" y="128" width="60" height="313" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/>
+            <text x="319" y="278" text-anchor="middle" fill="#fff" font-size="18" font-weight="900">B-1</text>
+            <text x="319" y="295" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pile</text>
+          </g>
+
+          <!-- A-1  Magenta  right=R1 left, extends to south wall -->
+          <g id="zone-A-1" class="rack-zone" onclick="rackClick(&apos;A-1&apos;)" style="cursor:pointer;">
+            <rect x="68" y="389" width="159" height="241" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/>
+            <text x="147" y="500" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">A-1</text>
+            <text x="147" y="520" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Ground Pallet</text>
+          </g>
+
+          <!-- PICK ROUTE -->
+          <polyline id="rack-route-path"  points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/>
+          <polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/>
 
         </svg>
       </div>
