@@ -1064,6 +1064,49 @@ function isOnShift(p){ return p.active===true; }
 function isOffShift(p){ return p.active!==true; }
 
 function packerColor(p){ return p.color||PCOLORS[0]; }
+// ══════════════════════════════════════════
+// CODE 128 BARCODE GENERATOR
+// ══════════════════════════════════════════
+var C128=(function(){
+  var CHARS=[' ','!','"','#','$','%','&',"'",'(',')','*','+',',','-','.','/','0','1','2','3','4','5','6','7','8','9',':',';','<','=','>','?','@','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','[','\\',']','^','_','`','a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','{','|','}','~'];
+  var ENCODE=[212222,222122,222221,121223,121322,131222,122213,122312,132212,221213,221312,231212,112232,122132,122231,113222,123122,123221,223211,221132,221231,213212,223112,312131,311222,321122,321221,312212,322112,322211,212123,212321,232121,111323,131123,131321,112313,132113,132311,211313,231113,231311,112133,112331,132131,113123,113321,133121,313121,211331,231131,213113,213311,213131,311123,311321,331121,312113,312311,332111,314111,221411,431111,111224,111422,121124,121421,141122,141221,112214,112412,122114,122411,142112,142211,241211,221114,413111,241112,134111,111242,121142,121241,114212,124112,124211,411212,421112,421211,212141,214121,412121,111143,111341,131141,114113,114311,411113,411311,113141,114131,311141,411131,211412,211214,211232,23311120];
+  var START_B=104, STOP=106;
+  function encode(s){
+    var bars=[START_B], sum=START_B;
+    for(var i=0;i<s.length;i++){
+      var idx=CHARS.indexOf(s[i]);
+      if(idx<0) idx=0;
+      bars.push(idx); sum+=idx*(i+1);
+    }
+    bars.push(sum%103); bars.push(STOP);
+    return bars;
+  }
+  function svg(text, barW, barH){
+    barW=barW||2; barH=barH||60;
+    var bars=encode(String(text));
+    var patterns=bars.map(function(b){return ENCODE[b];});
+    var totalBars=0;
+    patterns.forEach(function(p){
+      var s=String(p);
+      for(var i=0;i<s.length;i++) totalBars+=parseInt(s[i]);
+    });
+    var totalW=totalBars*barW;
+    var rects='';
+    var x=0;
+    patterns.forEach(function(p){
+      var s=String(p);
+      var dark=true;
+      for(var i=0;i<s.length;i++){
+        var w=parseInt(s[i])*barW;
+        if(dark) rects+='<rect x="'+x+'" y="0" width="'+w+'" height="'+barH+'" fill="#000"/>';
+        x+=w; dark=!dark;
+      }
+    });
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+barH+'" viewBox="0 0 '+totalW+' '+barH+'">'+rects+'</svg>';
+  }
+  return {svg:svg};
+})();
+
 function packerInitial(p){ return p.name?p.name[0].toUpperCase():'?'; }
 function avatarHtml(p,size){
   size=size||32;
@@ -4027,6 +4070,7 @@ async function aiAsk(text){
   // Try proxy URL first (user-configured), then direct (works locally, not on GitHub Pages)
   var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'';
   var apiUrl = proxyUrl || 'https://api.anthropic.com/v1/messages';
+  console.log('[AI] Sending POST to:', apiUrl);
 
   try{
     var headers = {'Content-Type':'application/json'};
@@ -4046,6 +4090,8 @@ async function aiAsk(text){
     });
     if(!resp.ok){
       var status=resp.status;
+      var errBody = await resp.text();
+      console.log('[AI] Error response:', status, errBody);
       if(status===401||status===403){
         loadDiv.innerHTML='✗ AI auth error ('+status+'). Set up a Cloudflare Worker proxy — click the ⚙ in the AI panel.';
       } else {
@@ -4089,38 +4135,158 @@ async function aiAsk(text){
 function aiShowProxySetup(){
   var existing=document.getElementById('ai-proxy-modal');
   if(existing){existing.remove();return;}
+
+  var workerCode = [
+    "export default {",
+    "  async fetch(req, env) {",
+    "    const cors = {",
+    "      'Access-Control-Allow-Origin': '*',",
+    "      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',",
+    "      'Access-Control-Allow-Headers': '*'",
+    "    };",
+    "    // Handle preflight",
+    "    if (req.method === 'OPTIONS') {",
+    "      return new Response(null, { status: 204, headers: cors });",
+    "    }",
+    "    // Health check for GET",
+    "    if (req.method === 'GET') {",
+    "      return new Response(JSON.stringify({ status: 'Warehub AI proxy is running' }), {",
+    "        status: 200, headers: { ...cors, 'Content-Type': 'application/json' }",
+    "      });",
+    "    }",
+    "    // Handle POST — forward to Anthropic",
+    "    try {",
+    "      const text = await req.text();",
+    "      if (!text || text.trim() === '') {",
+    "        return new Response(JSON.stringify({ error: 'Empty request body' }), {",
+    "          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }",
+    "        });",
+    "      }",
+    "      const body = JSON.parse(text);",
+    "      const resp = await fetch('https://api.anthropic.com/v1/messages', {",
+    "        method: 'POST',",
+    "        headers: {",
+    "          'Content-Type': 'application/json',",
+    "          'x-api-key': env.ANTHROPIC_KEY,",
+    "          'anthropic-version': '2023-06-01'",
+    "        },",
+    "        body: JSON.stringify(body)",
+    "      });",
+    "      const data = await resp.text();",
+    "      return new Response(data, {",
+    "        status: resp.status,",
+    "        headers: { ...cors, 'Content-Type': 'application/json' }",
+    "      });",
+    "    } catch (e) {",
+    "      return new Response(JSON.stringify({ error: e.message }), {",
+    "        status: 500, headers: { ...cors, 'Content-Type': 'application/json' }",
+    "      });",
+    "    }",
+    "  }",
+    "}"
+  ].join('\n'); var savedUrl = localStorage.getItem('warehub_ai_proxy')||'';
+
   var m=document.createElement('div');
   m.id='ai-proxy-modal';
-  m.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;';
-  m.innerHTML=
-    '<div style="background:var(--sur);border:1px solid var(--bdr);padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;">'
-    +'<div style="font-size:10px;letter-spacing:3px;color:var(--cy);margin-bottom:4px;">WAREHUB AI SETUP</div>'
-    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Set up a free Cloudflare Worker to enable the AI assistant.</div>'
-    +'<div style="background:var(--bg);border:1px solid var(--bdr);padding:12px;margin-bottom:14px;font-size:10px;color:var(--td);line-height:1.9;">'
-    +'<strong style="color:var(--tx);">Step 1</strong> — Go to <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--cy);">workers.cloudflare.com</a> (free account)<br>'
-    +'<strong style="color:var(--tx);">Step 2</strong> — Create Worker → paste this code:<br>'
-    +'<pre style="background:#111;padding:8px;margin:6px 0;font-size:9px;overflow-x:auto;color:#0af;">Paste the Cloudflare Worker proxy code (see instructions above)</pre>'
-    +'<strong style="color:var(--tx);">Step 3</strong> — In Worker Settings → Variables → add: <code style="color:#0af;">ANTHROPIC_KEY</code> = your API key from <a href="https://console.anthropic.com" target="_blank" style="color:var(--cy);">console.anthropic.com</a><br>'
-    +'<strong style="color:var(--tx);">Step 4</strong> — Deploy → copy the Worker URL below'
+  m.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:20px;';
+
+  var inner=document.createElement('div');
+  inner.style.cssText='background:var(--sur);border:1px solid var(--bdr);padding:24px;width:560px;max-width:100%;max-height:90vh;overflow-y:auto;';
+  inner.innerHTML=
+    '<div style="font-size:10px;letter-spacing:3px;color:#8b5cf6;margin-bottom:4px;">WAREHUB AI — PROXY SETUP</div>'
+    +'<div style="font-size:11px;color:var(--td);margin-bottom:16px;">Enables the AI assistant via a free Cloudflare Worker.</div>'
+
+    +'<div style="font-size:9px;font-weight:700;color:var(--tx);letter-spacing:1px;margin-bottom:6px;">STEP 1 — Create Cloudflare Worker</div>'
+    +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;line-height:1.7;">'
+    +'Go to <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--cy);">workers.cloudflare.com</a> → '
+    +'<strong style="color:var(--tx);">Create Worker</strong> → select all code in editor → delete → paste code below → <strong style="color:var(--tx);">Deploy</strong>'
     +'</div>'
-    +'<div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:5px;">YOUR WORKER URL</div>'
-    +'<input id="ai-proxy-url" placeholder="https://warehub-ai.yourname.workers.dev" value="'+(localStorage.getItem('warehub_ai_proxy')||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;font-family:monospace;margin-bottom:14px;outline:none;"/>'
+    +'<div style="position:relative;margin-bottom:12px;">'
+    +'<textarea id="ai-worker-code" readonly rows="8" style="width:100%;box-sizing:border-box;background:#0d0d0d;border:1px solid var(--bdr);color:#0af;padding:10px;font-family:monospace;font-size:9px;resize:none;outline:none;"></textarea>'
+    +'<button id="ai-copy-code" style="position:absolute;top:6px;right:6px;padding:3px 10px;font-size:8px;background:var(--sur);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">COPY</button>'
+    +'</div>'
+
+    +'<div style="font-size:9px;font-weight:700;color:var(--tx);letter-spacing:1px;margin-bottom:6px;">STEP 2 — Add API Key as Secret</div>'
+    +'<div style="font-size:10px;color:var(--td);margin-bottom:12px;line-height:1.7;">'
+    +'Worker Settings → <strong style="color:var(--tx);">Variables → Add variable</strong><br>'
+    +'Name: <code style="color:#0af;">ANTHROPIC_KEY</code> &nbsp; Type: <strong style="color:var(--tx);">Secret</strong> &nbsp; Value: your key from <a href="https://console.anthropic.com" target="_blank" style="color:var(--cy);">console.anthropic.com</a>'
+    +'</div>'
+
+    +'<div style="font-size:9px;font-weight:700;color:var(--tx);letter-spacing:1px;margin-bottom:6px;">STEP 3 — Paste Worker URL Here</div>'
+    +'<input id="ai-proxy-url" placeholder="https://warehub-ai.yourname.workers.dev" value="'+savedUrl+'" '
+    +'style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:8px;font-size:11px;font-family:monospace;margin-bottom:6px;outline:none;"/>'
+    +'<div id="ai-proxy-msg" style="font-size:10px;color:var(--am);min-height:14px;margin-bottom:12px;"></div>'
+
     +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
     +'<button id="ai-proxy-cancel" style="padding:7px 14px;font-size:10px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">CANCEL</button>'
-    +'<button id="ai-proxy-save" style="padding:7px 14px;font-size:10px;background:#6366f1;border:none;color:#fff;cursor:pointer;font-family:inherit;">SAVE & TEST →</button>'
-    +'</div></div>';
+    +(savedUrl?'<button id="ai-proxy-clear" style="padding:7px 14px;font-size:10px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">CLEAR</button>':'')
+    +'<button id="ai-proxy-test" style="padding:7px 14px;font-size:10px;background:transparent;border:1px solid var(--cy);color:var(--cy);cursor:pointer;font-family:inherit;">TEST</button>'
+    +'<button id="ai-proxy-save" style="padding:7px 14px;font-size:10px;background:#8b5cf6;border:none;color:#fff;cursor:pointer;font-family:inherit;">SAVE</button>'
+    +'</div>';
+
+  m.appendChild(inner);
   document.body.appendChild(m);
+
+  // Fill code textarea
+  document.getElementById('ai-worker-code').value = workerCode;
+
+  // Copy code button
+  document.getElementById('ai-copy-code').onclick=function(){
+    var ta=document.getElementById('ai-worker-code');
+    ta.select(); document.execCommand('copy');
+    this.textContent='COPIED!';
+    setTimeout(function(){document.getElementById('ai-copy-code').textContent='COPY';},1500);
+  };
+
+  // Cancel
   document.getElementById('ai-proxy-cancel').onclick=function(){m.remove();};
+
+  // Clear
+  var clearBtn=document.getElementById('ai-proxy-clear');
+  if(clearBtn) clearBtn.onclick=function(){
+    localStorage.removeItem('warehub_ai_proxy');
+    m.remove(); pm('AI proxy cleared.');
+  };
+
+  var msgEl=document.getElementById('ai-proxy-msg');
+
+  // Test
+  document.getElementById('ai-proxy-test').onclick=async function(){
+    var url=document.getElementById('ai-proxy-url').value.trim();
+    if(!url){msgEl.style.color='var(--am)';msgEl.textContent='⚠ Enter a Worker URL first.';return;}
+    msgEl.style.color='var(--am)';msgEl.textContent='⟳ Testing connection…';
+    try{
+      var r=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:20,messages:[{role:'user',content:'Reply with just: OK'}]})
+      });
+      var txt=await r.text();
+      if(r.ok){
+        msgEl.style.color='var(--gn)';
+        msgEl.textContent='✓ Connected! Response: '+txt.slice(0,60);
+      } else {
+        msgEl.style.color='var(--rd)';
+        msgEl.textContent='✗ Error '+r.status+': '+txt.slice(0,100);
+      }
+    }catch(e){
+      msgEl.style.color='var(--rd)';
+      msgEl.textContent='✗ '+e.message;
+    }
+  };
+
+  // Save
   document.getElementById('ai-proxy-save').onclick=function(){
     var url=document.getElementById('ai-proxy-url').value.trim();
-    if(!url){localStorage.removeItem('warehub_ai_proxy');m.remove();pm('AI proxy cleared.');return;}
-    if(!url.startsWith('http')){pm('⚠ Enter a valid URL.');return;}
+    if(!url){msgEl.style.color='var(--am)';msgEl.textContent='⚠ Enter a Worker URL.';return;}
+    if(!url.startsWith('http')){msgEl.style.color='var(--am)';msgEl.textContent='⚠ URL must start with https://';return;}
     localStorage.setItem('warehub_ai_proxy',url);
     m.remove();
-    pm('✓ AI proxy saved! Testing…');
-    aiAsk('Hello, are you working?');
+    pm('✓ AI proxy saved! Try asking something.');
   };
 }
+
+
 
 
 function aiDoActions(actions){
