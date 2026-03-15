@@ -19,13 +19,13 @@ html,body{margin:0;padding:0;}
 body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;font-size:clamp(11px,1.5vw,13px);height:100%;overflow:hidden;}
 
 /* ── HEADER ── */
-#hdr{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px;height:auto;min-height:44px;flex-wrap:wrap;border-bottom:1px solid var(--bdr);background:var(--sur);min-width:0;gap:8px;}
+#hdr{flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--bdr);background:var(--sur);}
 #logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
 #dot{width:7px;height:7px;border-radius:50%;background:var(--bdr);margin-right:8px;transition:all .4s;}
 #dot.live{background:var(--gn);box-shadow:0 0 8px var(--gn);}
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
-.tabs{display:flex;gap:1px;overflow-x:auto;flex-shrink:1;min-width:0;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
-.tab{padding:5px 10px;font-size:9px;letter-spacing:1.5px;border:1px solid var(--bdr);cursor:pointer;font-family:inherit;white-space:nowrap;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;}
+.tabs{display:flex;gap:0;overflow-x:auto;flex-shrink:0;width:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch;border-top:1px solid var(--bdr);}
+.tab{flex:1;padding:6px 4px;font-size:8.5px;letter-spacing:1px;border:none;border-right:1px solid var(--bdr);cursor:pointer;font-family:inherit;white-space:nowrap;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;text-align:center;min-width:0;}
 .tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
 
 /* ── LAYOUT ── */
@@ -185,6 +185,13 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 .dev-section.collapsed .dev-section-body{display:none;}
 .dev-section.collapsed .dev-chevron{transform:rotate(-90deg);}
 /* ── Floating Buttons ── */
+.rack-spot rect{transition:fill .12s,stroke .12s,stroke-width .12s;}
+.rack-spot:hover rect{fill:rgba(255,255,255,0.22)!important;stroke:rgba(255,255,255,0.85)!important;stroke-width:1.2!important;}
+.rack-spot.active rect{fill:rgba(0,229,255,0.38)!important;stroke:#00e5ff!important;stroke-width:1.8!important;}
+.rack-spot.active{filter:drop-shadow(0 0 5px #00e5ff66);}
+.rack-spot.has-orders rect{fill:rgba(255,200,0,0.32)!important;stroke:#ffd700!important;}
+.rack-spot.done rect{fill:rgba(56,161,105,0.35)!important;stroke:#68d391!important;}
+.rack-spot.active text{fill:#00e5ff!important;font-weight:900!important;}
 #fm-btn{position:fixed!important;bottom:74px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:var(--cy)!important;color:#000!important;font-size:18px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 12px #0008;transition:transform .15s;padding:0!important;}
 #fm-btn:hover{transform:scale(1.08)!important;}
 #fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:min(300px,92vw);background:var(--sur);border:1px solid var(--bdr);padding:14px;display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
@@ -194,67 +201,59 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 
 /* ══ RESPONSIVE ══ */
 
-/* MacBook / large tablet landscape (≤1280px) */
+/* All screens — tabs always full width, just scale font */
 @media(max-width:1280px){
-  .tab{padding:4px 8px;font-size:8.5px;letter-spacing:1px;}
+  .tab{font-size:8px;letter-spacing:0.8px;}
 }
-
-/* iPad landscape / small laptop (≤1024px) */
 @media(max-width:1024px){
-  #hdr{padding:0 8px;gap:6px;}
-  .tab{padding:4px 7px;font-size:8px;letter-spacing:0.8px;}
-  .view{padding:12px 14px;}
+  .tab{font-size:7.5px;padding:6px 2px;letter-spacing:0.5px;}
+  .view{padding:12px 12px;}
   #ai-panel{width:min(320px,92vw);}
-  #fm-panel{width:min(280px,92vw)!important;}
 }
-
-/* iPad portrait / large phone landscape (≤768px) */
 @media(max-width:768px){
   body{font-size:12px;}
   #logo{font-size:14px;}
-  .tab{padding:4px 6px;font-size:7.5px;letter-spacing:0.5px;}
-  .view{padding:10px;}
+  .tab{font-size:7px;padding:5px 2px;letter-spacing:0;}
+  .view{padding:10px 8px;}
   #packer-grid,#dash-grid,#payroll-grid{grid-template-columns:1fr!important;}
-  .fp-card{min-width:80px;padding:8px 10px;}
-  .fc{min-width:70px;}
+  .fp-card{min-width:70px;padding:8px 6px;}
+  .fc{min-width:60px;}
   #fbar{width:95vw!important;}
   #ai-panel{width:95vw!important;right:2.5vw!important;left:2.5vw!important;}
   #fm-panel{width:92vw!important;right:4vw!important;}
   .dev-grid{grid-template-columns:1fr!important;}
-  .rack-map-header{flex-direction:column;align-items:flex-start;}
 }
-
-/* Phone portrait (≤480px) */
 @media(max-width:480px){
   body{font-size:11px;}
   #logo{font-size:12px;letter-spacing:2px;}
-  .tab{padding:3px 5px;font-size:7px;letter-spacing:0;}
+  .tab{font-size:6.5px;padding:5px 1px;}
   .view{padding:8px 6px;}
   .btn{padding:5px 8px;font-size:8px;}
-  #hdr{min-height:40px;}
-  #ai-panel{width:96vw!important;right:2vw!important;left:2vw!important;bottom:80px!important;border-radius:8px;}
-  #fm-panel{width:92vw!important;right:4vw!important;}
-  .fp-card,.fc{min-width:60px;font-size:9px;}
+  #ai-panel{width:100vw!important;right:0!important;left:0!important;bottom:0!important;}
+  #fm-panel{width:100vw!important;right:0!important;}
 }
-
-/* Very small phones (≤360px) */
 @media(max-width:360px){
-  .tab{padding:2px 4px;font-size:6.5px;}
+  .tab{font-size:6px;padding:4px 1px;}
   #logo{font-size:11px;}
 }
-#6366f1;}
+
 </style>
 </head>
 <body>
 
 <div id="hdr">
-  <div style="display:flex;align-items:center;flex-shrink:0;">
-    <div id="dot"></div>
-    <div style="display:flex;flex-direction:column;line-height:1.1;">
-      <span id="logo">WAREHUB</span>
-      <span style="font-size:8px;letter-spacing:3px;color:var(--td);font-family:'Share Tech Mono',monospace;">DOUBLE SIDED ISCM LLC</span>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;min-height:42px;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div id="dot"></div>
+      <div style="display:flex;flex-direction:column;line-height:1.1;">
+        <span id="logo">WAREHUB</span>
+        <span style="font-size:8px;letter-spacing:3px;color:var(--td);font-family:'Share Tech Mono',monospace;">DOUBLE SIDED ISCM LLC</span>
+      </div>
     </div>
-    <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
+      <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+    </div>
   </div>
   <div class="tabs">
     <button class="tab on"  data-view="import"   onclick="gv('import')">Import</button>
@@ -1825,6 +1824,60 @@ function doScan(raw){
           setTimeout(function(){el.style.background='';},600);
         });
       }
+    }
+    focusScan(); return;
+  }
+
+  // ── STATE: rack-scan ── packer scans SKU → then location ──
+  if(packState==='rack-scan'){
+    if(!rackScanState) rackScanState = {};
+
+    if(!rackScanState.sku){
+      // First scan = SKU
+      rackScanState.sku = scanned;
+      bpOk(); flash('ok');
+      setFb('✓ SKU: '+scanned+' — now scan LOCATION (e.g. R1-05)','var(--am)');
+      setErr('Scan the rack location label now');
+    } else {
+      // Second scan = location
+      var loc = scanned.toUpperCase().replace(/\s/g,'');
+      // Validate location exists in rack map
+      var validLoc = document.getElementById('spot-'+loc);
+      if(!validLoc){
+        bpErr(); flash('err');
+        setErr('✗ "'+loc+'" is not a valid rack location. Try R1-01, B-1-05, etc.');
+        setFb('✗ INVALID LOCATION','var(--rd)');
+        focusScan(); return;
+      }
+      // Store in inventory data
+      if(!window._inventoryData) window._inventoryData = {};
+      if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
+      var invLoc = window._inventoryData[loc];
+      // Check if SKU already exists at this location
+      var existing = invLoc.skus.find(function(s){return s.sku===rackScanState.sku;});
+      if(existing){
+        existing.qty = (parseInt(existing.qty)||0) + 1;
+      } else {
+        invLoc.skus.push({sku:rackScanState.sku, name:'', qty:1, unit:'PCS'});
+      }
+      invLoc.lastUpdated = new Date().toLocaleDateString();
+      // Highlight spot
+      rackHighlightInventory();
+      // Highlight the specific spot on map
+      var spotEl = document.getElementById('spot-'+loc);
+      if(spotEl){
+        spotEl.classList.remove('active');
+        void spotEl.offsetWidth;
+        spotEl.classList.add('active');
+        setTimeout(function(){if(spotEl)spotEl.classList.remove('active');}, 2000);
+      }
+      bpOk(); flash('ok');
+      setFb('✓ '+rackScanState.sku+' → '+loc+' saved! Scan next SKU','var(--gn)');
+      setErr('');
+      // Save to localStorage
+      try{ localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); }catch(e){}
+      // Reset for next scan pair
+      rackScanState = {};
     }
     focusScan(); return;
   }
@@ -3511,53 +3564,123 @@ function rackNormalise(shelf){
 }
 
 function spotClick(spotId){
-  // Clear previous active spot
-  document.querySelectorAll('.rack-spot.active').forEach(function(el){ el.classList.remove('active'); });
+  // Deactivate previous spot
+  document.querySelectorAll('.rack-spot.active').forEach(function(el){
+    el.classList.remove('active');
+  });
+
+  // Activate clicked spot
   var el = document.getElementById('spot-'+spotId);
   if(el) el.classList.add('active');
 
-  // Show info panel for this specific spot
-  var info = document.getElementById('rack-info-panel');
+  // Determine zone
+  var zoneId   = spotId.replace(/-\d+$/, '');
+  var zoneInfo = RACK_INFO[zoneId] || {type:'STORAGE', color:'var(--cy)'};
+  var color    = zoneInfo.color;
+
+  // ── Build info panel ──
+  var panel = document.getElementById('rack-info-panel');
   var title = document.getElementById('rack-info-title');
   var type  = document.getElementById('rack-info-type');
-  var ordersEl = document.getElementById('rack-info-orders');
+  var body  = document.getElementById('rack-info-orders');
 
-  // Determine parent zone
-  var zoneId = spotId.replace(/-\d+$/, '');  // e.g. B-1-5 → B-1, R1-3 → R1
-  var zoneInfo = RACK_INFO[zoneId]||{type:'STORAGE',color:'var(--cy)'};
+  panel.style.display   = 'block';
+  panel.style.borderColor = color;
+  title.style.color     = color;
+  title.textContent     = spotId;
+  type.textContent      = zoneInfo.type;
 
-  info.style.display='block';
-  info.style.borderColor = zoneInfo.color;
-  title.style.color = zoneInfo.color;
-  title.textContent = spotId;
-  type.textContent  = zoneInfo.type + ' — LOCATION '+spotId;
+  // ── Check inventory CSV data (future connection) ──
+  var invData = window._inventoryData || {};
+  var invItem = invData[spotId.toUpperCase()] || invData[spotId] || null;
 
-  // Find orders at this exact spot
+  // ── Check current orders at this spot ──
   var spotOrders = orders.filter(function(o){
     var shelf = (o.shelf||'').trim().toUpperCase();
     var sid   = spotId.toUpperCase();
-    return shelf === sid || shelf === sid.replace(/-/g,'') || shelf.endsWith('-'+sid.split('-').pop());
+    return shelf === sid || shelf.replace(/-/g,'') === sid.replace(/-/g,'');
   });
 
-  if(!spotOrders.length){
-    ordersEl.innerHTML = '<span style="color:var(--td);font-size:11px;">No orders currently at '+spotId+'.</span>';
+  var html = '';
+
+  // ── Inventory section (shows when CSV is loaded) ──
+  if(invItem){
+    var skus = invItem.skus||[];
+    html +=
+      '<div style="background:var(--bg);border:1px solid '+color+'33;padding:10px 12px;margin-bottom:12px;border-radius:2px;">'
+      +'<div style="font-size:8px;letter-spacing:2px;color:'+color+';margin-bottom:8px;">INVENTORY AT '+spotId+'</div>';
+    if(skus.length){
+      html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+        +'<tr style="border-bottom:1px solid var(--bdr);">'
+        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">SKU</th>'
+        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">PRODUCT</th>'
+        +'<th style="text-align:right;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">QTY</th>'
+        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">UNIT</th>'
+        +'</tr>';
+      skus.forEach(function(s){
+        html += '<tr style="border-bottom:1px solid var(--bdr)22;">'
+          +'<td style="padding:4px 6px;color:var(--cy);font-family:monospace;">'+s.sku+'</td>'
+          +'<td style="padding:4px 6px;color:var(--tx);">'+s.name+'</td>'
+          +'<td style="padding:4px 6px;color:var(--tx);text-align:right;font-weight:700;">'+s.qty+'</td>'
+          +'<td style="padding:4px 6px;color:var(--td);">'+s.unit+'</td>'
+          +'</tr>';
+      });
+      html += '</table>';
+    } else {
+      html += '<div style="font-size:10px;color:var(--td);">No SKUs recorded for this location.</div>';
+    }
+    if(invItem.supplier)    html += '<div style="font-size:9px;color:var(--td);margin-top:6px;">Supplier: <span style="color:var(--tx);">'+invItem.supplier+'</span></div>';
+    if(invItem.lastUpdated) html += '<div style="font-size:9px;color:var(--td);">Updated: <span style="color:var(--tx);">'+invItem.lastUpdated+'</span></div>';
+    if(invItem.notes)       html += '<div style="font-size:9px;color:var(--am);margin-top:4px;">📝 '+invItem.notes+'</div>';
+    html += '</div>';
   } else {
-    var pending = spotOrders.filter(function(o){return o.status==='pending';});
-    var done    = spotOrders.filter(function(o){return o.status==='done';});
-    ordersEl.innerHTML =
-      '<div style="font-size:10px;letter-spacing:1px;color:var(--td);margin-bottom:8px;">'
-      +spotOrders.length+' ORDER(S) · '+pending.length+' PENDING · '+done.length+' DONE</div>'
-      +spotOrders.map(function(o){
-        var packer=(o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null);
-        var packerName=packer?packer.name:'Unassigned';
-        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);gap:8px;">'
-          +'<span style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-12)+'</span>'
-          +'<span style="font-size:10px;color:var(--td);">'+o.skus+'</span>'
-          +'<span style="font-size:10px;color:var(--cy);">'+packerName+'</span>'
-          +'<span style="font-size:9px;padding:1px 6px;background:'+(o.status==='done'?'#38a16922':'#e53e3e22')+';color:'+(o.status==='done'?'var(--gn)':'var(--rd)')+';">'+o.status.toUpperCase()+'</span>'
-          +'</div>';
-      }).join('');
+    html +=
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+      +'<div style="font-size:8px;letter-spacing:2px;color:var(--td);">INVENTORY</div>'
+      +'<div style="font-size:8px;color:var(--td);opacity:0.6;">— no CSV loaded —</div>'
+      +'</div>';
   }
+
+  // ── Orders section ──
+  html += '<div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">ORDERS AT '+spotId+'</div>';
+
+  if(!spotOrders.length){
+    html += '<div style="font-size:11px;color:var(--td);padding:8px 0;">No orders assigned to this location.</div>';
+  } else {
+    var pending = spotOrders.filter(function(o){return o.status!=='done';}).length;
+    var done    = spotOrders.filter(function(o){return o.status==='done';}).length;
+    html += '<div style="font-size:9px;color:var(--td);margin-bottom:8px;">'
+           +spotOrders.length+' total &nbsp;·&nbsp; '
+           +'<span style="color:var(--am);">'+pending+' pending</span> &nbsp;·&nbsp; '
+           +'<span style="color:var(--gn);">'+done+' done</span></div>';
+    spotOrders.forEach(function(o){
+      var packer = o.assignedTo ? (packers.find(function(p){return p.id===o.assignedTo;})||null) : null;
+      var isDone = o.status==='done';
+      html += '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;'
+             +'padding:6px 0;border-bottom:1px solid var(--bdr);">'
+             +'<div>'
+             +'<div style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-14)+'</div>'
+             +'<div style="font-size:9px;color:var(--td);margin-top:1px;">'+( o.skus||'—')+'</div>'
+             +'</div>'
+             +'<div style="font-size:9px;color:var(--cy);">'+(packer?packer.name:'—')+'</div>'
+             +'<div style="font-size:8px;padding:2px 7px;border-radius:2px;'
+             +'background:'+(isDone?'#38a16922':'#e53e3e22')+';'
+             +'color:'+(isDone?'var(--gn)':'var(--rd)')+';">'
+             +(isDone?'DONE':'PENDING')+'</div>'
+             +'</div>';
+    });
+  }
+
+  // ── Import CSV hint (only when no inventory loaded) ──
+  if(!invItem){
+    html += '<div style="margin-top:12px;padding:8px;background:var(--bg);border:1px dashed var(--bdr);font-size:9px;color:var(--td);text-align:center;">'
+           +'📦 Import an inventory CSV to display goods stored at each location'
+           +'</div>';
+  }
+
+  body.innerHTML = html;
+}
+
 
 function rackHighlightSpots(){
   // Color all spots based on order status
@@ -3615,7 +3738,6 @@ function rackHighlightSpots(){
         }).join('')
       +(zoneOrders.length>10?'<div style="font-size:9px;color:var(--td);margin-top:4px;">+ '+(zoneOrders.length-10)+' more…</div>':'');
   }
-}
 
 function rackHighlight(zoneId){
   var g = document.getElementById('zone-'+zoneId);
@@ -3762,7 +3884,260 @@ function rackShowPickRoute(){
   }).join('');
 }
 
+
+// ══════════════════════════════════════════
+// INVENTORY CSV — Rack Map Data Source
+// ══════════════════════════════════════════
+// Expected CSV format:
+// LOCATION,SKU,DESCRIPTION,QTY,UNIT,NOTES
+// R1-01,SKU-001,Widget A,24,PCS,
+// B-1-05,SKU-002,Widget B,12,BOX,Fragile
+
+window._inventoryData = {};  // keyed by location e.g. "R1-01"
+
+function inventoryLoadCSV(text){
+  var lines = text.trim().split('\n');
+  if(!lines.length) return;
+  var headers = lines[0].split(',').map(function(h){ return h.trim().toUpperCase(); });
+  var locIdx  = headers.indexOf('LOCATION');
+  if(locIdx < 0) locIdx = 0;
+  var data = {};
+
+  for(var i=1;i<lines.length;i++){
+    var cols = lines[i].split(',');
+    if(!cols[locIdx]||!cols[locIdx].trim()) continue;
+    var loc  = cols[locIdx].trim().toUpperCase();
+    var item = { skus:[] };
+
+    // Read up to 5 SKU slots
+    for(var s=1;s<=5;s++){
+      var skuIdx  = headers.indexOf('SKU_'+s);
+      var nameIdx = headers.indexOf('PRODUCT_NAME_'+s);
+      var qtyIdx  = headers.indexOf('QTY_'+s);
+      var unitIdx = headers.indexOf('UNIT_'+s);
+      if(skuIdx>=0 && cols[skuIdx] && cols[skuIdx].trim()){
+        item.skus.push({
+          sku:  cols[skuIdx].trim(),
+          name: nameIdx>=0 ? (cols[nameIdx]||'').trim() : '',
+          qty:  qtyIdx>=0  ? (cols[qtyIdx]||'').trim()  : '',
+          unit: unitIdx>=0 ? (cols[unitIdx]||'').trim() : ''
+        });
+      }
+    }
+
+    // Extra fields
+    var supIdx  = headers.indexOf('SUPPLIER');
+    var updIdx  = headers.indexOf('LAST_UPDATED');
+    var noteIdx = headers.indexOf('NOTES');
+    if(supIdx>=0)  item.supplier    = (cols[supIdx]||'').trim();
+    if(updIdx>=0)  item.lastUpdated = (cols[updIdx]||'').trim();
+    if(noteIdx>=0) item.notes       = (cols[noteIdx]||'').trim();
+
+    // Also support legacy single-SKU format
+    var singleSkuIdx = headers.indexOf('SKU');
+    if(!item.skus.length && singleSkuIdx>=0 && cols[singleSkuIdx]){
+      item.skus.push({
+        sku:  (cols[singleSkuIdx]||'').trim(),
+        name: headers.indexOf('PRODUCT_NAME')>=0 ? (cols[headers.indexOf('PRODUCT_NAME')]||'').trim() : '',
+        qty:  headers.indexOf('QTY')>=0  ? (cols[headers.indexOf('QTY')]||'').trim()  : '',
+        unit: headers.indexOf('UNIT')>=0 ? (cols[headers.indexOf('UNIT')]||'').trim() : ''
+      });
+    }
+
+    if(loc) data[loc] = item;
+  }
+  window._inventoryData = data;
+  var count = Object.keys(data).length;
+  pm('✓ Inventory loaded — '+count+' locations. Click any spot to view contents.');
+  rackHighlightInventory();
+}
+
+function rackHighlightInventory(){
+  // Show which spots have inventory data
+  document.querySelectorAll('.rack-spot').forEach(function(el){
+    var sid = el.id.replace('spot-','').toUpperCase();
+    if(window._inventoryData[sid]){
+      el.classList.add('has-orders');
+    }
+  });
+}
+
+function inventoryTriggerUpload(){
+  var inp = document.createElement('input');
+  inp.type='file'; inp.accept='.csv,text/csv';
+  inp.onchange=function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){ inventoryLoadCSV(ev.target.result); };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+
+// ══════════════════════════════════════════
+// RACK MAP — SCAN GUN MODE
+// ══════════════════════════════════════════
+var _rackScanMode = 'off';      // 'off' | 'locate' | 'assign'
+var _rackAssignSpot = null;     // spot selected for assign mode
+
+function rackSetScanMode(mode){
+  _rackScanMode = mode;
+  _rackAssignSpot = null;
+
+  var inp    = document.getElementById('rack-scan-input');
+  var hint   = document.getElementById('rack-scan-hint');
+  var result = document.getElementById('rack-scan-result');
+  var btnL   = document.getElementById('rack-smode-locate');
+  var btnA   = document.getElementById('rack-smode-assign');
+  var btnOff = document.getElementById('rack-smode-off');
+
+  // Reset button styles
+  [btnL, btnA, btnOff].forEach(function(b){ if(b) b.className='btn'; });
+
+  if(mode==='off'){
+    inp.style.display='none';
+    hint.textContent='Select a scan mode to begin scanning with gun or keyboard.';
+    hint.style.color='var(--td)';
+    result.innerHTML='';
+    return;
+  }
+
+  inp.style.display='block';
+  inp.focus();
+  result.innerHTML='';
+
+  if(mode==='locate'){
+    if(btnL) btnL.className='btn btn-c';
+    inp.placeholder='Scan or type SKU to find its rack location…';
+    hint.style.color='var(--cy)';
+    hint.textContent='🔍 LOCATE — Scan an item SKU to highlight its rack location.';
+  } else if(mode==='assign'){
+    if(btnA) btnA.className='btn btn-c';
+    inp.placeholder='Step 1: Click a spot on the map, then scan the SKU…';
+    hint.style.color='var(--am)';
+    hint.textContent='📍 ASSIGN — Click a spot on the map first, then scan the SKU barcode.';
+  }
+}
+
+function rackDoScan(val){
+  if(!val || _rackScanMode==='off') return;
+  var result = document.getElementById('rack-scan-result');
+  var hint   = document.getElementById('rack-scan-hint');
+  var sku    = val.trim().toUpperCase();
+
+  // ── LOCATE MODE: find which spot(s) contain this SKU ──
+  if(_rackScanMode==='locate'){
+    var found = [];
+
+    // Search inventory data
+    var inv = window._inventoryData || {};
+    Object.keys(inv).forEach(function(loc){
+      var item = inv[loc];
+      if(item && item.skus){
+        item.skus.forEach(function(s){
+          if(s.sku && s.sku.toUpperCase().indexOf(sku) >= 0){
+            found.push({loc:loc, name:s.name, qty:s.qty, unit:s.unit});
+          }
+        });
+      }
+    });
+
+    // Also search current orders
+    orders.forEach(function(o){
+      if(o.skus){
+        o.skus.forEach(function(s){
+          if(s.sku && s.sku.toUpperCase().indexOf(sku)>=0 && o.shelf){
+            found.push({loc:o.shelf.toUpperCase(), name:s.sku, qty:s.qty||'', unit:'order', fromOrder:true});
+          }
+        });
+      }
+    });
+
+    if(!found.length){
+      result.innerHTML='<span style="color:var(--rd);">✗ SKU "'+sku+'" not found in inventory or orders.</span>';
+      return;
+    }
+
+    // Highlight all found spots
+    rackClearHighlight();
+    found.forEach(function(f){
+      var el = document.getElementById('spot-'+f.loc);
+      if(el) el.classList.add('active');
+    });
+
+    result.innerHTML = '<div style="font-size:9px;color:var(--gn);font-weight:700;">✓ Found at '+found.length+' location(s):</div>'
+      + found.map(function(f){
+          return '<div style="font-size:10px;color:var(--cy);margin-top:2px;">📍 '+f.loc
+            +(f.name?' — '+f.name:'')
+            +(f.qty?' · '+f.qty+(f.unit?' '+f.unit:''):'')+'</div>';
+        }).join('');
+
+    // Click the first found spot to show its panel
+    if(found[0]) spotClick(found[0].loc);
+    hint.textContent = '✓ Scan another SKU to locate it.';
+    return;
+  }
+
+  // ── ASSIGN MODE: link a SKU to the selected spot ──
+  if(_rackScanMode==='assign'){
+    // If no spot selected yet, try to interpret val as a location
+    var activeSpot = document.querySelector('.rack-spot.active');
+    if(!activeSpot){
+      // Maybe they scanned the spot label first
+      var spotEl = document.getElementById('spot-'+sku);
+      if(spotEl){
+        spotEl.classList.add('active');
+        _rackAssignSpot = sku;
+        result.innerHTML='<span style="color:var(--am);">📍 Spot '+sku+' selected. Now scan the SKU barcode.</span>';
+        hint.textContent='📍 ASSIGN — Now scan the item SKU to assign it to '+sku;
+        document.getElementById('rack-scan-input').placeholder='Now scan the item SKU…';
+        return;
+      }
+      result.innerHTML='<span style="color:var(--am);">⚠ Click a spot on the map first, then scan the SKU.</span>';
+      return;
+    }
+
+    var spotId = activeSpot.id.replace('spot-','');
+
+    // Assign to inventory data
+    var inv = window._inventoryData || {};
+    if(!inv[spotId]) inv[spotId] = {skus:[]};
+    if(!inv[spotId].skus) inv[spotId].skus = [];
+
+    // Check if SKU already exists at this spot
+    var existing = inv[spotId].skus.find(function(s){ return s.sku.toUpperCase()===sku; });
+    if(existing){
+      result.innerHTML='<span style="color:var(--am);">⚠ '+sku+' already at '+spotId+'.</span>';
+    } else {
+      inv[spotId].skus.push({sku:sku, name:'', qty:'', unit:''});
+      window._inventoryData = inv;
+      activeSpot.classList.add('has-orders');
+      result.innerHTML='<span style="color:var(--gn);">✓ '+sku+' assigned to '+spotId+'.</span>';
+      spotClick(spotId);  // refresh info panel
+    }
+
+    hint.textContent='📍 ASSIGN — Click another spot or scan next SKU.';
+    document.getElementById('rack-scan-input').placeholder='Scan next SKU or click another spot…';
+    return;
+  }
+}
+
+// Auto-focus rack scan input when rack map tab is open and gun scans
+function rackScanIntercept(e){
+  if(_rackScanMode==='off') return;
+  var inp = document.getElementById('rack-scan-input');
+  if(!inp || document.activeElement===inp) return;
+  // If a printable key is pressed while rack scan is active, redirect to scan input
+  if(e.key && e.key.length===1 && !e.ctrlKey && !e.altKey && !e.metaKey){
+    inp.focus();
+  }
+}
+document.addEventListener('keydown', rackScanIntercept);
+
 document.addEventListener('DOMContentLoaded',function(){
+  // Load saved inventory
+  try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
   loadStaff();
   excelLoadConfig();
   gmapsLoadConfig();
@@ -4002,6 +4377,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input id="rack-search" placeholder="Search shelf (e.g. R1, W2, A-1)…" oninput="rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:200px;"/>
           <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
+          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT INVENTORY CSV</button>
           <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
         </div>
       </div>
@@ -4011,6 +4387,26 @@ document.addEventListener('DOMContentLoaded',function(){
           <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#d53f8c;border-radius:2px;"></div>Ground Pallet A-1</div>
           <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#3182ce;border-radius:2px;"></div>Ground Pile B-1 (New Goods)</div>
           <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#dd6b20;border-radius:2px;"></div>Ground Pallet C-1</div>
+      <!-- ── RACK SCAN MODE ── -->
+      <div id="rack-scan-panel" style="background:var(--sur);border:1px solid var(--bdr);padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
+          <div style="font-size:8px;letter-spacing:2px;color:var(--td);">SCAN MODE</div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="rackSetScanMode('locate')"  id="rack-smode-locate"  class="btn btn-c" style="font-size:9px;padding:4px 10px;">🔍 LOCATE SKU</button>
+            <button onclick="rackSetScanMode('assign')"  id="rack-smode-assign"  class="btn"       style="font-size:9px;padding:4px 10px;">📍 ASSIGN TO SPOT</button>
+            <button onclick="rackSetScanMode('off')"     id="rack-smode-off"     class="btn"       style="font-size:9px;padding:4px 10px;">✕ OFF</button>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <div id="rack-scan-hint" style="font-size:9px;color:var(--td);margin-bottom:4px;">Select a scan mode to begin scanning with gun or keyboard.</div>
+          <input id="rack-scan-input" placeholder="Scan or type SKU / location…" autocomplete="off"
+            onkeydown="if(event.key==='Enter'){rackDoScan(this.value.trim());this.value='';}"
+            style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 10px;font-size:11px;font-family:monospace;outline:none;display:none;"/>
+        </div>
+        <div id="rack-scan-result" style="font-size:10px;min-width:160px;"></div>
+      </div>
+
+
         </div>
 
       <!-- Map container -->
