@@ -4048,7 +4048,26 @@ function aiGetContext(){
 }
 
 function aiSystemPrompt(){
-  return 'You are the Warehub AI assistant for Double Sided ISCM LLC warehouse.\nYou have real-time shift data in each message. Be concise — this is a busy warehouse.\nYou can answer questions AND take actions by appending a JSON block at the end of your reply.\n\nACTION FORMAT (only when needed):\n```json\n{"actions":[\n  {"type":"autoAssign"},\n  {"type":"assignAll","packerId":"PKR-001"},\n  {"type":"assign","trackingId":"TRACK123","packerId":"PKR-001"},\n  {"type":"clockIn","packerId":"PKR-001"},\n  {"type":"clockOut","packerId":"PKR-001"},\n  {"type":"setOnShift","packerId":"PKR-001"},\n  {"type":"setOffShift","packerId":"PKR-001"}\n]}\n```\nNever invent data. Use exact IDs from context.';
+  return 'You are the Warehub AI assistant for Double Sided ISCM LLC warehouse.\n'
+    +'You have real-time shift data in each message AND web search capability.\n'
+    +'Be concise — this is a busy warehouse.\n\n'
+    +'You can:\n'
+    +'- Answer questions about the current shift using the context provided\n'
+    +'- Search the web for external information (shipping rates, carrier status, product info, etc.)\n'
+    +'- Take warehouse actions by appending a JSON block\n\n'
+    +'ACTION FORMAT (only when needed):\n'
+    +'```json\n'
+    +'{"actions":[\n'
+    +'  {"type":"autoAssign"},\n'
+    +'  {"type":"assignAll","packerId":"PKR-001"},\n'
+    +'  {"type":"assign","trackingId":"TRACK123","packerId":"PKR-001"},\n'
+    +'  {"type":"clockIn","packerId":"PKR-001"},\n'
+    +'  {"type":"clockOut","packerId":"PKR-001"},\n'
+    +'  {"type":"setOnShift","packerId":"PKR-001"},\n'
+    +'  {"type":"setOffShift","packerId":"PKR-001"}\n'
+    +']}\n'
+    +'```\n'
+    +'Never invent warehouse data. Use exact IDs from context.';
 }
 
 async function aiSend(){
@@ -4083,8 +4102,9 @@ async function aiAsk(text){
       headers:headers,
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
+        max_tokens:2000,
         system:aiSystemPrompt(),
+        tools:[{type:'web_search_20250305',name:'web_search'}],
         messages:_aiHistory
       })
     });
@@ -4100,7 +4120,15 @@ async function aiAsk(text){
       _aiLoading=false; return;
     }
     var data=await resp.json();
-    var reply=(data.content&&data.content[0]&&data.content[0].text)||'⚠ No response.';
+    console.log('[AI] Response:', data);
+    // Extract text from content blocks (may include tool_use blocks from web search)
+    var reply='';
+    if(data.content && Array.isArray(data.content)){
+      data.content.forEach(function(block){
+        if(block.type==='text') reply += block.text;
+      });
+    }
+    if(!reply) reply='⚠ No response.';
     var actionMatch=reply.match(/```json([\s\S]*?)```/);
     var display=reply.replace(/```json[\s\S]*?```/g,'').trim();
     loadDiv.innerHTML=display
