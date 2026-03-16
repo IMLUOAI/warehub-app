@@ -9,6 +9,80 @@
 <title>WAREHUB — Double Sided ISCM LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;700;900&display=swap" rel="stylesheet"/>
 <style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+
+html,body{height:100%;overflow:hidden;}
+
+body{
+  font-family:'Share Tech Mono',monospace;
+  background:var(--bg);
+  color:var(--tx);
+  font-size:clamp(11px,1.5vw,13px);
+  display:grid;
+  grid-template-rows:auto 1fr;
+  grid-template-columns:1fr;
+  height:100svh;
+  overflow:hidden;
+}
+
+#hdr{
+  grid-row:1;
+  display:flex;
+  flex-direction:column;
+  flex-shrink:0;
+  background:var(--sur);
+  border-bottom:1px solid var(--bdr);
+  z-index:100;
+}
+
+#app{
+  grid-row:2;
+  position:relative;
+  overflow:hidden;
+  min-height:0;
+}
+
+.view{
+  display:none;
+  position:absolute;
+  inset:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  background:var(--bg);
+  -webkit-overflow-scrolling:touch;
+}
+
+.view.on{
+  display:block;
+}
+
+.tabs{
+  display:flex;
+  flex-shrink:0;
+  overflow-x:auto;
+  width:100%;
+  scrollbar-width:none;
+  border-top:1px solid var(--bdr);
+}
+
+.tab{
+  flex:1;
+  padding:6px 4px;
+  font-size:8.5px;
+  letter-spacing:1px;
+  border:none;
+  border-right:1px solid var(--bdr);
+  cursor:pointer;
+  font-family:inherit;
+  white-space:nowrap;
+  text-transform:uppercase;
+  background:transparent;
+  color:var(--td);
+  transition:all .15s;
+  text-align:center;
+  min-width:0;
+}
+
 :root{
   --bg:#05080f;--sur:#0a0f1e;--bdr:#162035;
   --cy:#00e5ff;--gn:#00ff88;--am:#ffb300;
@@ -16,35 +90,30 @@
   --tx:#e8f0fe;--td:#4a6080;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-/* ── TAB VIEWS ── */
-.view{
-  display:none;
-  position:absolute;
-  top:0;left:0;right:0;bottom:0;
-  overflow-y:auto;
-  overflow-x:hidden;
-  background:var(--bg);
-  -webkit-overflow-scrolling:touch;
-;z-index:1;}
-.view.on{
-  display:block;
-}
+/* ── APP LAYOUT ── */
 
-html{box-sizing:border-box;}html,body{margin:0;padding:0;}
-body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx);font-size:clamp(11px,1.5vw,13px);margin:0;padding:0;display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh;overflow:hidden;}
+
+
+
+/* ── TAB VIEWS ── */
+
+
+
+
+
 
 /* ── HEADER ── */
-#hdr{flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--bdr);background:var(--sur);;z-index:100;}
+
 #logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
 #dot{width:7px;height:7px;border-radius:50%;background:var(--bdr);margin-right:8px;transition:all .4s;}
 #dot.live{background:var(--gn);box-shadow:0 0 8px var(--gn);}
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
-.tabs{display:flex;flex-shrink:0;overflow-x:auto;width:100%;scrollbar-width:none;border-top:1px solid var(--bdr);}
-.tab{flex:1;padding:6px 4px;font-size:8.5px;letter-spacing:1px;border:none;border-right:1px solid var(--bdr);cursor:pointer;font-family:inherit;white-space:nowrap;text-transform:uppercase;background:transparent;color:var(--td);transition:all .15s;text-align:center;min-width:0;}
+
+
 .tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
 
 /* ── LAYOUT ── */
-#app{flex:1;position:relative;overflow:hidden;min-height:0;display:block;}
+
 
 
 
@@ -62,7 +131,9 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 .inp:focus{border-color:var(--cy);}
 
 /* ── IMPORT ── */
-#dz{border:2px dashed var(--bdr);padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px;}
+#dz{border:2px dashed var(--bdr);padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#dz.drag-over{border-color:var(--cy);background:#00e5ff0d;}
+.view-import-drag{outline:2px dashed var(--cy);outline-offset:-4px;}
 #dz.over,#dz:hover{border-color:var(--cy);background:#00e5ff06;}
 #pmsg{font-size:11px;color:var(--am);min-height:16px;margin-top:8px;}
 #debug-box{display:none;margin-top:10px;}
@@ -215,24 +286,24 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 #ai-btn:hover{transform:scale(1.08)!important;}
 #ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:min(340px,95vw);height:min(480px,70vh);background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
 
-.view-scroll{overflow-y:auto;overflow-x:hidden;padding:16px 18px;-webkit-overflow-scrolling:touch;flex:1;}
+
 
 
 /* ══ RESPONSIVE ══ */
 
 /* All screens — tabs always full width, just scale font */
 @media(max-width:1280px){
-  .tab{font-size:8px;letter-spacing:0.8px;}
+  
 }
 @media(max-width:1024px){
-  .tab{font-size:7.5px;padding:6px 2px;letter-spacing:0.5px;}
+  
   
   #ai-panel{width:min(320px,92vw);}
 }
 @media(max-width:768px){
   body{font-size:12px;}
   #logo{font-size:14px;}
-  .tab{font-size:7px;padding:5px 2px;letter-spacing:0;}
+  
   
   #packer-grid,#dash-grid,#payroll-grid{grid-template-columns:1fr!important;}
   .fp-card{min-width:70px;padding:8px 6px;}
@@ -245,14 +316,14 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 @media(max-width:480px){
   body{font-size:11px;}
   #logo{font-size:12px;letter-spacing:2px;}
-  .tab{font-size:6.5px;padding:5px 1px;}
+  
   
   .btn{padding:5px 8px;font-size:8px;}
   #ai-panel{width:100vw!important;right:0!important;left:0!important;bottom:0!important;}
   #fm-panel{width:100vw!important;right:0!important;}
 }
 @media(max-width:360px){
-  .tab{font-size:6px;padding:4px 1px;}
+  
   #logo{font-size:11px;}
 }
 
@@ -296,16 +367,16 @@ body{font-family:'Share Tech Mono',monospace;background:var(--bg);color:var(--tx
 <div id="app">
 
   <!-- ══ IMPORT ══ -->
-  <div id="view-import" class="view on">
+  <div id="view-import" class="view on" style="padding:16px 18px;">
 
     <!-- Drop zone -->
-    <div id="dz" style="margin-bottom:14px;">
+    <div id="dz" style="margin-bottom:14px;" onclick="document.getElementById('fi').click();">
       <div style="font-size:28px;margin-bottom:8px;">📦</div>
       <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
       <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX · Uniuni</div>
       <div id="pmsg"></div>
     </div>
-    <input id="fi" type="file" accept="application/pdf" style="display:none"/>
+    <input id="fi" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]) parsePdf(this.files[0]);this.value='';">
 
     <!-- Action buttons — always one row -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:nowrap;align-items:center;">
@@ -4093,11 +4164,30 @@ document.addEventListener('DOMContentLoaded',function(){try{
       if(file&&file.type==='application/pdf') parsePdf(file);
       else pm('⚠ Please drop a PDF file.');
     });
+    // Allow drop anywhere on the import view
+    var importView=document.getElementById('view-import');
+    if(importView){
+      importView.addEventListener('dragover',function(e){
+        e.preventDefault();
+        dz.classList.add('drag-over');
+        importView.classList.add('view-import-drag');
+      });
+      importView.addEventListener('dragleave',function(e){
+        if(e.relatedTarget && importView.contains(e.relatedTarget)) return;
+        dz.classList.remove('drag-over');
+        importView.classList.remove('view-import-drag');
+      });
+      importView.addEventListener('drop',function(e){
+        e.preventDefault();
+        dz.classList.remove('drag-over');
+        importView.classList.remove('view-import-drag');
+        var file=e.dataTransfer.files[0];
+        if(file&&file.type==='application/pdf') parsePdf(file);
+        else pm('⚠ Please drop a PDF file.');
+      });
+    }
     dz.addEventListener('click',function(){
-      var inp=document.createElement('input');
-      inp.type='file'; inp.accept='.pdf';
-      inp.onchange=function(e){ if(e.target.files[0]) parsePdf(e.target.files[0]); };
-      inp.click();
+      document.getElementById('fi').click();
     });
   }
 
