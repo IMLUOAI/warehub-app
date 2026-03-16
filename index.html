@@ -158,7 +158,7 @@ body{
 
 /* ── PACK STATION ── */
 /* Packer login overlay */
-#packer-login{position:absolute;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+#packer-login{position:absolute;inset:0;background:var(--bg);z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
 #packer-login.hide{display:none;}
 #login-scan-in{width:min(320px,90vw);background:var(--sur);border:2px solid var(--cy);color:var(--tx);padding:12px 16px;font-size:14px;font-family:inherit;outline:none;text-align:center;letter-spacing:2px;}
 #login-scan-in:focus{border-color:var(--gn);}
@@ -692,7 +692,7 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
-  if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); }
+  if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderPayroll();
   if(name==='floor')  renderFloor();
@@ -1566,7 +1566,8 @@ function showLoginOrPack(){
   } else {
     if(loginDiv) loginDiv.classList.remove('hide');
     if(barDiv) barDiv.style.display='none';
-    activeOrder=null; verifySkus=[];
+    activeOrder=null;
+    setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},50); verifySkus=[];
     packState='idle';
     renderQuickLoginBtns();
     setTimeout(function(){
@@ -3566,11 +3567,17 @@ function rackNormalise(shelf){
   if(!shelf) return '';
   var s = shelf.toString().trim().toUpperCase();
 
-  s = s.replace(/^R(\d)$/,  'R$1');
-  s = s.replace(/^W(\d)$/,  'W$1');
-  s = s.replace(/^A(\d)$/,  'A-$1');
-  s = s.replace(/^B(\d)$/,  'B-$1');
-  s = s.replace(/^C(\d)$/,  'C-$1');
+  // Expand single-letter zone shorthand ONLY when no dash follows
+  // b1 → B-1,  a1 → A-1,  c1 → C-1
+  s = s.replace(/^([ABC])(\d)(-|$)/, '$1-$2$3');
+
+  // Zero-pad the LAST number segment only when it is a single digit
+  // R1-1 → R1-01,  B-1-5 → B-1-05,  A-1-1 → A-1-01
+  // But leave zone-only strings alone: R1, B-1, A-1
+  if(/-\d+-\d$/.test(s) || /^R\d+-\d$/.test(s)){
+    s = s.replace(/-(\d)$/, '-0$1');
+  }
+
   return s;
 }
 
@@ -4294,7 +4301,7 @@ document.addEventListener('DOMContentLoaded',function(){try{
 
   <!-- ── Vehicle Log ── -->
   <div id="view-vehicle" class="view">
-    <div style="padding:16px 18px;width:100%;">
+    <div style="padding:16px 18px;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -4394,7 +4401,7 @@ document.addEventListener('DOMContentLoaded',function(){try{
           <div style="font-size:10px;color:var(--td);margin-top:2px;">1701 10th St Suite 200 · Plano TX 75074 · 9,129 sqft</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="rack-search" placeholder="Search shelf (e.g. R1, W2, A-1)…" oninput="rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:200px;"/>
+          <input id="rack-search" placeholder="Search shelf (e.g. R1-01, B-1-05, A-1)…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:200px;"/>
           <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
           <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT INVENTORY CSV</button>
           <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
