@@ -53,7 +53,11 @@ body{
 }
 
 .view.on{
-  display:block;
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
 }
 
 .tabs{
@@ -63,7 +67,10 @@ body{
   width:100%;
   scrollbar-width:none;
   border-top:1px solid var(--bdr);
+  -webkit-overflow-scrolling:touch;
+  scroll-snap-type:x mandatory;
 }
+.tabs::-webkit-scrollbar{display:none;}
 
 .tab{
   flex:1;
@@ -80,7 +87,8 @@ body{
   color:var(--td);
   transition:all .15s;
   text-align:center;
-  min-width:0;
+  min-width:64px;
+  scroll-snap-align:start;
 }
 
 :root{
@@ -145,9 +153,9 @@ body{
 .packer-row.online{border-color:var(--gn);}
 .packer-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow',sans-serif;font-weight:900;font-size:13px;flex-shrink:0;}
 .packer-info{flex:1;min-width:0;}
-.packer-name{font-size:12px;font-weight:600;letter-spacing:1px;}
-.packer-id{font-size:9px;color:var(--td);margin-top:1px;}
-.packer-stats-mini{font-size:9px;color:var(--td);margin-top:2px;}
+.packer-name{font-size:12px;font-weight:600;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.packer-id{font-size:9px;color:var(--td);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.packer-stats-mini{font-size:9px;color:var(--td);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #assign-panel{display:flex;flex-direction:column;gap:8px;overflow-y:auto;}
 .order-assign-row{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--bdr);}
 .oar-track{font-size:11px;color:var(--cy);font-weight:600;flex:1;}
@@ -348,6 +356,7 @@ body{
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
+      <span id="cloud-status" title="Cloud sync" style="font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0;cursor:default;">☁</span>
       <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
     </div>
   </div>
@@ -367,7 +376,8 @@ body{
 <div id="app">
 
   <!-- ══ IMPORT ══ -->
-  <div id="view-import" class="view on" style="padding:16px 18px;">
+  <div id="view-import" class="view on">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;">
 
     <!-- Drop zone -->
     <div id="dz" style="margin-bottom:14px;" onclick="document.getElementById('fi').click();">
@@ -417,6 +427,7 @@ body{
 
   <!-- ══ MANAGER / PACKERS ══ -->
   <div id="view-manager" class="view">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;gap:12px;">
 
     <!-- ── Section: Add Staff ── -->
     <div class="card" style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -446,6 +457,7 @@ body{
     <!-- ── Action Buttons ── -->
     <div style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);" onclick="printPackerCards()">🪪 PRINT ALL ID CARDS</button>
+      <button class="btn" id="sync-staff-btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;" onclick="kvSaveStaff().then(function(){pm('✓ Staff synced to cloud.');})" title="Save staff to Excel so it loads on any browser">☁ SYNC STAFF</button>
       <div style="flex:1;"></div>
       <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;" onclick="autoAssign()">⚡ SKU AUTO-ASSIGN</button>
       <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printPickLists()">🖨 PRINT PICK LISTS</button>
@@ -526,10 +538,13 @@ body{
       <div id="queue"></div>
     </div>
   </div>
+    </div>
+    </div>
 
 
   <!-- ══ DASHBOARD ══ -->
   <div id="view-dash" class="view">
+    <div style="padding:16px 18px;flex:1;min-height:0;overflow-y:auto;">
     <div id="dash-wrap" style="padding:16px 18px;">
 
       <!-- KPI row -->
@@ -598,6 +613,7 @@ body{
 
   <!-- ══ PAYROLL ══ -->
   <div id="view-payroll" class="view">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;gap:12px;">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <div>
         <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PAYROLL — TIME SHEET</div>
@@ -638,6 +654,7 @@ body{
 
   <!-- ══ FLOOR DISPLAY ══ -->
   <div id="view-floor" class="view">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;">
     <div id="floor" style="padding:16px 18px;">
       <div id="fnum" style="color:var(--cy);">–</div>
       <div id="fsub">ORDERS REMAINING TODAY</div>
@@ -1158,7 +1175,10 @@ function saveStaff(){
     if(currentPacker) localStorage.setItem('warehub_currentPacker', currentPacker.id);
     else localStorage.removeItem('warehub_currentPacker');
   }catch(e){}
+  staffSaveToExcel();
+  kvSaveStaff();
 }
+
 function loadStaff(){
   try{
     var ps=localStorage.getItem('warehub_packers');
@@ -2814,6 +2834,7 @@ async function msFindFile(fname, msgEl){
     console.log('Graph path lookup:', r1.status, d1);
     if(r1.ok && d1.id){
       _excelFileId=d1.id; excelSaveConfig();
+      staffSyncOnConnect();
       setMsg('✓ Found: '+d1.name,'var(--gn)');
       setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400);
       return;
@@ -4141,10 +4162,163 @@ function rackScanIntercept(e){
 }
 document.addEventListener('keydown', rackScanIntercept);
 
+
+// ══════════════════════════════════════════
+// STAFF CLOUD SYNC — Excel (OneDrive)
+// ══════════════════════════════════════════
+var _staffSyncing = false;
+
+async function staffSaveToExcel(){
+  if(!_msalToken || !_excelFileId) return; // silently skip if not connected
+  if(_staffSyncing) return;
+  _staffSyncing = true;
+  try{
+    var base = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+    var sheet = 'WH_Staff';
+
+    // Ensure sheet exists
+    var sr = await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sd = await sr.json();
+    var names = (sd.value||[]).map(function(s){return s.name;});
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets',{method:'POST',
+        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+        body:JSON.stringify({name:sheet})});
+    }
+
+    // Write staff JSON to A1
+    var payload = JSON.stringify({packers:packers, managers:managers, savedAt: new Date().toISOString()});
+    await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1')",{
+      method:'PATCH',
+      headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+      body:JSON.stringify({values:[[payload]]})
+    });
+    console.log('[Warehub] Staff synced to Excel');
+  }catch(e){
+    console.warn('[Warehub] Staff Excel sync failed:',e.message);
+  }finally{
+    _staffSyncing = false;
+  }
+}
+
+async function staffLoadFromExcel(){
+  if(!_msalToken || !_excelFileId) return false;
+  try{
+    var base = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+    var sheet = 'WH_Staff';
+
+    var r = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1')?$select=values",
+      {headers:{Authorization:'Bearer '+_msalToken}});
+    if(!r.ok) return false;
+    var d = await r.json();
+    var raw = d.values&&d.values[0]&&d.values[0][0];
+    if(!raw) return false;
+
+    var data = JSON.parse(raw);
+    if(data.packers && data.packers.length){
+      packers   = data.packers;
+      managers  = data.managers || managers;
+      // Also update localStorage
+      localStorage.setItem('warehub_packers',  JSON.stringify(packers));
+      localStorage.setItem('warehub_managers', JSON.stringify(managers));
+      pm('✓ Staff loaded from Excel ('+packers.length+' packers)');
+      renderManagerPanel();
+      renderPackerPanel();
+      renderAssignPanel();
+      renderQuickLoginBtns();
+      return true;
+    }
+  }catch(e){
+    console.warn('[Warehub] Staff load from Excel failed:',e.message);
+  }
+  return false;
+}
+
+// Called after Excel connects successfully
+async function staffSyncOnConnect(){
+  var loaded = await staffLoadFromExcel();
+  if(!loaded){
+    // Nothing in Excel yet — push current localStorage data up
+    await staffSaveToExcel();
+  }
+}
+
+// ══════════════════════════════════════════
+// STAFF CLOUD SYNC — Cloudflare KV
+// ══════════════════════════════════════════
+var _kvProxy = null;
+
+function kvGetProxy(){
+  if(_kvProxy) return _kvProxy;
+  try{ _kvProxy = localStorage.getItem('warehub_ai_proxy')||null; }catch(e){}
+  return _kvProxy;
+}
+
+async function kvSaveStaff(){
+  var proxy = kvGetProxy();
+  if(!proxy) return;
+  var dot = document.getElementById('cloud-status');
+  try{
+    if(dot) dot.style.color = 'var(--am)';
+    var payload = JSON.stringify({
+      packers:  packers,
+      managers: managers,
+      savedAt:  new Date().toISOString()
+    });
+    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: payload
+    });
+    if(r.ok){
+      if(dot){ dot.style.color='var(--gn)'; dot.title='Cloud sync: saved '+new Date().toLocaleTimeString(); }
+      console.log('[Warehub] Staff saved to KV');
+    } else {
+      if(dot) dot.style.color = 'var(--rd)';
+      console.warn('[Warehub] KV save error:', r.status);
+    }
+  }catch(e){
+    if(dot) dot.style.color = 'var(--rd)';
+    console.warn('[Warehub] KV save failed:', e.message);
+  }
+}
+
+async function kvLoadStaff(){
+  var proxy = kvGetProxy();
+  if(!proxy) return false;
+  var dot = document.getElementById('cloud-status');
+  try{
+    if(dot) dot.style.color = 'var(--am)';
+    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff');
+    if(!r.ok){ if(dot) dot.style.color='var(--rd)'; return false; }
+    var data = await r.json();
+    if(dot) dot.style.color = 'var(--gn)';
+    if(!data.packers || !data.packers.length){
+      if(dot) dot.title = 'Cloud sync: connected, no staff yet';
+      return false;
+    }
+    packers  = data.packers;
+    managers = data.managers || managers;
+    localStorage.setItem('warehub_packers',  JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+    renderManagerPanel();
+    renderPackerPanel();
+    renderAssignPanel();
+    renderQuickLoginBtns();
+    if(dot) dot.title = 'Cloud sync: loaded '+packers.length+' packers at '+new Date().toLocaleTimeString();
+    pm('✓ Staff loaded from cloud ('+packers.length+' packers)');
+    return true;
+  }catch(e){
+    if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync error: '+e.message; }
+    console.warn('[Warehub] KV load failed:', e.message);
+    return false;
+  }
+}
 document.addEventListener('DOMContentLoaded',function(){try{
 
   try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
   loadStaff();
+  kvLoadStaff();
   excelLoadConfig();
   gmapsLoadConfig();
   vehicleLoad();
@@ -4300,19 +4474,19 @@ document.addEventListener('DOMContentLoaded',function(){try{
 </script>
 
   <!-- ── Vehicle Log ── -->
-  <div id="view-vehicle" class="view">
-    <div style="padding:16px 18px;">
+  <div id="view-vehicle" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;width:100%;box-sizing:border-box;flex-shrink:0;">
 
       <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">VEHICLE LOG</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">Daily Usage Record</div>
           <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · Company Vehicle</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;">📊 SAVE TO EXCEL</button>
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
+          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
         </div>
       </div>
 
@@ -4387,6 +4561,9 @@ document.addEventListener('DOMContentLoaded',function(){try{
 
     </div>
   </div>
+    </div>
+    </div>
+    </div>
 
 
   <!-- ══ RACK MAP ══ -->
