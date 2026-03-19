@@ -455,7 +455,7 @@ body{
     <!-- ── Action Buttons ── -->
     <div style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);" onclick="printPackerCards()">🪪 PRINT ALL ID CARDS</button>
-      <button class="btn" id="sync-staff-btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;" onclick="kvSaveStaff().then(function(){pm('✓ Staff synced to cloud.');})" title="Save staff to Excel so it loads on any browser">☁ SYNC STAFF</button>
+      <button class="btn" id="sync-staff-btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;" onclick="kvSaveStaff().then(function(){pm('✓ Staff synced to cloud.');})" title="Sync staff to Cloudflare cloud — loads on any browser without login">☁ SYNC STAFF</button>
       <div style="flex:1;"></div>
       <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;" onclick="autoAssign()">⚡ SKU AUTO-ASSIGN</button>
       <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printPickLists()">🖨 PRINT PICK LISTS</button>
@@ -1173,7 +1173,6 @@ function saveStaff(){
     if(currentPacker) localStorage.setItem('warehub_currentPacker', currentPacker.id);
     else localStorage.removeItem('warehub_currentPacker');
   }catch(e){}
-  staffSaveToExcel();
   kvSaveStaff();
 }
 
@@ -2832,7 +2831,6 @@ async function msFindFile(fname, msgEl){
     console.log('Graph path lookup:', r1.status, d1);
     if(r1.ok && d1.id){
       _excelFileId=d1.id; excelSaveConfig();
-      staffSyncOnConnect();
       setMsg('✓ Found: '+d1.name,'var(--gn)');
       setTimeout(function(){ var m=document.getElementById('excel-setup-modal'); if(m) m.remove(); pm('✓ Excel connected!'); },1400);
       return;
@@ -4161,85 +4159,10 @@ function rackScanIntercept(e){
 document.addEventListener('keydown', rackScanIntercept);
 
 
-// ══════════════════════════════════════════
-// STAFF CLOUD SYNC — Excel (OneDrive)
-// ══════════════════════════════════════════
-var _staffSyncing = false;
 
-async function staffSaveToExcel(){
-  if(!_msalToken || !_excelFileId) return; // silently skip if not connected
-  if(_staffSyncing) return;
-  _staffSyncing = true;
-  try{
-    var base = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-    var sheet = 'WH_Staff';
 
-    // Ensure sheet exists
-    var sr = await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
-    var sd = await sr.json();
-    var names = (sd.value||[]).map(function(s){return s.name;});
-    if(!names.includes(sheet)){
-      await fetch(base+'/worksheets',{method:'POST',
-        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
-        body:JSON.stringify({name:sheet})});
-    }
 
-    // Write staff JSON to A1
-    var payload = JSON.stringify({packers:packers, managers:managers, savedAt: new Date().toISOString()});
-    await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1')",{
-      method:'PATCH',
-      headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
-      body:JSON.stringify({values:[[payload]]})
-    });
-    console.log('[Warehub] Staff synced to Excel');
-  }catch(e){
-    console.warn('[Warehub] Staff Excel sync failed:',e.message);
-  }finally{
-    _staffSyncing = false;
-  }
-}
 
-async function staffLoadFromExcel(){
-  if(!_msalToken || !_excelFileId) return false;
-  try{
-    var base = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-    var sheet = 'WH_Staff';
-
-    var r = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1')?$select=values",
-      {headers:{Authorization:'Bearer '+_msalToken}});
-    if(!r.ok) return false;
-    var d = await r.json();
-    var raw = d.values&&d.values[0]&&d.values[0][0];
-    if(!raw) return false;
-
-    var data = JSON.parse(raw);
-    if(data.packers && data.packers.length){
-      packers   = data.packers;
-      managers  = data.managers || managers;
-      // Also update localStorage
-      localStorage.setItem('warehub_packers',  JSON.stringify(packers));
-      localStorage.setItem('warehub_managers', JSON.stringify(managers));
-      pm('✓ Staff loaded from Excel ('+packers.length+' packers)');
-      renderManagerPanel();
-      renderPackerPanel();
-      renderAssignPanel();
-      renderQuickLoginBtns();
-      return true;
-    }
-  }catch(e){
-    console.warn('[Warehub] Staff load from Excel failed:',e.message);
-  }
-  return false;
-}
-
-// Called after Excel connects successfully
-async function staffSyncOnConnect(){
-  var loaded = await staffLoadFromExcel();
-  if(!loaded){
-    // Nothing in Excel yet — push current localStorage data up
-    await staffSaveToExcel();
-  }
-}
 
 // ══════════════════════════════════════════
 // STAFF CLOUD SYNC — Cloudflare KV
@@ -4723,16 +4646,21 @@ document.addEventListener('DOMContentLoaded',function(){try{
       <!-- ── SECTION: Cloudflare Worker ── -->
       <div class="dev-section">
         <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>☁ Cloudflare Worker — AI Proxy</span><span class="dev-chevron">▾</span>
+          <span>☁ Cloudflare Worker — AI Proxy + Staff KV Sync</span><span class="dev-chevron">▾</span>
         </div>
         <div class="dev-section-body">
           <div class="dev-grid">
             <div class="dev-field"><div class="dev-label">CLOUDFLARE DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
             <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">anthropic-proxy</code></div>
             <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://anthropic-proxy.imluoai.workers.dev/</div></div>
-            <div class="dev-field"><div class="dev-label">SECRET VARIABLE NAME</div><code class="dev-code">ANTHROPIC_KEY</code></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO UPDATE WORKER CODE</div><div class="dev-note">dash.cloudflare.com → Workers &amp; Pages → anthropic-proxy → Edit Code → select all → paste new code → Deploy. Must have Access policy DISABLED (Settings → Access is OFF).</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX CORS ERROR</div><div class="dev-note">Worker code must include Access-Control-Allow-Origin: * on ALL responses including OPTIONS preflight. Redeploy worker with latest code from 🤖 → ⚙ SETUP.</div></div>
+            <div class="dev-field"><div class="dev-label">ANTHROPIC API SECRET</div><code class="dev-code">ANTHROPIC_KEY</code></div>
+            <div class="dev-field"><div class="dev-label">KV NAMESPACE BINDING</div><code class="dev-code">WAREHUB_KV</code></div>
+            <div class="dev-field"><div class="dev-label">KV NAMESPACE NAME</div><code class="dev-code">warehub-data</code></div>
+            <div class="dev-field"><div class="dev-label">KV STAFF ENDPOINT</div><code class="dev-code">GET /staff · PUT /staff</code></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW STAFF SYNC WORKS</div><div class="dev-note">Staff (packers + managers) auto-saves to KV on every add/edit/remove. On app open, staff loads from KV automatically — no login required. Works on any browser. The ☁ icon in header shows sync status: grey=not set, amber=syncing, green=OK, red=error.</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO SET WORKER URL</div><div class="dev-note">Click 🤖 (bottom right) → ⚙ SETUP → paste Worker URL → Save. This enables both AI assistant and staff cloud sync.</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">WORKER CODE</div><div class="dev-note">Worker handles: POST / → Anthropic AI proxy · GET /staff → read KV · PUT /staff → write KV · GET / → health check. CORS headers required on ALL responses. Access policy must be DISABLED.</div></div>
+            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX CORS ERROR</div><div class="dev-note">Worker must return Access-Control-Allow-Origin: * on every response including OPTIONS. Redeploy from 🤖 → ⚙ SETUP → copy worker code → paste in Cloudflare editor → Deploy.</div></div>
           </div>
         </div>
       </div>
