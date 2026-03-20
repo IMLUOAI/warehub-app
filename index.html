@@ -1189,8 +1189,8 @@ function loadStaff(){
   try{
     var ps=localStorage.getItem('warehub_packers');
     var ms=localStorage.getItem('warehub_managers');
-    if(ps) packers=JSON.parse(ps);
-    if(ms) managers=JSON.parse(ms);
+    if(ps){ var pp=JSON.parse(ps); packers=Array.isArray(pp)?pp:[]; }
+    if(ms){ var mm=JSON.parse(ms); managers=Array.isArray(mm)?mm:[]; }
     packers.forEach(function(p){
       p.active = p.active===true||p.active==='true'? true : (p.active===false||p.active==='false'? false : true);
 
@@ -1953,7 +1953,7 @@ function doScan(raw){
       if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
       var invLoc = window._inventoryData[loc];
 
-      var existing = invLoc.skus.find(function(s){return s.sku===rackScanState.sku;});
+      var existing = (invLoc.skus||[]).find(function(s){return s.sku===rackScanState.sku;});
       if(existing){
         existing.qty = (parseInt(existing.qty)||0) + 1;
       } else {
@@ -2701,7 +2701,7 @@ function excelLoadConfig(){
     _excelFileId      = s.fileId||'';
     _excelSheet       = s.sheet||'Warehub Payroll';
     _msalToken        = sessionStorage.getItem('warehub_ms_token')||null;
-    if(_msalCfg.clientId) msalInit();
+    if(_msalCfg.clientId) ensureMsal(function(){ msalInit(); });
   }catch(e){}
   excelUpdateUI();
 }
@@ -2827,6 +2827,10 @@ async function msSignIn(){
   excelSaveConfig();
 
 
+  if(typeof msal === 'undefined'){
+    pm('⚠ MSAL not loaded yet — click Connect Excel again.');
+    return;
+  }
   msalInit();
   if(!_msalInstance){ setMsg('⚠ MSAL failed to initialize. Check Client ID format.','var(--rd)'); return; }
 
@@ -3316,7 +3320,7 @@ function vehicleExportCSV(){
 async function vehicleSaveExcel(){
   if(!_msalToken || !_excelFileId){
 
-    if(_msalCfg.clientId && !_msalInstance) msalInit();
+    if(_msalCfg.clientId && !_msalInstance && typeof msal !== 'undefined') msalInit();
     excelConnect();
     return;
   }
@@ -3759,7 +3763,8 @@ function rackHighlightSpots(){
   });
 }
 
-  rackClearHighlight();
+function rackClick(zoneId){
+rackClearHighlight();
   rackHighlight(zoneId);
 
   var info = RACK_INFO[zoneId]||{type:'STORAGE ZONE',color:'var(--cy)'};
@@ -3799,6 +3804,8 @@ function rackHighlightSpots(){
         }).join('')
       +(zoneOrders.length>10?'<div style="font-size:9px;color:var(--td);margin-top:4px;">+ '+(zoneOrders.length-10)+' more…</div>':'');
   }
+}
+
 
 function rackHighlight(zoneId){
   var g = document.getElementById('zone-'+zoneId);
@@ -4158,7 +4165,7 @@ function rackDoScan(val){
     if(!inv[spotId].skus) inv[spotId].skus = [];
 
 
-    var existing = inv[spotId].skus.find(function(s){ return s.sku.toUpperCase()===sku; });
+    var existing = (inv[spotId].skus||[]).find(function(s){ return s.sku.toUpperCase()===sku; });
     if(existing){
       result.innerHTML='<span style="color:var(--am);">⚠ '+sku+' already at '+spotId+'.</span>';
     } else {
@@ -4248,7 +4255,7 @@ async function kvLoadStaff(){
   var dot = document.getElementById('cloud-status');
   try{
     if(dot){ dot.style.color='var(--am)'; dot.title='Cloud sync: connecting…'; }
-    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff');
+    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {mode:'cors'});
     console.log('[Warehub KV] GET /staff response:', r.status);
     if(!r.ok){ if(dot) dot.style.color='var(--rd)'; return false; }
     var data = await r.json();
@@ -4276,6 +4283,8 @@ async function kvLoadStaff(){
   }catch(e){
     if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync error: '+e.message; }
     console.warn('[Warehub] KV load failed:', e.message);
+    if(dot){ dot.title = 'KV error: '+e.message+' — Check Worker URL and CORS settings'; }
+    pm('⚠ Staff cloud sync failed: '+e.message);
     return false;
   }
 }
@@ -4405,14 +4414,17 @@ function returnsSave(){
 function returnsLoad(){
   try{
     var d = localStorage.getItem('warehub_returns');
-    if(d) returnsList = JSON.parse(d);
+    if(d){
+      var parsed = JSON.parse(d);
+      returnsList = Array.isArray(parsed) ? parsed : [];
+    }
   }catch(e){ returnsList = []; }
 }
 
 function returnsConditionChange(val){
   var flagRow = document.getElementById('return-mgr-flag-row');
   if(flagRow){
-    var needsMgr = MGR_REVIEW_CONDITIONS.indexOf(val) >= 0;
+    var needsMgr = Array.isArray(MGR_REVIEW_CONDITIONS) && MGR_REVIEW_CONDITIONS.indexOf(val) >= 0;
     flagRow.style.display = needsMgr ? 'block' : 'none';
     // Auto-set pile
     var pile = document.getElementById('return-pile');
@@ -4503,13 +4515,15 @@ function returnsScan(val){
   if(!tracking) tracking = norm;
 
   // Detect carrier from CR map
-  Object.keys(CR).forEach(function(k){
-    if(CR[k].t && CR[k].t(tracking)) carrier = k;
-  });
+  try {
+    Object.keys(CR).forEach(function(k){
+      if(CR[k] && typeof CR[k].t === 'function' && CR[k].t(tracking)) carrier = k;
+    });
+  } catch(e) {}
 
   // Duplicate check (today)
   var today = new Date().toLocaleDateString();
-  var dup = returnsList.find(function(r){ return r.tracking===tracking && r.date===today; });
+  var dup = Array.isArray(returnsList) && returnsList.find(function(r){ return r.tracking===tracking && r.date===today; });
   if(dup){
     bpErr();
     fb.style.color = 'var(--am)';
@@ -4557,7 +4571,7 @@ function returnsSubmit(){
   var notes     = document.getElementById('return-notes').value.trim();
   var pile      = document.getElementById('return-pile').value;
   var now       = new Date();
-  var needsMgr  = MGR_REVIEW_CONDITIONS.indexOf(condition) >= 0;
+  var needsMgr  = Array.isArray(MGR_REVIEW_CONDITIONS) && MGR_REVIEW_CONDITIONS.indexOf(condition) >= 0;
 
   var entry = {
     id:        'RET-'+Date.now(),
@@ -4586,7 +4600,7 @@ function returnsSubmit(){
     if(!window._inventoryData) window._inventoryData = {};
     if(!window._inventoryData[location]) window._inventoryData[location]={skus:[]};
     var inv = window._inventoryData[location];
-    var ex  = inv.skus.find(function(s){return s.sku===sku;});
+    var ex  = (inv.skus||[]).find(function(s){return s.sku===sku;});
     if(ex){ ex.qty=(parseInt(ex.qty)||0)+qty; }
     else { inv.skus.push({sku:sku,name:'RETURN',qty:qty,unit:'PCS'}); }
     try{ localStorage.setItem('warehub_inventory',JSON.stringify(window._inventoryData)); }catch(e){}
@@ -4704,8 +4718,8 @@ function renderReturnsList(){
           +'<div style="font-family:monospace;font-size:11px;color:var(--cy);">'+r.tracking.slice(-18)+mgrTag+'</div>'
           +'<div style="font-size:9px;color:var(--td);margin-top:2px;">'+r.date+' '+r.time+' · '+r.scannedBy+'</div>'
         +'</div>'
-        +'<div style="font-size:9px;color:var(--am);white-space:nowrap;">'+RETURN_TYPES[r.type]+'</div>'
-        +'<div style="font-size:9px;font-weight:700;color:'+cc+';white-space:nowrap;">'+RETURN_CONDITIONS[r.condition]+'</div>'
+        +'<div style="font-size:9px;color:var(--am);white-space:nowrap;">'+(RETURN_TYPES[r.type]||r.type||'Unknown')+'</div>'
+        +'<div style="font-size:9px;font-weight:700;color:'+cc+';white-space:nowrap;">'+(RETURN_CONDITIONS[r.condition]||r.condition||'Unknown')+'</div>'
         +'<div style="font-size:9px;color:var(--td);white-space:nowrap;">Pile '+r.pile+'</div>'
         +(r.sku?'<div style="font-size:9px;font-family:monospace;color:var(--tx);">'+r.sku+(r.qty>1?' ×'+r.qty:'')+'</div>':'')
         +(r.location?'<div style="font-size:9px;color:var(--gn);font-family:monospace;">📍 '+r.location+'</div>':'')
@@ -4803,21 +4817,36 @@ async function returnsSaveExcel(){
 function kvTestConnection(){
   var proxy = kvGetProxy();
   if(!proxy){ pm('✗ No Worker URL set. Go to 🤖 → ⚙ SETUP'); return; }
-  pm('⟳ Testing KV connection to '+proxy.replace(/\/+$/,'')+'/staff …');
-  fetch(proxy.replace(/\/+$/,'')+'/staff')
+  var url = proxy.replace(/\/+$/,'')+'/staff';
+  pm('⟳ Testing: GET '+url+' …');
+  var dot=document.getElementById('cloud-status');
+  if(dot){dot.style.color='var(--am)';}
+  fetch(url, {mode:'cors'})
     .then(function(r){
-      if(r.ok) r.json().then(function(d){
-        var count = d.packers ? d.packers.length : 0;
-        pm('✓ KV connected — '+count+' packer(s) in cloud. ☁ is green = syncing.');
-        var dot=document.getElementById('cloud-status');
-        if(dot){dot.style.color='var(--gn)';dot.title='Connected: '+count+' packers in KV';}
-      });
-      else pm('✗ KV error: HTTP '+r.status+'. Check Worker KV binding WAREHUB_KV.');
+      if(r.ok){
+        r.text().then(function(txt){
+          try{
+            var d = JSON.parse(txt);
+            var count = d.packers ? d.packers.length : 0;
+            pm('✓ Worker OK — '+count+' packer(s) in KV cloud.');
+            if(dot){dot.style.color='var(--gn)';dot.title='Connected: '+count+' packers';}
+          }catch(e){
+            pm('⚠ Worker responded but returned invalid JSON: '+txt.slice(0,60));
+            if(dot) dot.style.color='var(--am)';
+          }
+        });
+      } else {
+        pm('✗ Worker HTTP '+r.status+'. Check: 1) WAREHUB_KV binding set  2) Worker redeployed with /staff endpoints');
+        if(dot){dot.style.color='var(--rd)';}
+      }
     })
     .catch(function(e){
-      pm('✗ KV fetch failed: '+e.message+'. Check Worker URL and CORS (PUT must be allowed).');
-      var dot=document.getElementById('cloud-status');
-      if(dot){dot.style.color='var(--rd)';dot.title='Error: '+e.message;}
+      if(e.message.indexOf('CORS')>=0||e.message.indexOf('fetch')>=0){
+        pm('✗ CORS blocked. Worker must return Access-Control-Allow-Origin:* on GET /staff. Redeploy Worker with latest code.');
+      } else {
+        pm('✗ Network error: '+e.message+'. Is the Worker URL correct?');
+      }
+      if(dot){dot.style.color='var(--rd)';}
     });
 }
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
