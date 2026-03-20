@@ -90,10 +90,10 @@ body{
 }
 
 :root{
-  --bg:#05080f;--sur:#0a0f1e;--bdr:#162035;
-  --cy:#00e5ff;--gn:#00ff88;--am:#ffb300;
-  --rd:#ff3d5a;--pu:#c77dff;--dim:#2a3f5f;
-  --tx:#e8f0fe;--td:#4a6080;
+  --bg:#1a1f2e;--sur:#242937;--bdr:#323852;
+  --cy:#818cf8;--gn:#34d399;--am:#fbbf24;
+  --rd:#f87171;--pu:#a78bfa;--dim:#374162;
+  --tx:#e2e8f0;--td:#6b7a9e;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 /* ── APP LAYOUT ── */
@@ -116,7 +116,7 @@ body{
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
 
 
-.tab:hover,.tab.on{border-color:var(--cy);background:#00e5ff12;color:var(--cy);}
+.tab:hover,.tab.on{border-color:var(--cy);background:#818cf812;color:var(--cy);}
 
 /* ── LAYOUT ── */
 
@@ -130,7 +130,7 @@ body{
 .bar{background:var(--bdr);height:4px;}.barf{height:100%;transition:width .6s;}
 .bdg{display:inline-block;font-size:9px;padding:2px 7px;border:1px solid;border-radius:1px;}
 .btn{padding:6px 14px;font-size:9px;letter-spacing:2px;border:1px solid;cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .15s;}
-.btn-c{border-color:var(--cy);background:#00e5ff10;color:var(--cy);}.btn-c:hover{background:#00e5ff20;}
+.btn-c{border-color:var(--cy);background:#818cf810;color:var(--cy);}.btn-c:hover{background:#818cf820;}
 .btn-r{border-color:var(--rd);background:#ff3d5a10;color:var(--rd);}.btn-r:hover{background:#ff3d5a20;}
 .btn-g{border-color:var(--gn);background:#00ff8810;color:var(--gn);}.btn-g:hover{background:#00ff8820;}
 .inp{background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 11px;font-size:12px;font-family:inherit;outline:none;}
@@ -138,9 +138,9 @@ body{
 
 /* ── IMPORT ── */
 #dz{border:2px dashed var(--bdr);padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-#dz.drag-over{border-color:var(--cy);background:#00e5ff0d;}
+#dz.drag-over{border-color:var(--cy);background:#818cf80d;}
 .view-import-drag{outline:2px dashed var(--cy);outline-offset:-4px;}
-#dz.over,#dz:hover{border-color:var(--cy);background:#00e5ff06;}
+#dz.over,#dz:hover{border-color:var(--cy);background:#818cf806;}
 #pmsg{font-size:11px;color:var(--am);min-height:16px;margin-top:8px;}
 #debug-box{display:none;margin-top:10px;}
 
@@ -205,7 +205,7 @@ body{
 #queue{overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
 .qc{background:var(--sur);border:1px solid var(--bdr);padding:10px 12px;cursor:pointer;flex-shrink:0;}
 .qc:hover{border-color:var(--dim);}
-.qc.act{border-color:var(--cy);background:#00e5ff08;}
+.qc.act{border-color:var(--cy);background:#818cf808;}
 .qc.fin{opacity:.28;pointer-events:none;}
 .qt{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;}
 .qtrk{font-size:10px;color:var(--cy);font-weight:600;}
@@ -280,11 +280,11 @@ body{
 /* ── Floating Buttons ── */
 .rack-spot rect{transition:fill .12s,stroke .12s,stroke-width .12s;}
 .rack-spot:hover rect{fill:rgba(255,255,255,0.22)!important;stroke:rgba(255,255,255,0.85)!important;stroke-width:1.2!important;}
-.rack-spot.active rect{fill:rgba(0,229,255,0.38)!important;stroke:#00e5ff!important;stroke-width:1.8!important;}
-.rack-spot.active{filter:drop-shadow(0 0 5px #00e5ff66);}
+.rack-spot.active rect{fill:rgba(129,140,248,0.38)!important;stroke:#818cf8!important;stroke-width:1.8!important;}
+.rack-spot.active{filter:drop-shadow(0 0 5px #818cf866);}
 .rack-spot.has-orders rect{fill:rgba(255,200,0,0.32)!important;stroke:#ffd700!important;}
 .rack-spot.done rect{fill:rgba(56,161,105,0.35)!important;stroke:#68d391!important;}
-.rack-spot.active text{fill:#00e5ff!important;font-weight:900!important;}
+.rack-spot.active text{fill:#818cf8!important;font-weight:900!important;}
 #fm-btn{position:fixed!important;bottom:74px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:var(--cy)!important;color:#000!important;font-size:18px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 12px #0008;transition:transform .15s;padding:0!important;}
 #fm-btn:hover{transform:scale(1.08)!important;}
 #fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:min(300px,92vw);background:var(--sur);border:1px solid var(--bdr);padding:14px;display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
@@ -677,7 +677,7 @@ var currentPacker = null;
 var ai = 0;
 var shiftDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'2-digit',day:'2-digit'});
 
-var PCOLORS = ['#00e5ff','#00ff88','#c77dff','#ffb300','#ff3d5a','#eab308','#4ade80','#f472b6'];
+var PCOLORS = ['#818cf8','#00ff88','#c77dff','#ffb300','#ff3d5a','#eab308','#4ade80','#f472b6'];
 
 var _actx = null;
 function getAC(){ if(!_actx) _actx=new(window.AudioContext||window.webkitAudioContext)(); return _actx; }
@@ -688,7 +688,7 @@ function bpErr() { bp(180,.28,'sawtooth',.3); }
 function bpLogin(){ bp(660,.05,'sine',.2); setTimeout(function(){ bp(990,.08,'sine',.22); },60); }
 
 var CR = {
-  GOFO:   {c:'#00e5ff', t:function(s){return /^GFUS/i.test(s);}},
+  GOFO:   {c:'#818cf8', t:function(s){return /^GFUS/i.test(s);}},
   FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|FX-|FEDEX-)/.test(s);}},
   UPS:    {c:'#ffb300', t:function(s){return /^1Z/i.test(s);}},
   USPS:   {c:'#00ff88', t:function(s){return /^9[1-8]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s);}},
@@ -2944,13 +2944,13 @@ async function msEnsureSheet(){
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   try{
 
-    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sr=await fetch(base+'/worksheets?$select=name', {headers:{Authorization:'Bearer '+_msalToken}});
     var sd=await sr.json();
     var existing=(sd.value||[]).map(function(s){return s.name;});
 
 
     if(!existing.includes(_excelSheet)){
-      await fetch(base+'/worksheets',{
+      await fetch(base+'/worksheets', {
         method:'POST',
         headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
         body:JSON.stringify({name:_excelSheet})
@@ -2958,13 +2958,11 @@ async function msEnsureSheet(){
     }
 
 
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')?$select=values',
-      {headers:{Authorization:'Bearer '+_msalToken}});
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')?$select=values', {headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
     if(!hasHeader){
-      await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')',
-        {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+      await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A1:F1\')', {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
          body:JSON.stringify({values:[['Date','Packer','Hours','Packages','Clock In','Clock Out']]})});
     }
   }catch(e){ console.warn('msEnsureSheet:',e); }
@@ -3016,7 +3014,7 @@ async function excelSavePayroll(){
   try{
     var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
     await msEnsureSheet();
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount', {headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var existingRows=(rd.rowCount&&!rd.error)?rd.rowCount:0;
     var dataRows=existingRows===0?rows:rows.slice(1);
@@ -3332,7 +3330,7 @@ async function vehicleSaveExcel(){
 
     await msEnsureVehicleSheet();
 
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:{Authorization:'Bearer '+_msalToken}});
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount', {headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var existing=(rd.rowCount&&!rd.error)?rd.rowCount:0;
     var hdr=[['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes']];
@@ -3357,23 +3355,22 @@ async function msEnsureVehicleSheet(){
   var sheet='Vehicle Log';
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   try{
-    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sr=await fetch(base+'/worksheets?$select=name', {headers:{Authorization:'Bearer '+_msalToken}});
     var sd=await sr.json();
     var existing=(sd.value||[]).map(function(s){return s.name;});
     if(!existing.includes(sheet)){
-      await fetch(base+'/worksheets',{
+      await fetch(base+'/worksheets', {
         method:'POST',
         headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
         body:JSON.stringify({name:sheet})
       });
     }
 
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')?$select=values',{headers:{Authorization:'Bearer '+_msalToken}});
+    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')?$select=values', {headers:{Authorization:'Bearer '+_msalToken}});
     var rd=await rr.json();
     var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
     if(!hasHeader){
-      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')',
-        {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')', {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
          body:JSON.stringify({values:[['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes']]})});
     }
   }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
@@ -4594,6 +4591,7 @@ function returnsSubmit(){
   returnsList.unshift(entry);
   returnsSave();
   bpDone();
+  returnsAutoSaveExcel(entry); // auto-push to Excel
 
   // Restock to rack if location + sku given
   if(location && sku){
@@ -4788,11 +4786,11 @@ async function returnsSaveExcel(){
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
   pm('⟳ Saving returns to Excel…');
   try{
-    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sr=await fetch(base+'/worksheets?$select=name', {headers:{Authorization:'Bearer '+_msalToken}});
     var sd=await sr.json();
     var names=(sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
-      await fetch(base+'/worksheets',{method:'POST',
+      await fetch(base+'/worksheets', {method:'POST',
         headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
         body:JSON.stringify({name:sheet})});
     }
@@ -4848,6 +4846,57 @@ function kvTestConnection(){
       }
       if(dot){dot.style.color='var(--rd)';}
     });
+}
+
+// ── Returns auto-save to Excel on every new entry ──
+async function returnsAutoSaveExcel(entry){
+  if(!_msalToken || !_excelFileId) return; // not connected, skip silently
+  var sheet = 'Returns Log';
+  var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var hdrs  = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  try{
+    // Ensure sheet exists
+    var sr = await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    if(!sr.ok) return;
+    var sd = await sr.json();
+    var names = (sd.value||[]).map(function(s){return s.name;});
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets',{
+        method:'POST',headers:hdrs,
+        body:JSON.stringify({name:sheet})
+      });
+      // Write header row
+      await fetch(
+        base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:L1')",
+        {method:'PATCH',headers:hdrs,
+         body:JSON.stringify({values:[['Date','Time','Tracking','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']]})}
+      );
+    }
+    // Find next empty row
+    var rr = await fetch(
+      base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',
+      {headers:{Authorization:'Bearer '+_msalToken}}
+    );
+    var rd = await rr.json();
+    var nextRow = (rd.rowCount && !rd.error) ? rd.rowCount + 1 : 2;
+    // Write the new entry
+    var row = [[
+      entry.date, entry.time, entry.tracking,
+      RETURN_TYPES[entry.type]||entry.type,
+      (RETURN_CONDITIONS[entry.condition]||entry.condition||'').replace(/[✅⚠❌🚨]/g,'').trim(),
+      entry.sku||'', entry.qty||1, entry.pile||'',
+      entry.location||'', entry.notes||'',
+      entry.scannedBy, entry.mgrReview?'YES':'no'
+    ]];
+    var addr = 'A'+nextRow+':L'+nextRow;
+    await fetch(
+      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='"+addr+"')",
+      {method:'PATCH',headers:hdrs,body:JSON.stringify({values:row})}
+    );
+    console.log('[Warehub] Return auto-saved to Excel row '+nextRow);
+  }catch(e){
+    console.warn('[Warehub] Returns auto-save failed:',e.message);
+  }
 }
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
