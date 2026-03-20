@@ -354,7 +354,7 @@ body{
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
-      <span id="cloud-status" title="Cloud sync" style="font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0;cursor:default;">☁</span>
+      <span id="cloud-status" title="Cloud sync: not connected" style="font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0;cursor:pointer;" onclick="kvTestConnection()">☁</span>
       <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
     </div>
   </div>
@@ -365,6 +365,7 @@ body{
     <button class="tab"     data-view="dash"     onclick="gv('dash')">Dashboard</button>
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')">Payroll</button>
     <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
+    <button class="tab"     data-view="returns"  onclick="gv('returns')">📦 Returns</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
     <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
     <button class="tab" data-view="devpanel" onclick="gv('devpanel')">⚙ Dev Panel</button>
@@ -711,6 +712,7 @@ function gv(name){
   if(name==='dash')   renderDash();
   if(name==='payroll') renderPayroll();
   if(name==='floor')  renderFloor();
+  if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
 }
 
 var TPATS=[
@@ -765,7 +767,8 @@ function matchTracking(words){
   var rowKeys=Object.keys(rows).map(Number).sort(function(a,b){return a-b;});
   for(var ri=0;ri<rowKeys.length;ri++){
     var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
-    var concat=sorted.map(function(w){return clean(w.text);}).join('');
+    var concat=sorted.map(function(w){return clean(w.text);}).join('')
+  el.querySelectorAll('[data-rdel]').forEach(function(b){b.onclick=function(){returnsDelete(b.dataset.rdel);};});;
     if(concat.length<8) continue;
     for(var j=0;j<TPATS.length;j++){
       var m=concat.match(TPATS[j].r);
@@ -4205,6 +4208,11 @@ function kvGetProxy(){
 async function kvSaveStaff(){
   var proxy = kvGetProxy();
   if(!proxy) return;
+  // Safety guard: never overwrite KV with empty data
+  if(!packers.length && !managers.length){
+    console.log('[Warehub KV] Skipping save — no staff data to push');
+    return;
+  }
   var dot = document.getElementById('cloud-status');
   try{
     if(dot) dot.style.color = 'var(--am)';
@@ -4213,11 +4221,13 @@ async function kvSaveStaff(){
       managers: managers,
       savedAt:  new Date().toISOString()
     });
+    console.log('[Warehub KV] PUT /staff to:', proxy.replace(/\/+$/,'')+'/staff');
     var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: payload
     });
+    console.log('[Warehub KV] PUT /staff response:', r.status);
     if(r.ok){
       if(dot){ dot.style.color='var(--gn)'; dot.title='Cloud sync: saved '+new Date().toLocaleTimeString(); }
       console.log('[Warehub] Staff saved to KV');
@@ -4233,11 +4243,13 @@ async function kvSaveStaff(){
 
 async function kvLoadStaff(){
   var proxy = kvGetProxy();
-  if(!proxy) return false;
+  if(!proxy){ console.warn('[Warehub KV] No proxy URL'); return false; }
+  console.log('[Warehub KV] Loading staff from:', proxy.replace(/\/+$/,'')+'/staff');
   var dot = document.getElementById('cloud-status');
   try{
-    if(dot) dot.style.color = 'var(--am)';
+    if(dot){ dot.style.color='var(--am)'; dot.title='Cloud sync: connecting…'; }
     var r = await fetch(proxy.replace(/\/+$/, '') + '/staff');
+    console.log('[Warehub KV] GET /staff response:', r.status);
     if(!r.ok){ if(dot) dot.style.color='var(--rd)'; return false; }
     var data = await r.json();
     if(dot) dot.style.color = 'var(--gn)';
@@ -4255,6 +4267,11 @@ async function kvLoadStaff(){
     renderQuickLoginBtns();
     if(dot) dot.title = 'Cloud sync: loaded '+packers.length+' packers at '+new Date().toLocaleTimeString();
     pm('✓ Staff loaded from cloud ('+packers.length+' packers)');
+    // Re-render panels with cloud data
+    renderManagerPanel();
+    renderPackerPanel();
+    renderAssignPanel();
+    renderQuickLoginBtns();
     return true;
   }catch(e){
     if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync error: '+e.message; }
@@ -4332,12 +4349,478 @@ function syncStaffWithFeedback(){
     }, 2500);
   });
 }
-document.addEventListener('DOMContentLoaded',function(){try{
+
+// ══════════════════════════════════════════
+// RETURNS INTAKE
+// ══════════════════════════════════════════
+var returnsList = [];
+var _returnPendingTracking = null;
+var _returnPhotos = [];
+
+var RETURN_TYPES = {
+  'customer':       'Customer Return',
+  'undeliverable':  'Carrier Undeliverable',
+  'refused':        'Refused',
+  'damaged_transit':'Damaged in Transit',
+  'wrong_item':     'Wrong Item',
+  'not_ordered':    'Not Ordered',
+  'other':          'Other'
+};
+var RETURN_CONDITIONS = {
+  'sealed':       'Sealed ✅',
+  'open_good':    'Opened Good ✅',
+  'open_damaged': 'Opened Damaged ⚠',
+  'damaged':      'Item Damaged ❌',
+  'missing_items':'Items Missing ❌',
+  'counterfeit':  'Counterfeit 🚨'
+};
+var CONDITION_COLORS = {
+  'sealed':       'var(--gn)',
+  'open_good':    'var(--cy)',
+  'open_damaged': 'var(--am)',
+  'damaged':      'var(--rd)',
+  'missing_items':'var(--rd)',
+  'counterfeit':  'var(--rd)'
+};
+// Conditions that require manager review
+var MGR_REVIEW_CONDITIONS = ['damaged','missing_items','counterfeit','open_damaged'];
+
+function returnsSave(){
+  try{
+    // Save without photos (base64 too large for localStorage)
+    var light = returnsList.map(function(r){
+      var copy = Object.assign({},r);
+      delete copy.photos;
+      return copy;
+    });
+    localStorage.setItem('warehub_returns', JSON.stringify(light));
+  }catch(e){}
+}
+function returnsLoad(){
+  try{
+    var d = localStorage.getItem('warehub_returns');
+    if(d) returnsList = JSON.parse(d);
+  }catch(e){ returnsList = []; }
+}
+
+function returnsConditionChange(val){
+  var flagRow = document.getElementById('return-mgr-flag-row');
+  if(flagRow){
+    var needsMgr = MGR_REVIEW_CONDITIONS.indexOf(val) >= 0;
+    flagRow.style.display = needsMgr ? 'block' : 'none';
+    // Auto-set pile
+    var pile = document.getElementById('return-pile');
+    if(pile){
+      if(val==='sealed' || val==='open_good') pile.value = 'A';
+      else if(val==='open_damaged') pile.value = 'B';
+      else if(val==='damaged' || val==='missing_items') pile.value = 'C';
+      else if(val==='counterfeit') pile.value = 'D';
+    }
+  }
+}
+
+function returnsTakePhoto(){
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment'; // rear camera on mobile
+  input.onchange = function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      _returnPhotos.push(ev.target.result);
+      returnsUpdatePhotoPreview();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function returnsUploadPhoto(){
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.onchange = function(e){
+    Array.from(e.target.files).forEach(function(file){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        _returnPhotos.push(ev.target.result);
+        returnsUpdatePhotoPreview();
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+  input.click();
+}
+
+function returnsUpdatePhotoPreview(){
+  var preview = document.getElementById('return-photo-preview');
+  var count   = document.getElementById('return-photo-count');
+  if(!preview) return;
+  if(count) count.textContent = _returnPhotos.length + ' photo(s)';
+  var html = '';
+  _returnPhotos.forEach(function(src, i){
+    html += '<div style="position:relative;display:inline-block;">'
+      +'<img src="'+src+'" style="width:64px;height:64px;object-fit:cover;border:1px solid var(--bdr);border-radius:2px;"/>'
+      +'<button data-photo-rm="'+i+'" style="position:absolute;top:-4px;right:-4px;background:var(--rd);color:#fff;border:none;border-radius:50%;width:16px;height:16px;font-size:9px;cursor:pointer;line-height:16px;padding:0;">✕</button>'
+      +'</div>';
+  });
+  preview.innerHTML = html;
+  preview.querySelectorAll('[data-photo-rm]').forEach(function(btn){
+    btn.onclick = function(){ returnsRemovePhoto(parseInt(btn.dataset.photoRm)); };
+  });
+}
+
+function returnsRemovePhoto(i){
+  _returnPhotos.splice(i, 1);
+  returnsUpdatePhotoPreview();
+}
+
+function returnsScan(val){
+  if(!val) return;
+  var fb = document.getElementById('return-scan-fb');
+  var norm = val.replace(/[\s\-().]/g,'').toUpperCase();
+
+  // Try TPATS carrier matching
+  var tracking = null;
+  var carrier  = 'Unknown';
+  for(var i=0;i<TPATS.length;i++){
+    var m = norm.match(TPATS[i].r);
+    if(m){
+      tracking = m[1];
+      carrier  = TPATS[i].carrier || 'Unknown';
+      break;
+    }
+  }
+  if(!tracking) tracking = norm;
+
+  // Detect carrier from CR map
+  Object.keys(CR).forEach(function(k){
+    if(CR[k].t && CR[k].t(tracking)) carrier = k;
+  });
+
+  // Duplicate check (today)
+  var today = new Date().toLocaleDateString();
+  var dup = returnsList.find(function(r){ return r.tracking===tracking && r.date===today; });
+  if(dup){
+    bpErr();
+    fb.style.color = 'var(--am)';
+    fb.textContent = '⚠ Already logged today: '+tracking.slice(-14);
+    return;
+  }
+
+  // Good scan
+  bpOk();
+  _returnPendingTracking = tracking;
+  _returnPhotos = [];
+
+  fb.style.color = 'var(--gn)';
+  fb.textContent = '✓ '+carrier+' — '+tracking.slice(-16)+' — fill details below';
+
+  var form = document.getElementById('return-form');
+  var tEl  = document.getElementById('return-form-tracking');
+  var cEl  = document.getElementById('return-form-carrier');
+  form.style.display = 'block';
+  if(tEl) tEl.textContent = tracking.slice(-20);
+  if(cEl) cEl.textContent = carrier;
+
+  // Reset form
+  document.getElementById('return-type').value      = 'customer';
+  document.getElementById('return-condition').value = 'sealed';
+  document.getElementById('return-sku').value       = '';
+  document.getElementById('return-qty').value       = '1';
+  document.getElementById('return-location').value  = '';
+  document.getElementById('return-notes').value     = '';
+  document.getElementById('return-pile').value      = 'A';
+  document.getElementById('return-mgr-flag-row').style.display = 'none';
+  returnsUpdatePhotoPreview();
+
+  // Auto-focus SKU
+  setTimeout(function(){ document.getElementById('return-sku').focus(); }, 100);
+}
+
+function returnsSubmit(){
+  if(!_returnPendingTracking) return;
+  var condition = document.getElementById('return-condition').value;
+  var type      = document.getElementById('return-type').value;
+  var sku       = document.getElementById('return-sku').value.trim().toUpperCase();
+  var qty       = parseInt(document.getElementById('return-qty').value)||1;
+  var location  = document.getElementById('return-location').value.trim().toUpperCase();
+  var notes     = document.getElementById('return-notes').value.trim();
+  var pile      = document.getElementById('return-pile').value;
+  var now       = new Date();
+  var needsMgr  = MGR_REVIEW_CONDITIONS.indexOf(condition) >= 0;
+
+  var entry = {
+    id:        'RET-'+Date.now(),
+    tracking:  _returnPendingTracking,
+    date:      now.toLocaleDateString(),
+    time:      now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+    type:      type,
+    condition: condition,
+    sku:       sku,
+    qty:       qty,
+    location:  location,
+    pile:      pile,
+    notes:     notes,
+    photos:    _returnPhotos.slice(),
+    scannedBy: currentPacker ? currentPacker.name : 'Unknown',
+    mgrReview: needsMgr,
+    mgrCleared:false
+  };
+
+  returnsList.unshift(entry);
+  returnsSave();
+  bpDone();
+
+  // Restock to rack if location + sku given
+  if(location && sku){
+    if(!window._inventoryData) window._inventoryData = {};
+    if(!window._inventoryData[location]) window._inventoryData[location]={skus:[]};
+    var inv = window._inventoryData[location];
+    var ex  = inv.skus.find(function(s){return s.sku===sku;});
+    if(ex){ ex.qty=(parseInt(ex.qty)||0)+qty; }
+    else { inv.skus.push({sku:sku,name:'RETURN',qty:qty,unit:'PCS'}); }
+    try{ localStorage.setItem('warehub_inventory',JSON.stringify(window._inventoryData)); }catch(e){}
+  }
+
+  // Manager notification
+  if(needsMgr){ returnsNotifyManager(entry); }
+
+  document.getElementById('return-scan-fb').style.color = 'var(--gn)';
+  document.getElementById('return-scan-fb').textContent =
+    '✓ Logged → Pile '+pile+(location?' · Restocked to '+location:'')+(needsMgr?' · ⚠ Manager notified':'');
+
+  returnsCancelForm();
+  renderReturnsList();
+  renderReturnsStats();
+  pm('✓ Return logged'+(location?' + restocked to '+location:'')+(needsMgr?' — manager review required':''));
+
+  _returnPendingTracking = null;
+  _returnPhotos = [];
+  setTimeout(function(){
+    var el=document.getElementById('return-scan-in');
+    if(el){el.value='';el.focus();}
+  },100);
+}
+
+function returnsNotifyManager(entry){
+  // Show banner
+  var banner = document.getElementById('return-mgr-banner');
+  var count  = document.getElementById('return-mgr-count');
+  if(!banner) return;
+  var pending = returnsList.filter(function(r){return r.mgrReview&&!r.mgrCleared;}).length;
+  banner.style.display = 'block';
+  if(count) count.textContent = pending+' item(s) need review';
+  // Sound alert
+  setTimeout(function(){ bp(440,.15,'square',.3); },0);
+  setTimeout(function(){ bp(330,.15,'square',.3); },150);
+  setTimeout(function(){ bp(440,.15,'square',.3); },300);
+}
+
+function returnsManagerClear(){
+  returnsList.forEach(function(r){ if(r.mgrReview) r.mgrCleared=true; });
+  returnsSave();
+  var banner = document.getElementById('return-mgr-banner');
+  if(banner) banner.style.display='none';
+  renderReturnsList();
+  pm('✓ Manager review cleared.');
+}
+
+function returnsCancelForm(){
+  var form=document.getElementById('return-form');
+  if(form) form.style.display='none';
+  _returnPendingTracking=null;
+  _returnPhotos=[];
+}
+
+function renderReturnsStats(){
+  var el=document.getElementById('return-stats');
+  if(!el) return;
+  var today=new Date().toLocaleDateString();
+  var td=returnsList.filter(function(r){return r.date===today;});
+  var mgr=returnsList.filter(function(r){return r.mgrReview&&!r.mgrCleared;}).length;
+  var damaged=returnsList.filter(function(r){
+    return r.condition==='damaged'||r.condition==='missing_items'||r.condition==='counterfeit';
+  }).length;
+  var piles={A:0,B:0,C:0,D:0};
+  returnsList.forEach(function(r){if(piles[r.pile]!==undefined)piles[r.pile]++;});
+  el.innerHTML=[
+    ['TODAY',    td.length,      'var(--cy)'],
+    ['TOTAL',    returnsList.length,'var(--tx)'],
+    ['MGR REVIEW',mgr,           mgr>0?'var(--am)':'var(--td)'],
+    ['DAMAGED',  damaged,        damaged>0?'var(--rd)':'var(--td)']
+  ].map(function(s){
+    return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:10px 12px;">'
+      +'<div style="font-size:8px;letter-spacing:1px;color:var(--td);">'+s[0]+'</div>'
+      +'<div style="font-size:20px;font-weight:700;color:'+s[2]+';margin-top:2px;">'+s[1]+'</div>'
+      +'</div>';
+  }).join('')
+  +'<div style="background:var(--sur);border:1px solid var(--bdr);padding:10px 12px;">'
+  +'<div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">PILES</div>'
+  +['A','B','C','D'].map(function(p){
+    return '<span style="font-size:9px;margin-right:8px;color:var(--td);">'+p+': <b style="color:var(--tx);">'+piles[p]+'</b></span>';
+  }).join('')
+  +'</div>';
+}
+
+function renderReturnsList(){
+  var el=document.getElementById('return-list');
+  if(!el) return;
+  // Update manager banner
+  var pending=returnsList.filter(function(r){return r.mgrReview&&!r.mgrCleared;}).length;
+  var banner=document.getElementById('return-mgr-banner');
+  var bcount=document.getElementById('return-mgr-count');
+  if(banner) banner.style.display=pending>0?'block':'none';
+  if(bcount) bcount.textContent=pending+' item(s) need review';
+
+  if(!returnsList.length){
+    el.innerHTML='<div style="color:var(--td);font-size:11px;padding:16px;">No returns logged yet.</div>';
+    return;
+  }
+  el.innerHTML=returnsList.map(function(r,ri){
+    var cc=CONDITION_COLORS[r.condition]||'var(--td)';
+    var mgrTag=r.mgrReview&&!r.mgrCleared
+      ?'<span style="background:#ffb30022;color:var(--am);font-size:8px;padding:1px 6px;margin-left:6px;">⚠ MGR</span>':'';
+        var photos='';
+    if(r.photos&&r.photos.length){
+      photos='<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">';
+      for(var pi=0;pi<r.photos.length;pi++){
+        photos+='<img src="'+r.photos[pi]+'" data-photoret="'+ri+'" style="width:48px;height:48px;object-fit:cover;border:1px solid var(--bdr);border-radius:2px;cursor:pointer;">';
+      }
+      photos+='</div>';
+    }
+    return '<div style="background:var(--sur);border:1px solid '+(r.mgrReview&&!r.mgrCleared?'var(--am)':'var(--bdr)')+';padding:10px 14px;">'
+      +'<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">'
+        +'<div style="flex:1;min-width:120px;">'
+          +'<div style="font-family:monospace;font-size:11px;color:var(--cy);">'+r.tracking.slice(-18)+mgrTag+'</div>'
+          +'<div style="font-size:9px;color:var(--td);margin-top:2px;">'+r.date+' '+r.time+' · '+r.scannedBy+'</div>'
+        +'</div>'
+        +'<div style="font-size:9px;color:var(--am);white-space:nowrap;">'+RETURN_TYPES[r.type]+'</div>'
+        +'<div style="font-size:9px;font-weight:700;color:'+cc+';white-space:nowrap;">'+RETURN_CONDITIONS[r.condition]+'</div>'
+        +'<div style="font-size:9px;color:var(--td);white-space:nowrap;">Pile '+r.pile+'</div>'
+        +(r.sku?'<div style="font-size:9px;font-family:monospace;color:var(--tx);">'+r.sku+(r.qty>1?' ×'+r.qty:'')+'</div>':'')
+        +(r.location?'<div style="font-size:9px;color:var(--gn);font-family:monospace;">📍 '+r.location+'</div>':'')
+        +'<button data-rdel="'+r.id+'" class="btn btn-r" style="font-size:8px;padding:2px 6px;flex-shrink:0;">✕</button>'
+      +'</div>'
+      +(r.notes?'<div style="font-size:9px;color:var(--td);margin-top:6px;border-top:1px solid var(--bdr);padding-top:6px;">'+r.notes+'</div>':'')
+      +photos
+      +'</div>';
+  }).join('');
+
+  el.querySelectorAll('[data-rdel]').forEach(function(b){
+    b.onclick=function(){returnsDelete(b.dataset.rdel);};
+  });
+  el.querySelectorAll('[data-photoret]').forEach(function(b){
+    b.onclick=function(){returnsViewPhoto(parseInt(b.dataset.photoret));};
+  });
+}
+
+function returnsViewPhoto(ri){
+  var r=returnsList[ri];
+  if(!r||!r.photos||!r.photos.length) return;
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:#000c;z-index:99999;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:20px;cursor:pointer;';
+  modal.onclick=function(){modal.remove();};
+  r.photos.forEach(function(p){
+    var img=document.createElement('img');
+    img.src=p;
+    img.style.cssText='max-width:90vw;max-height:80vh;object-fit:contain;border:2px solid var(--cy);';
+    modal.appendChild(img);
+  });
+  document.body.appendChild(modal);
+}
+
+function returnsDelete(id){
+  returnsList=returnsList.filter(function(r){return r.id!==id;});
+  returnsSave();
+  renderReturnsList();
+  renderReturnsStats();
+}
+
+function returnsExportCSV(){
+  if(!returnsList.length){pm('⚠ No returns to export.');return;}
+  var rows=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
+  returnsList.forEach(function(r){
+    rows.push([r.date,r.time,r.tracking,r.carrier||'',
+      RETURN_TYPES[r.type]||r.type,
+      (RETURN_CONDITIONS[r.condition]||r.condition).replace(/[✅⚠❌🚨]/g,'').trim(),
+      r.sku||'',r.qty||1,r.pile||'',r.location||'',r.notes||'',
+      r.scannedBy,r.mgrReview?'YES':'no']);
+  });
+  var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='Warehub-Returns-'+new Date().toLocaleDateString().replace(/\//g,'-')+'.csv';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  pm('✓ Returns CSV exported ('+returnsList.length+' records)');
+}
+
+async function returnsSaveExcel(){
+  if(!_msalToken||!_excelFileId){excelConnect();return;}
+  if(!returnsList.length){pm('⚠ No returns to save.');return;}
+  var sheet='Returns Log';
+  var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  pm('⟳ Saving returns to Excel…');
+  try{
+    var sr=await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sd=await sr.json();
+    var names=(sd.value||[]).map(function(s){return s.name;});
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets',{method:'POST',
+        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+        body:JSON.stringify({name:sheet})});
+    }
+    var hdr=[['Date','Time','Tracking','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
+    var data=returnsList.map(function(r){
+      return [r.date,r.time,r.tracking,
+        RETURN_TYPES[r.type]||r.type,
+        (RETURN_CONDITIONS[r.condition]||r.condition).replace(/[✅⚠❌🚨]/g,'').trim(),
+        r.sku||'',r.qty||1,r.pile||'',r.location||'',r.notes||'',
+        r.scannedBy,r.mgrReview?'YES':'no'];
+    });
+    var rows=hdr.concat(data);
+    var wr=await fetch(
+      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:L"+rows.length+"')",
+      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+       body:JSON.stringify({values:rows})});
+    if(wr.ok) pm('✓ Returns saved to Excel → "'+sheet+'" tab');
+    else{var e=await wr.json();pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status));}
+  }catch(e){pm('✗ Save failed: '+e.message);}
+}
+
+function kvTestConnection(){
+  var proxy = kvGetProxy();
+  if(!proxy){ pm('✗ No Worker URL set. Go to 🤖 → ⚙ SETUP'); return; }
+  pm('⟳ Testing KV connection to '+proxy.replace(/\/+$/,'')+'/staff …');
+  fetch(proxy.replace(/\/+$/,'')+'/staff')
+    .then(function(r){
+      if(r.ok) r.json().then(function(d){
+        var count = d.packers ? d.packers.length : 0;
+        pm('✓ KV connected — '+count+' packer(s) in cloud. ☁ is green = syncing.');
+        var dot=document.getElementById('cloud-status');
+        if(dot){dot.style.color='var(--gn)';dot.title='Connected: '+count+' packers in KV';}
+      });
+      else pm('✗ KV error: HTTP '+r.status+'. Check Worker KV binding WAREHUB_KV.');
+    })
+    .catch(function(e){
+      pm('✗ KV fetch failed: '+e.message+'. Check Worker URL and CORS (PUT must be allowed).');
+      var dot=document.getElementById('cloud-status');
+      if(dot){dot.style.color='var(--rd)';dot.title='Error: '+e.message;}
+    });
+}
+document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
   try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
-  loadStaff();
-  kvLoadStaff();
+  loadStaff();         // 1. load from localStorage first (instant)
+  returnsLoad();
   excelLoadConfig();
+  await kvLoadStaff(); // 2. AWAIT KV — overrides localStorage if cloud has newer data
   gmapsLoadConfig();
   vehicleLoad();
   renderManagerPanel();
@@ -4487,9 +4970,160 @@ document.addEventListener('DOMContentLoaded',function(){try{
 
   var csvBtn=document.getElementById('export-csv-btn');
   if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
-}catch(e){console.error("[Warehub init]",e);}
+}catch(e){console.error("[Warehub init]",e);}})();
 });
 </script>
+
+
+  <!-- ── Returns Intake ── -->
+  <div id="view-returns" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Returns Intake</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Scan · log condition · notify manager</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">
+          <button class="btn" onclick="returnsExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
+          <button class="btn" onclick="returnsSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
+          <button class="btn btn-r" onclick="if(confirm('Clear all return records?')){returnsList=[];returnsSave();renderReturnsList();renderReturnsStats();pm('Returns cleared.');}" style="font-size:9px;white-space:nowrap;">✕ CLEAR ALL</button>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div id="return-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex-shrink:0;"></div>
+
+      <!-- Manager notification banner -->
+      <div id="return-mgr-banner" style="display:none;background:#ffb30018;border:1px solid var(--am);padding:10px 14px;font-size:10px;color:var(--am);flex-shrink:0;">
+        <span style="font-weight:700;">⚠ MANAGER REVIEW REQUIRED</span>
+        <span id="return-mgr-count" style="margin-left:8px;"></span>
+        <button class="btn" onclick="returnsManagerClear()" style="font-size:8px;margin-left:12px;border-color:var(--am);color:var(--am);">✓ REVIEWED</button>
+      </div>
+
+      <!-- Scan input -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 16px;flex-shrink:0;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">SCAN RETURN PACKAGE</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="return-scan-in"
+            placeholder="Scan tracking barcode…"
+            autocomplete="off"
+            style="flex:1;min-width:180px;background:var(--bg);border:2px solid var(--cy);color:var(--tx);padding:10px 14px;font-size:13px;font-family:monospace;outline:none;"
+            onkeydown="if(event.key==='Enter'){returnsScan(this.value.trim());this.value='';}"
+          />
+          <button class="btn btn-c" onclick="var v=document.getElementById('return-scan-in');returnsScan(v.value.trim());v.value='';v.focus();" style="font-size:9px;white-space:nowrap;">✓ SCAN</button>
+        </div>
+        <div id="return-scan-fb" style="font-size:11px;color:var(--td);margin-top:8px;min-height:16px;"></div>
+      </div>
+
+      <!-- Detail form (appears after scan) -->
+      <div id="return-form" style="background:var(--sur);border:1px solid var(--cy);padding:14px 16px;display:none;flex-shrink:0;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:12px;">
+          RETURN DETAILS —
+          <span id="return-form-tracking" style="font-family:monospace;font-size:11px;"></span>
+          <span id="return-form-carrier" style="margin-left:8px;font-size:9px;opacity:0.7;"></span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <!-- Return type -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TYPE</div>
+            <select id="return-type" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="customer">Customer Return</option>
+              <option value="undeliverable">Carrier Undeliverable</option>
+              <option value="refused">Refused by Recipient</option>
+              <option value="damaged_transit">Damaged in Transit</option>
+              <option value="wrong_item">Wrong Item Sent</option>
+              <option value="not_ordered">Item Not Ordered</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <!-- Condition -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ITEM CONDITION</div>
+            <select id="return-condition" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" onchange="returnsConditionChange(this.value)">
+              <option value="sealed">Sealed / Unopened ✅</option>
+              <option value="open_good">Opened — Good ✅</option>
+              <option value="open_damaged">Opened — Damaged ⚠</option>
+              <option value="damaged">Item Damaged ❌</option>
+              <option value="missing_items">Items Missing ❌</option>
+              <option value="counterfeit">Suspected Counterfeit 🚨</option>
+            </select>
+          </div>
+          <!-- SKU -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU / PRODUCT</div>
+            <input id="return-sku" placeholder="Scan or type SKU…" autocomplete="off"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;"
+            />
+          </div>
+          <!-- Qty -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QTY</div>
+            <input id="return-qty" type="number" min="1" value="1"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"
+            />
+          </div>
+          <!-- Restock location -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RESTOCK LOCATION</div>
+            <input id="return-location" placeholder="e.g. R1-05 (leave blank for return pile)"
+              autocomplete="off"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;"
+            />
+          </div>
+          <!-- Pile assignment -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN PILE</div>
+            <select id="return-pile" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="A">Pile A — Resellable</option>
+              <option value="B">Pile B — Needs Inspection</option>
+              <option value="C">Pile C — Damaged / Dispose</option>
+              <option value="D">Pile D — Manager Review</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-bottom:10px;">
+          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NOTES</div>
+          <textarea id="return-notes" placeholder="Describe the condition, reason, any visible damage…" rows="2"
+            style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;"></textarea>
+        </div>
+
+        <!-- Photo capture -->
+        <div style="margin-bottom:12px;">
+          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:6px;">PHOTOS (optional)</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn" onclick="returnsTakePhoto()" style="font-size:9px;white-space:nowrap;">📷 TAKE PHOTO</button>
+            <button class="btn" onclick="returnsUploadPhoto()" style="font-size:9px;white-space:nowrap;">🖼 UPLOAD</button>
+            <span id="return-photo-count" style="font-size:9px;color:var(--td);"></span>
+          </div>
+          <div id="return-photo-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+        </div>
+
+        <!-- Manager flag -->
+        <div id="return-mgr-flag-row" style="display:none;background:#ffb30018;border:1px solid var(--am);padding:8px 12px;margin-bottom:10px;font-size:10px;color:var(--am);">
+          ⚠ This condition requires manager review — manager will be notified when you log this return.
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-g" onclick="returnsSubmit()" style="font-size:10px;padding:8px 18px;white-space:nowrap;">✓ LOG RETURN</button>
+          <button class="btn" onclick="returnsCancelForm()" style="font-size:9px;white-space:nowrap;">✕ CANCEL</button>
+        </div>
+      </div>
+
+      <!-- Returns list -->
+      <div style="flex-shrink:0;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">RETURN LOG</div>
+        <div id="return-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- ── Vehicle Log ── -->
   <div id="view-vehicle" class="view" style="display:flex;flex-direction:column;">
