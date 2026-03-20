@@ -455,7 +455,7 @@ body{
     <!-- ── Action Buttons ── -->
     <div style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button class="btn" id="print-cards-btn" style="border-color:var(--pu);background:#c77dff10;color:var(--pu);" onclick="printPackerCards()">🪪 PRINT ALL ID CARDS</button>
-      <button class="btn" id="sync-staff-btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;" onclick="kvSaveStaff().then(function(){pm('✓ Staff synced to cloud.');})" title="Sync staff to Cloudflare cloud — loads on any browser without login">☁ SYNC STAFF</button>
+      <button class="btn" id="sync-staff-btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;transition:all .2s;" onclick="syncStaffWithFeedback()" title="Sync staff to Cloudflare cloud — loads on any browser without login">☁ SYNC STAFF</button>
       <div style="flex:1;"></div>
       <button class="btn btn-g" id="auto-assign-btn" style="font-size:9px;" onclick="autoAssign()">⚡ SKU AUTO-ASSIGN</button>
       <button class="btn" id="print-picklist-btn" style="font-size:9px;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printPickLists()">🖨 PRINT PICK LISTS</button>
@@ -4261,6 +4261,76 @@ async function kvLoadStaff(){
     console.warn('[Warehub] KV load failed:', e.message);
     return false;
   }
+}
+
+function syncStaffWithFeedback(){
+  var btn = document.getElementById('sync-staff-btn');
+  var dot = document.getElementById('cloud-status');
+
+  // Visual: button pulse
+  if(btn){
+    btn.style.background = '#1D6F4240';
+    btn.style.transform  = 'scale(0.96)';
+    btn.textContent = '☁ SYNCING…';
+    btn.disabled = true;
+  }
+
+  // Sound: rising tone = action started
+  bp(440, .06, 'sine', .15);
+  setTimeout(function(){ bp(550, .08, 'sine', .15); }, 80);
+
+  kvSaveStaff().then(function(){
+    // Success sound: bpDone chord
+    bpDone();
+
+    // Visual: flash green
+    if(btn){
+      btn.style.background  = '#00ff8830';
+      btn.style.borderColor = 'var(--gn)';
+      btn.style.color       = 'var(--gn)';
+      btn.style.transform   = 'scale(1.04)';
+      btn.textContent = '✓ SYNCED';
+    }
+    if(dot){ dot.style.color = 'var(--gn)'; }
+
+    pm('✓ Staff synced to cloud — ' + packers.length + ' packer(s) saved.');
+
+    // Reset button after 2s
+    setTimeout(function(){
+      if(btn){
+        btn.style.background  = '#1D6F4215';
+        btn.style.borderColor = '#1D6F42';
+        btn.style.color       = '#1D6F42';
+        btn.style.transform   = 'scale(1)';
+        btn.textContent       = '☁ SYNC STAFF';
+        btn.disabled          = false;
+      }
+    }, 2000);
+
+  }).catch(function(e){
+    // Error sound
+    bpErr();
+
+    if(btn){
+      btn.style.background  = '#ff3d5a20';
+      btn.style.borderColor = 'var(--rd)';
+      btn.style.color       = 'var(--rd)';
+      btn.style.transform   = 'scale(1)';
+      btn.textContent       = '✗ FAILED';
+      btn.disabled          = false;
+    }
+    if(dot){ dot.style.color = 'var(--rd)'; }
+    pm('✗ Sync failed — check Worker URL in AI setup.');
+
+    setTimeout(function(){
+      if(btn){
+        btn.style.background  = '#1D6F4215';
+        btn.style.borderColor = '#1D6F42';
+        btn.style.color       = '#1D6F42';
+        btn.textContent       = '☁ SYNC STAFF';
+      }
+    }, 2500);
+  });
 }
 document.addEventListener('DOMContentLoaded',function(){try{
 
