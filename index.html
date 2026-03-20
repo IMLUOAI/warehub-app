@@ -733,11 +733,17 @@ function matchTracking(words){
   var allText = words.map(function(w){return w.text;}).join(' ');
 
 
-  var hintFedEx  = /FedEx|fedex/i.test(allText);
-  var hintUPS    = /UPS/i.test(allText) || /1Z[A-Z0-9]{4,}/i.test(allText);
-  var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POSTAGE/i.test(allText);
-  var hintSpeedX = /SpeedX|SPXMIA|SDX/i.test(allText);
-  var hintUniuni = /uniuni|UUS/i.test(allText);
+  var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]/i.test(allText);
+  var hintUPS    = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(allText);
+  var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POST|FIRST[\s-]CLASS|PRIORITY\s*MAIL|MEDIA\s*MAIL/i.test(allText);
+  var hintSpeedX = /SpeedX|SPXMIA|SDX|SPX/i.test(allText);
+  var hintUniuni = /uniuni|UUS|UNI[\s-]UNI/i.test(allText);
+  var hintGofo   = /GOFO|GFUS|GF[0-9]/i.test(allText);
+  var hintSwift  = /SWIFT|SWF|\bSW[0-9]/i.test(allText);
+  var hintLSO    = /\bLSO\b|Lone\s*Star\s*Overnight/i.test(allText);
+  var hintOntrac = /OnTrac|on-trac/i.test(allText);
+  var hintAmazon = /\bTBA[0-9]|Amazon\s*Logistics|AMZL/i.test(allText);
+  var hintDHL    = /\bDHL\b/i.test(allText);
 
 
   for(var i=0;i<words.length;i++){
@@ -1765,6 +1771,16 @@ function doScan(raw){
 
 
   function norm(s){ return s.replace(/[\s\-().]/g,'').toUpperCase(); }
+  // Handle GS1-128 / AI barcodes - extract tracking from compound barcode
+  function extractFromGS1(s){
+    // FedEx GS1: (00)SSCC or (92)tracking
+    var m = s.match(/\(92\)([0-9A-Z]{18,34})/i) || s.match(/92([0-9]{18,34})/);
+    if(m) return m[1];
+    // Generic: if barcode starts with AI codes, strip them
+    return s.replace(/^\(\d{2,4}\)/,'').replace(/^\d{2}(?=[A-Z0-9]{16,})/,'');
+  }
+  var scannedExtracted = extractFromGS1(scanned) || scanned;
+  var scannedNorm = norm(scannedExtracted);
   var scannedNorm=norm(scanned);
 
 
@@ -1813,9 +1829,12 @@ function doScan(raw){
 
     var skus=order.skus||[];
     var hasSkus=skus.some(function(s){return s.sku&&s.sku!=='UNKNOWN'&&s.qty>0;});
+    // Option C: count total items across all SKUs
+    var totalItems=skus.reduce(function(sum,s){return sum+(s.qty||0);},0);
+    var needsVerify = hasSkus && totalItems > 1;
 
-    if(hasSkus && packState==='idle'){
-
+    if(needsVerify && packState==='idle'){
+      // Multi-item order — require SKU scan verification
       activeOrder=order;
       activeOrder.orderStartTime=activeOrder.orderStartTime||Date.now();
       verifySkus=[];
@@ -1823,9 +1842,15 @@ function doScan(raw){
         for(var q=0;q<s.qty;q++) verifySkus.push({sku:s.sku,qty:s.qty,unit:q+1,scanned:false});
       });
       bpOk(); clearErr();
-      setFb('✓ Label found — now scan each item','var(--am)');
+      setFb('✓ '+totalItems+' items — scan each item barcode to verify','var(--am)');
       setPackState('verify-items');
       focusScan(); return;
+    }
+
+    if(hasSkus && !needsVerify && packState==='idle'){
+      // Single-item order — complete immediately, no SKU scan needed
+      bpOk(); flash('ok');
+      setFb('✓ Single item — completing directly','var(--gn)');
     }
 
 
@@ -4171,7 +4196,9 @@ var _kvProxy = null;
 
 function kvGetProxy(){
   if(_kvProxy) return _kvProxy;
-  try{ _kvProxy = localStorage.getItem('warehub_ai_proxy')||null; }catch(e){}
+  // Use stored URL or fall back to hardcoded default
+  try{ _kvProxy = localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev'; }
+  catch(e){ _kvProxy = 'https://anthropic-proxy.imluoai.workers.dev'; }
   return _kvProxy;
 }
 
@@ -4845,7 +4872,7 @@ async function aiAsk(text){
   _aiHistory.push({role:'user',content:aiGetContext()+'\n\nUSER: '+text});
 
   // Try proxy URL first (user-configured), then direct (works locally, not on GitHub Pages)
-  var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'';
+  var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev';
   var apiUrl = proxyUrl || 'https://api.anthropic.com/v1/messages';
   console.log('[AI] Sending POST to:', apiUrl);
 
