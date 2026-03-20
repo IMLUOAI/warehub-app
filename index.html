@@ -4284,19 +4284,25 @@ function syncStaffWithFeedback(){
   var btn = document.getElementById('sync-staff-btn');
   var dot = document.getElementById('cloud-status');
 
-  // Visual: button pulse
   if(btn){
     btn.style.background = '#1D6F4240';
     btn.style.transform  = 'scale(0.96)';
     btn.textContent = '☁ SYNCING…';
     btn.disabled = true;
   }
-
-  // Sound: rising tone = action started
   bp(440, .06, 'sine', .15);
   setTimeout(function(){ bp(550, .08, 'sine', .15); }, 80);
 
-  kvSaveStaff().then(function(){
+  // Smart sync: if no local staff → LOAD from cloud
+  //             if local staff exists → SAVE to cloud
+  var action = (!packers.length && !managers.length)
+    ? kvLoadStaff().then(function(loaded){
+        if(!loaded) return Promise.reject(new Error('No staff in cloud yet'));
+        return true;
+      })
+    : kvSaveStaff().then(function(){ return true; });
+
+  action.then(function(){
     // Success sound: bpDone chord
     bpDone();
 
@@ -4310,7 +4316,7 @@ function syncStaffWithFeedback(){
     }
     if(dot){ dot.style.color = 'var(--gn)'; }
 
-    pm('✓ Staff synced to cloud — ' + packers.length + ' packer(s) saved.');
+    pm('✓ Staff synced — ' + packers.length + ' packer(s) in cloud.');
 
     // Reset button after 2s
     setTimeout(function(){
