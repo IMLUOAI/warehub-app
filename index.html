@@ -597,20 +597,93 @@ body{
   function buildRubik(){
     var rubik = document.getElementById('rubik');
     if(!rubik) return;
+
+    // 6 faces — each a scientific discipline with authentic symbols
     var faces = [
-      {t:'translateZ(60px)',                    c:['#f87171','#818cf8','#34d399','#fbbf24','#f472b6','#60a5fa','#a78bfa','#4ade80','#fb923c']},
-      {t:'rotateY(180deg) translateZ(60px)',    c:['#60a5fa','#fbbf24','#f87171','#4ade80','#a78bfa','#fb923c','#818cf8','#34d399','#f472b6']},
-      {t:'rotateY(-90deg) translateZ(60px)',    c:['#34d399','#f87171','#818cf8','#fb923c','#60a5fa','#fbbf24','#f472b6','#4ade80','#a78bfa']},
-      {t:'rotateY(90deg) translateZ(60px)',     c:['#fbbf24','#34d399','#fb923c','#818cf8','#f472b6','#f87171','#60a5fa','#a78bfa','#4ade80']},
-      {t:'rotateX(90deg) translateZ(60px)',     c:['#a78bfa','#fb923c','#4ade80','#f87171','#818cf8','#34d399','#fbbf24','#f472b6','#60a5fa']},
-      {t:'rotateX(-90deg) translateZ(60px)',    c:['#fb923c','#4ade80','#a78bfa','#34d399','#f87171','#60a5fa','#818cf8','#fbbf24','#f472b6']}
+
+      // ── PHYSICS (front) — indigo ──
+      { t:'translateZ(60px)', col:'#818cf8', bg:'rgba(30,27,75,0.95)',
+        s:[ 'E=mc²', 'ΔE', 'ℏω',
+            'F=ma',  '∇·B',  'λ',
+            'ψ(x)',  'ħ/2',  'c²'  ] },
+
+      // ── CHEMISTRY (back) — emerald ──
+      { t:'rotateY(180deg) translateZ(60px)', col:'#34d399', bg:'rgba(2,44,34,0.95)',
+        s:[ 'H₂O',  'NaCl', 'CO₂',
+            'CH₄',  'NH₃',  'O₂',
+            'pH',   'mol',  'Au'  ] },
+
+      // ── MATHEMATICS (left) — amber ──
+      { t:'rotateY(-90deg) translateZ(60px)', col:'#fbbf24', bg:'rgba(28,18,0,0.95)',
+        s:[ 'π',    '∑',    '∞',
+            '∫dx',  '∂/∂x', '√2',
+            'Δx',   'θ',    'e'   ] },
+
+      // ── QUANTUM (right) — violet ──
+      { t:'rotateY(90deg) translateZ(60px)', col:'#a78bfa', bg:'rgba(30,18,51,0.95)',
+        s:[ '|ψ⟩',  'ρ̂',   'Ĥ',
+            'σₓ',   'ℏ',    'Â†',
+            '⟨φ|',  'β',    'α'   ] },
+
+      // ── THERMODYNAMICS (top) — rose ──
+      { t:'rotateX(90deg) translateZ(60px)', col:'#f472b6', bg:'rgba(45,10,30,0.95)',
+        s:[ 'ΔS≥0', 'kB',   'PV',
+            'ΔG',   'Q',    'W',
+            'nRT',  'ΔH',   'Cp'  ] },
+
+      // ── ELECTROMAGNETISM (bottom) — cyan ──
+      { t:'rotateX(-90deg) translateZ(60px)', col:'#60a5fa', bg:'rgba(12,26,46,0.95)',
+        s:[ '∇×E',  'μ₀',   '∮B',
+            'ε₀',   'c',    'Φ',
+            'J',    'σ',    'Ω'   ] }
     ];
+
+    // Inject shimmer keyframes once
+    if(!document.getElementById('rubik-style')){
+      var st = document.createElement('style');
+      st.id = 'rubik-style';
+      st.textContent = [
+        '@keyframes cellGlow{',
+        '  0%,100%{opacity:0.75;}',
+        '  50%{opacity:1;text-shadow:0 0 14px currentColor,0 0 4px currentColor;}',
+        '}',
+        '.rk-cell{animation:cellGlow var(--gd,3s) ease-in-out infinite;}'
+      ].join('');
+      document.head.appendChild(st);
+    }
+
     faces.forEach(function(face){
       var el = document.createElement('div');
-      el.style.cssText='position:absolute;width:120px;height:120px;transform:'+face.t+';display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:4px;box-sizing:border-box;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);';
-      face.c.forEach(function(col){
-        var cell=document.createElement('div');
-        cell.style.cssText='background:'+col+';border-radius:2px;';
+      el.style.cssText = [
+        'position:absolute;width:120px;height:120px;',
+        'transform:'+face.t+';',
+        'display:grid;grid-template-columns:repeat(3,1fr);gap:2px;',
+        'padding:3px;box-sizing:border-box;',
+        'background:'+face.bg+';',
+        'border:1px solid rgba(255,255,255,0.1);',
+        'border-radius:2px;',
+        'box-shadow:inset 0 0 20px rgba(0,0,0,0.4);'
+      ].join('');
+
+      face.s.forEach(function(sym, i){
+        var cell = document.createElement('div');
+        var delay = (i * 0.37).toFixed(2);
+        var dur   = (2.4 + i * 0.31).toFixed(2);
+        cell.className = 'rk-cell';
+        cell.style.cssText = [
+          'display:flex;align-items:center;justify-content:center;',
+          'border-radius:2px;',
+          'background:rgba(255,255,255,0.04);',
+          'font-size:9.5px;font-weight:700;',
+          'color:'+face.col+';',
+          'font-family:"Share Tech Mono",monospace;',
+          'letter-spacing:-0.3px;',
+          'user-select:none;cursor:default;',
+          'transition:background .2s;',
+          '--gd:'+dur+'s;',
+          'animation-delay:'+delay+'s;'
+        ].join('');
+        cell.textContent = sym;
         el.appendChild(cell);
       });
       rubik.appendChild(el);
@@ -5086,6 +5159,184 @@ function renderProductivity(){
       }).join('')
       +'</tbody></table>';
   }
+}
+
+// ══════════════════════════════════════════
+// VEHICLE LOG
+// ══════════════════════════════════════════
+var vehicleTrips = [];
+
+function vehicleLoad(){
+  try{ vehicleTrips = JSON.parse(localStorage.getItem('warehub_vehicle')||'[]'); }
+  catch(e){ vehicleTrips = []; }
+}
+
+function vehicleSave(){
+  try{ localStorage.setItem('warehub_vehicle', JSON.stringify(vehicleTrips)); }
+  catch(e){}
+}
+
+function vehiclePopulateDrivers(){
+  var sel = document.getElementById('veh-driver');
+  if(!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— select driver —</option>';
+  managers.forEach(function(m){
+    sel.innerHTML += '<option value="'+m.name+'">'+m.name+' (Manager)</option>';
+  });
+  packers.forEach(function(p){
+    sel.innerHTML += '<option value="'+p.name+'">'+p.name+'</option>';
+  });
+  sel.innerHTML += '<option value="__other__">Other (type below)…</option>';
+  if(cur) sel.value = cur;
+}
+
+function vehicleSetNow(fieldId){
+  var el = document.getElementById(fieldId);
+  if(!el) return;
+  var now = new Date();
+  var pad = function(n){ return n<10?'0'+n:n; };
+  el.value = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())
+    +'T'+pad(now.getHours())+':'+pad(now.getMinutes());
+}
+
+function vehicleAddTrip(){
+  var driver   = document.getElementById('veh-driver').value;
+  var plate    = document.getElementById('veh-plate') ? document.getElementById('veh-plate').value.trim() : '';
+  var dest     = document.getElementById('veh-dest').value.trim();
+  var depart   = document.getElementById('veh-depart').value;
+  var ret      = document.getElementById('veh-return').value;
+  var odoStart = document.getElementById('veh-odo-start').value;
+  var odoEnd   = document.getElementById('veh-odo-end').value;
+  var notes    = document.getElementById('veh-notes').value.trim();
+  var msg      = document.getElementById('veh-form-msg');
+
+  if(!driver){ if(msg) msg.textContent='Please select a driver.'; return; }
+  if(!dest)  { if(msg) msg.textContent='Please enter a destination.'; return; }
+  if(msg) msg.textContent='';
+
+  var miles = '';
+  if(odoStart && odoEnd){
+    var diff = parseFloat(odoEnd) - parseFloat(odoStart);
+    if(diff >= 0) miles = diff.toFixed(1);
+  }
+
+  var trip = {
+    id:      'TRIP-'+Date.now(),
+    date:    new Date().toLocaleDateString(),
+    driver:  driver === '__other__'
+               ? (document.getElementById('veh-driver-other')
+                  ? document.getElementById('veh-driver-other').value.trim() : 'Unknown')
+               : driver,
+    plate:   plate,
+    dest:    dest,
+    depart:  depart,
+    ret:     ret,
+    odoStart:odoStart,
+    odoEnd:  odoEnd,
+    miles:   miles,
+    notes:   notes
+  };
+
+  vehicleTrips.unshift(trip);
+  vehicleSave();
+  vehicleClearForm();
+  renderVehicleLog();
+  renderVehicleStats();
+  pm('✓ Trip logged: '+trip.driver+' → '+trip.dest+(miles?' ('+miles+' mi)':''));
+}
+
+function vehicleClearForm(){
+  ['veh-driver','veh-dest','veh-depart','veh-return','veh-odo-start','veh-odo-end','veh-notes'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  var plateEl = document.getElementById('veh-plate');
+  if(plateEl) plateEl.value = '';
+  var msg = document.getElementById('veh-form-msg');
+  if(msg) msg.textContent = '';
+  var linkEl = document.getElementById('veh-dest-map-link');
+  if(linkEl) linkEl.style.display = 'none';
+}
+
+function renderVehicleStats(){
+  var el = document.getElementById('veh-stats');
+  if(!el) return;
+  var totalMiles = vehicleTrips.reduce(function(s,t){ return s+(parseFloat(t.miles)||0); }, 0);
+  var today = new Date().toLocaleDateString();
+  var todayTrips = vehicleTrips.filter(function(t){ return t.date===today; });
+  var drivers = [...new Set(vehicleTrips.map(function(t){ return t.driver; }))].length;
+  el.innerHTML = [
+    ['TOTAL TRIPS',   vehicleTrips.length, 'var(--cy)'],
+    ['TODAY',         todayTrips.length,   'var(--gn)'],
+    ['TOTAL MILES',   totalMiles.toFixed(1),'var(--am)'],
+    ['DRIVERS',       drivers,             'var(--pu)']
+  ].map(function(s){
+    return '<div class="kpi"><div class="lbl">'+s[0]+'</div>'
+      +'<div class="kval" style="color:'+s[2]+';">'+s[1]+'</div></div>';
+  }).join('');
+}
+
+function renderVehicleLog(){
+  var el = document.getElementById('veh-log');
+  if(!el) return;
+  var filter = (document.getElementById('veh-filter')||{}).value||'';
+  var trips = vehicleTrips.filter(function(t){
+    if(!filter) return true;
+    var q = filter.toLowerCase();
+    return (t.driver||'').toLowerCase().includes(q)
+        || (t.dest||'').toLowerCase().includes(q)
+        || (t.plate||'').toLowerCase().includes(q);
+  });
+  if(!trips.length){
+    el.innerHTML='<div style="padding:16px;font-size:11px;color:var(--td);">No trips logged yet.</div>';
+    return;
+  }
+  var hdr = ['DATE','DRIVER','PLATE','DESTINATION','DEPART','RETURN','MILES','NOTES'];
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px;min-width:600px;">'
+    +'<thead><tr>'+hdr.map(function(h){
+      return '<th style="text-align:left;padding:7px 10px;color:var(--td);letter-spacing:1px;'
+        +'border-bottom:1px solid var(--bdr);white-space:nowrap;">'+h+'</th>';
+    }).join('')+'<th style="border-bottom:1px solid var(--bdr);"></th></tr></thead><tbody>'
+    +trips.map(function(t,i){
+      var bg = i%2===0?'':'background:rgba(255,255,255,0.02);';
+      return '<tr style="'+bg+'">'
+        +'<td style="padding:7px 10px;white-space:nowrap;">'+t.date+'</td>'
+        +'<td style="padding:7px 10px;">'+t.driver+'</td>'
+        +'<td style="padding:7px 10px;font-family:monospace;">'+(t.plate||'—')+'</td>'
+        +'<td style="padding:7px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+t.dest+'</td>'
+        +'<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.depart||'—')+'</td>'
+        +'<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.ret||'—')+'</td>'
+        +'<td style="padding:7px 10px;color:var(--cy);">'+(t.miles?t.miles+' mi':'—')+'</td>'
+        +'<td style="padding:7px 10px;color:var(--td);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.notes||'')+'</td>'
+        +'<td style="padding:7px 4px;"><button data-del-trip="'+t.id+'" class="btn btn-r" style="font-size:8px;padding:2px 6px;">✕</button></td>'
+        +'</tr>';
+    }).join('')+'</tbody></table>';
+
+  el.querySelectorAll('[data-del-trip]').forEach(function(btn){
+    btn.onclick = function(){
+      vehicleTrips = vehicleTrips.filter(function(t){ return t.id!==btn.dataset.delTrip; });
+      vehicleSave(); renderVehicleLog(); renderVehicleStats();
+    };
+  });
+}
+
+function vehicleExportCSV(){
+  if(!vehicleTrips.length){ pm('⚠ No trips to export.'); return; }
+  var rows = [['Date','Driver','Plate','Destination','Depart','Return','Miles','Notes']];
+  vehicleTrips.forEach(function(t){
+    rows.push([t.date,t.driver,t.plate||'',t.dest,t.depart||'',t.ret||'',t.miles||'',t.notes||'']);
+  });
+  var csv = rows.map(function(r){
+    return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv],{type:'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href=url; a.download='Warehub-Vehicle-'+new Date().toLocaleDateString().replace(/\//g,'-')+'.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  pm('✓ Vehicle log exported ('+vehicleTrips.length+' trips)');
 }
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
