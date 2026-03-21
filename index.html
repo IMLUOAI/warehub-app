@@ -343,6 +343,346 @@ body{
 </head>
 <body>
 
+<!-- ══ PIN LOCK SCREEN ══ -->
+<div id="pin-lock" style="position:fixed;inset:0;z-index:99999;background:#1a1f2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;overflow:hidden;">
+
+  <!-- Background particles -->
+  <canvas id="pin-particles" style="position:absolute;inset:0;pointer-events:none;opacity:0.4;"></canvas>
+
+  <!-- Rubik's cube -->
+  <div style="perspective:600px;width:120px;height:120px;flex-shrink:0;">
+    <div id="rubik" style="width:120px;height:120px;position:relative;transform-style:preserve-3d;animation:rubikSpin 8s infinite linear;">
+      <!-- Each face: front back left right top bottom -->
+    </div>
+  </div>
+
+  <!-- App title -->
+  <div style="text-align:center;z-index:1;">
+    <div style="font-size:10px;letter-spacing:5px;color:#6b7a9e;margin-bottom:6px;">DOUBLE SIDED ISCM LLC</div>
+    <div style="font-size:28px;font-weight:900;letter-spacing:4px;color:#e2e8f0;">WAREHUB</div>
+    <div style="font-size:10px;letter-spacing:2px;color:#6b7a9e;margin-top:4px;">WAREHOUSE MANAGEMENT</div>
+  </div>
+
+  <!-- PIN dots -->
+  <div id="pin-dots" style="display:flex;gap:14px;z-index:1;"></div>
+
+  <!-- PIN pad -->
+  <div id="pin-pad" style="display:grid;grid-template-columns:repeat(3,64px);gap:10px;z-index:1;">
+  </div>
+
+  <!-- Error message -->
+  <div id="pin-error" style="font-size:11px;color:#f87171;letter-spacing:2px;min-height:16px;z-index:1;"></div>
+
+  <!-- First-time setup hint -->
+  <div id="pin-hint" style="font-size:10px;color:#6b7a9e;text-align:center;z-index:1;max-width:260px;line-height:1.6;"></div>
+
+</div>
+
+<style>
+@keyframes rubikSpin{
+  0%   { transform:rotateX(0deg)   rotateY(0deg)   rotateZ(0deg); }
+  20%  { transform:rotateX(180deg) rotateY(90deg)  rotateZ(0deg); }
+  40%  { transform:rotateX(90deg)  rotateY(180deg) rotateZ(90deg); }
+  60%  { transform:rotateX(270deg) rotateY(270deg) rotateZ(180deg); }
+  80%  { transform:rotateX(180deg) rotateY(360deg) rotateZ(270deg); }
+  100% { transform:rotateX(360deg) rotateY(450deg) rotateZ(360deg); }
+}
+@keyframes pinShake{
+  0%,100%{transform:translateX(0);}
+  20%{transform:translateX(-8px);}
+  40%{transform:translateX(8px);}
+  60%{transform:translateX(-6px);}
+  80%{transform:translateX(6px);}
+}
+@keyframes pinPulse{
+  0%{transform:scale(1);box-shadow:0 0 0 0 rgba(129,140,248,0.4);}
+  70%{transform:scale(1.05);box-shadow:0 0 0 8px rgba(129,140,248,0);}
+  100%{transform:scale(1);box-shadow:0 0 0 0 rgba(129,140,248,0);}
+}
+@keyframes pinUnlock{
+  0%{opacity:1;transform:scale(1);}
+  50%{opacity:0.5;transform:scale(1.05);}
+  100%{opacity:0;transform:scale(0.95);}
+}
+.pin-key{
+  width:64px;height:64px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid #323852;
+  color:#e2e8f0;
+  font-size:20px;font-weight:700;
+  font-family:inherit;
+  cursor:pointer;
+  border-radius:8px;
+  transition:all .12s;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;
+}
+.pin-key:hover{background:rgba(129,140,248,0.12);border-color:#818cf8;}
+.pin-key:active{transform:scale(0.92);background:rgba(129,140,248,0.25);}
+.pin-dot{
+  width:14px;height:14px;
+  border-radius:50%;
+  border:2px solid #323852;
+  background:transparent;
+  transition:all .2s;
+}
+.pin-dot.filled{background:#818cf8;border-color:#818cf8;box-shadow:0 0 8px rgba(129,140,248,0.6);}
+</style>
+
+<script>
+// ══════════════════════════════════════════
+// PIN LOCK SYSTEM — SHA-256 + Cloudflare KV
+// ══════════════════════════════════════════
+(function(){
+  var SESSION_KEY = 'warehub_session';
+  var PIN_LEN     = 6;
+  var _pinBuffer  = '';
+  var _pinHash    = '';   // SHA-256 hash loaded from KV
+  var _setting    = false;
+  var _confirming = false;
+  var _firstEntry = '';
+
+  // Already unlocked this session?
+  if(sessionStorage.getItem(SESSION_KEY) === 'unlocked'){
+    document.getElementById('pin-lock').style.display = 'none';
+    return;
+  }
+
+  // SHA-256 via WebCrypto
+  async function sha256(str){
+    var buf  = new TextEncoder().encode(str);
+    var hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash))
+      .map(function(b){ return b.toString(16).padStart(2,'0'); })
+      .join('');
+  }
+
+  // KV helpers — use same proxy as staff sync
+  function kvProxy(){
+    try{ return (localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev').replace(/\/+$/,''); }
+    catch(e){ return 'https://anthropic-proxy.imluoai.workers.dev'; }
+  }
+  async function kvGetPin(){
+    try{
+      var r = await fetch(kvProxy()+'/pin', {mode:'cors'});
+      if(!r.ok) return null;
+      var d = await r.json();
+      return d.hash || null;
+    }catch(e){ return null; }
+  }
+  async function kvSetPin(hash){
+    try{
+      await fetch(kvProxy()+'/pin', {
+        method:'PUT', mode:'cors',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({hash:hash})
+      });
+    }catch(e){ console.warn('[PIN] KV save failed:',e.message); }
+  }
+
+  // Init — load PIN hash from KV
+  buildRubik();
+  buildDots();
+  buildPad();
+  initParticles();
+
+  var hint = document.getElementById('pin-hint');
+
+  (async function(){
+    setHint('Connecting…', '#6b7a9e');
+    _pinHash = await kvGetPin();
+    if(!_pinHash){
+      _setting = true;
+      setHint('First launch — enter a new 6-digit PIN to secure the app.', '#818cf8');
+    } else {
+      setHint('', '');
+    }
+  })();
+
+  function setHint(txt, col){
+    var h = document.getElementById('pin-hint');
+    if(h){ h.textContent = txt; h.style.color = col||'#6b7a9e'; }
+  }
+
+  // Keyboard
+  document.addEventListener('keydown', function(e){
+    var lock = document.getElementById('pin-lock');
+    if(!lock || lock.style.display==='none') return;
+    if(e.key>='0'&&e.key<='9') pinPress(e.key);
+    else if(e.key==='Backspace') pinBackspace();
+    else if(e.key==='Enter') pinSubmit();
+  });
+
+  function pinPress(digit){
+    if(_pinBuffer.length >= PIN_LEN) return;
+    _pinBuffer += digit;
+    updateDots();
+    var dot = document.getElementById('pin-dot-'+(_pinBuffer.length-1));
+    if(dot){ dot.style.animation='none'; void dot.offsetWidth; dot.style.animation='pinPulse .3s ease'; }
+    if(_pinBuffer.length === PIN_LEN) setTimeout(pinSubmit, 150);
+  }
+
+  function pinBackspace(){
+    if(!_pinBuffer.length) return;
+    _pinBuffer = _pinBuffer.slice(0,-1);
+    updateDots();
+  }
+
+  function updateDots(){
+    for(var i=0;i<PIN_LEN;i++){
+      var d = document.getElementById('pin-dot-'+i);
+      if(d) d.classList.toggle('filled', i < _pinBuffer.length);
+    }
+  }
+
+  async function pinSubmit(){
+    if(_pinBuffer.length < PIN_LEN) return;
+    var entered = _pinBuffer;
+    _pinBuffer  = '';
+    updateDots();
+
+    if(_setting){
+      if(!_confirming){
+        // Step 1: first entry
+        _firstEntry = entered;
+        _confirming = true;
+        setHint('Confirm your PIN — enter it again.', '#818cf8');
+        return;
+      } else {
+        // Step 2: confirm
+        if(entered !== _firstEntry){
+          _confirming = false; _firstEntry = '';
+          setHint('PINs did not match — try again.', '#f87171');
+          pinShake();
+          return;
+        }
+        // Save hash to KV
+        var hash = await sha256(entered);
+        await kvSetPin(hash);
+        _pinHash   = hash;
+        _setting   = false; _confirming = false;
+        setHint('PIN set! Unlocking…', '#34d399');
+        setTimeout(showSuccess, 600);
+        return;
+      }
+    }
+
+    // Verify
+    var hash = await sha256(entered);
+    if(hash === _pinHash){
+      showSuccess();
+    } else {
+      setHint('', '');
+      pinShake();
+      var err = document.getElementById('pin-error');
+      if(err) err.textContent = 'INCORRECT PIN';
+      setTimeout(function(){ var e=document.getElementById('pin-error'); if(e) e.textContent=''; }, 1000);
+    }
+  }
+
+  function showSuccess(){
+    sessionStorage.setItem(SESSION_KEY, 'unlocked');
+    var lock = document.getElementById('pin-lock');
+    if(lock){
+      lock.style.animation = 'pinUnlock .5s ease forwards';
+      setTimeout(function(){ lock.style.display='none'; }, 500);
+    }
+  }
+
+  function pinShake(){
+    var dots = document.getElementById('pin-dots');
+    if(dots){ dots.style.animation='none'; void dots.offsetWidth; dots.style.animation='pinShake .4s ease'; }
+  }
+
+  function buildRubik(){
+    var rubik = document.getElementById('rubik');
+    if(!rubik) return;
+    var faces = [
+      {t:'translateZ(60px)',                    c:['#f87171','#818cf8','#34d399','#fbbf24','#f472b6','#60a5fa','#a78bfa','#4ade80','#fb923c']},
+      {t:'rotateY(180deg) translateZ(60px)',    c:['#60a5fa','#fbbf24','#f87171','#4ade80','#a78bfa','#fb923c','#818cf8','#34d399','#f472b6']},
+      {t:'rotateY(-90deg) translateZ(60px)',    c:['#34d399','#f87171','#818cf8','#fb923c','#60a5fa','#fbbf24','#f472b6','#4ade80','#a78bfa']},
+      {t:'rotateY(90deg) translateZ(60px)',     c:['#fbbf24','#34d399','#fb923c','#818cf8','#f472b6','#f87171','#60a5fa','#a78bfa','#4ade80']},
+      {t:'rotateX(90deg) translateZ(60px)',     c:['#a78bfa','#fb923c','#4ade80','#f87171','#818cf8','#34d399','#fbbf24','#f472b6','#60a5fa']},
+      {t:'rotateX(-90deg) translateZ(60px)',    c:['#fb923c','#4ade80','#a78bfa','#34d399','#f87171','#60a5fa','#818cf8','#fbbf24','#f472b6']}
+    ];
+    faces.forEach(function(face){
+      var el = document.createElement('div');
+      el.style.cssText='position:absolute;width:120px;height:120px;transform:'+face.t+';display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:4px;box-sizing:border-box;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);';
+      face.c.forEach(function(col){
+        var cell=document.createElement('div');
+        cell.style.cssText='background:'+col+';border-radius:2px;';
+        el.appendChild(cell);
+      });
+      rubik.appendChild(el);
+    });
+  }
+
+  function buildDots(){
+    var dots = document.getElementById('pin-dots');
+    if(!dots) return;
+    dots.innerHTML='';
+    for(var i=0;i<PIN_LEN;i++){
+      var d=document.createElement('div');
+      d.className='pin-dot'; d.id='pin-dot-'+i;
+      dots.appendChild(d);
+    }
+  }
+
+  function buildPad(){
+    var pad = document.getElementById('pin-pad');
+    if(!pad) return;
+    pad.innerHTML='';
+    ['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(function(k){
+      var btn=document.createElement('button');
+      btn.className='pin-key'; btn.textContent=k;
+      if(k==='⌫'){ btn.style.color='#6b7a9e'; btn.onclick=pinBackspace; }
+      else if(k==='✓'){ btn.style.cssText+=';background:rgba(129,140,248,0.15);border-color:#818cf8;color:#818cf8;'; btn.onclick=pinSubmit; }
+      else { btn.onclick=function(){ pinPress(k); }; }
+      pad.appendChild(btn);
+    });
+  }
+
+  function initParticles(){
+    var canvas=document.getElementById('pin-particles');
+    if(!canvas) return;
+    var ctx=canvas.getContext('2d');
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+    var pts=[];
+    for(var i=0;i<60;i++) pts.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*2+.5,dx:(Math.random()-.5)*.4,dy:(Math.random()-.5)*.4,a:Math.random()*.5+.1});
+    function draw(){
+      var lock=document.getElementById('pin-lock');
+      if(!lock||lock.style.display==='none') return;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      pts.forEach(function(p){
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle='rgba(129,140,248,'+p.a+')'; ctx.fill();
+        p.x+=p.dx; p.y+=p.dy;
+        if(p.x<0||p.x>canvas.width) p.dx*=-1;
+        if(p.y<0||p.y>canvas.height) p.dy*=-1;
+      });
+      requestAnimationFrame(draw);
+    }
+    draw();
+    window.addEventListener('resize',function(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; });
+  }
+
+})();
+
+// Allow PIN reset from Dev Panel
+async function pinReset(){
+  if(!confirm('Reset the app PIN? All devices will need to set a new PIN on next open.')) return;
+  var proxy = (localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev').replace(/\/+$/,'');
+  try{
+    await fetch(proxy+'/pin', {method:'PUT', mode:'cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify({hash:''})});
+  }catch(e){}
+  sessionStorage.removeItem('warehub_session');
+  location.reload();
+}
+
+</script>
+
+
+
 <div id="hdr">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;min-height:42px;flex-shrink:0;">
     <div style="display:flex;align-items:center;gap:8px;">
@@ -363,7 +703,7 @@ body{
     <button class="tab"     data-view="manager"  onclick="gv('manager')">Packers</button>
     <button class="tab"     data-view="pack"     onclick="gv('pack')">Pack Station</button>
     <button class="tab"     data-view="dash"     onclick="gv('dash')">Dashboard</button>
-    <button class="tab"     data-view="payroll"  onclick="gv('payroll')">Payroll</button>
+    <button class="tab"     data-view="payroll"  onclick="gv('payroll')">📊 Stats</button>
     <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
     <button class="tab"     data-view="returns"  onclick="gv('returns')">📦 Returns</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
@@ -611,43 +951,57 @@ body{
   </div>
 
   <!-- ══ PAYROLL ══ -->
-  <div id="view-payroll" class="view" style="display:flex;flex-direction:column;padding:16px 18px;gap:12px;">
-    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;gap:12px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-      <div>
-        <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PAYROLL — TIME SHEET</div>
-        <div style="font-size:9px;color:var(--td);margin-top:3px;">Double Sided ISCM LLC &nbsp;·&nbsp; <span id="pr-date"></span></div>
+  <div id="view-payroll" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Productivity</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Packages packed per packer · current shift</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">
+          <button class="btn" onclick="renderProductivity()" style="font-size:9px;">↺ REFRESH</button>
+          <button class="btn btn-r" onclick="
+            if(!confirm('Reset all packer stats for this shift?')) return;
+            packers.forEach(function(p){ p.ordersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0; });
+            saveStaff(); renderProductivity(); pm('✓ Shift stats reset.');
+          " style="font-size:9px;">↺ RESET SHIFT</button>
+          <button id="excel-connect-btn" class="btn" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;white-space:nowrap;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
+          <button id="excel-save-btn"    class="btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;display:none;" onclick="excelSavePayroll()">📊 SAVE STATS</button>
+          <button id="excel-settings-btn" style="border-color:var(--bdr);color:var(--td);display:none;padding:6px 8px;font-size:10px;cursor:pointer;background:transparent;border:1px solid;" onclick="excelConnect()" title="Change Excel file / Disconnect">⚙</button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span id="pr-status" style="font-size:9px;color:var(--td);"></span>
-        <button class="btn" id="reset-hours-btn" style="border-color:var(--rd);color:var(--rd);" onclick="
-          if(!confirm('Clear ALL shift sessions and hours for every packer? This cannot be undone.\n\nTip: export CSV first if you need a record.')) return;
-          packers.forEach(function(p){ p.shiftSessions=[]; p.loginTime=null; p.online=false; p.ordersCompleted=0; p.skusScanned=0; p.orderTimes=[]; p.totalPackTime=0; });
-          currentPacker=null; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); showLoginOrPack();
-          pm('✓ Hours reset. Ready for a new shift.');
-        ">↺ RESET HOURS</button>
-        <button class="btn btn-g" id="export-csv-btn" onclick="exportPayrollCSV()">⬇ EXPORT CSV</button>
-        <button class="btn" id="excel-connect-btn" style="border-color:#1D6F42;color:#1D6F42;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
-        <button class="btn" id="excel-save-btn" style="border-color:#1D6F42;color:#1D6F42;display:none;" onclick="excelSavePayroll()">📊 SAVE TO EXCEL</button>
-        <button id="excel-settings-btn" style="border-color:#555;color:#888;display:none;padding:6px 8px;font-size:10px;" onclick="excelConnect()" title="Change Excel file / Disconnect">⚙</button>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex-shrink:0;">
+        <div class="kpi"><div class="lbl">TOTAL PACKED</div><div class="kval" id="prod-total" style="color:var(--cy);">0</div></div>
+        <div class="kpi"><div class="lbl">TOP PACKER</div><div class="kval" id="prod-top" style="color:var(--gn);font-size:14px;">—</div></div>
+        <div class="kpi"><div class="lbl">AVG PER PACKER</div><div class="kval" id="prod-avg" style="color:var(--am);">0</div></div>
+        <div class="kpi"><div class="lbl">ACTIVE NOW</div><div class="kval" id="prod-active" style="color:var(--pu);">0</div></div>
       </div>
-    </div>
-    <!-- Summary cards -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex-shrink:0;">
-      <div class="kpi"><div class="lbl">PACKERS TODAY</div><div class="kval" id="pr-packers" style="color:var(--cy);">0</div></div>
-      <div class="kpi"><div class="lbl">TOTAL MAN-HRS</div><div class="kval" id="pr-hrs" style="color:var(--gn);">0.00</div></div>
-      <div class="kpi"><div class="lbl">ORDERS PACKED</div><div class="kval" id="pr-orders" style="color:var(--am);">0</div></div>
-      <div class="kpi"><div class="lbl">ACTIVE NOW</div><div class="kval" id="pr-active" style="color:var(--pu);">0</div></div>
-    </div>
-    <!-- Per-packer time sheet -->
-    <div class="card" style="flex-shrink:0;">
-      <div class="lbl">TIME SHEET</div>
-      <div id="pr-sheet" style="overflow-x:auto;"></div>
-    </div>
-    <!-- Session log -->
-    <div class="card" style="flex-shrink:0;">
-      <div class="lbl">SESSION LOG</div>
-      <div id="pr-log" style="overflow-x:auto;max-height:280px;overflow-y:auto;"></div>
+
+      <!-- Bar chart -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;flex-shrink:0;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:14px;">PACKAGES PACKED THIS SHIFT</div>
+        <div id="prod-chart" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="prod-empty" style="font-size:11px;color:var(--td);display:none;">No orders completed yet this shift.</div>
+      </div>
+
+      <!-- Per-packer breakdown -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;flex-shrink:0;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:12px;">PACKER BREAKDOWN</div>
+        <div id="prod-table" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- Order rate chart (orders per hour) -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;flex-shrink:0;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:14px;">PACK SPEED (avg min/order)</div>
+        <div id="prod-speed" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="prod-speed-empty" style="font-size:11px;color:var(--td);display:none;">Complete some orders to see pack speed.</div>
+      </div>
+
     </div>
   </div>
 
@@ -710,7 +1064,7 @@ function gv(name){
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
-  if(name==='payroll') renderPayroll();
+  if(name==='payroll') renderProductivity();
   if(name==='floor')  renderFloor();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
 }
@@ -1673,7 +2027,7 @@ function loginPacker(rawId){
     document.getElementById('login-scan-in').value='';
     saveStaff();
     renderPackerPanel(); renderQuickLoginBtns();
-    if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
+    if(document.getElementById('view-payroll').classList.contains('on')) renderProductivity();
     showLoginOrPack();
     return;
   }
@@ -2336,19 +2690,18 @@ function renderPayroll(){
     btn.addEventListener('click',function(){
       var p=packers.find(function(pk){return pk.id===btn.dataset.prClockout;});
       if(p) loginPacker(p.id);
-      renderPayroll();
     });
   });
   sheet.querySelectorAll('[data-pr-deactivate]').forEach(function(btn){
     btn.addEventListener('click',function(){
       var p=packers.find(function(pk){return pk.id===btn.dataset.prDeactivate;});
-      if(p){ p.active=false; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); }
+      if(p){ p.active=false; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
     });
   });
   sheet.querySelectorAll('[data-pr-activate]').forEach(function(btn){
     btn.addEventListener('click',function(){
       var p=packers.find(function(pk){return pk.id===btn.dataset.prActivate;});
-      if(p){ p.active=true; saveStaff(); renderPayroll(); renderPackerPanel(); renderQuickLoginBtns(); }
+      if(p){ p.active=true; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
     });
   });
 
@@ -2969,350 +3322,41 @@ async function msEnsureSheet(){
 }
 
 async function excelSavePayroll(){
-  if(!_msalToken||!_msalInstance){ pm('⚠ Not signed in. Click Connect Excel first.'); return; }
-  if(!_excelFileId){ pm('⚠ No file selected. Click Connect Excel first.'); return; }
-
-
+  if(!_msalToken||!_excelFileId){ excelConnect(); return; }
+  var sheet = 'Productivity';
+  var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var hdrs  = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  pm('⟳ Saving productivity snapshot to Excel…');
   try{
-    var accounts = _msalInstance.getAllAccounts();
-    if(accounts.length){
-      var resp = await _msalInstance.acquireTokenSilent({scopes:GRAPH_SCOPES, account:accounts[0]});
-      _msalToken = resp.accessToken;
-      sessionStorage.setItem('warehub_ms_token', _msalToken);
+    // Ensure sheet
+    var sr = await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sd = await sr.json();
+    var names = (sd.value||[]).map(function(s){return s.name;});
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
-  }catch(e){ console.warn('Silent token refresh failed, using cached token'); }
-
-  var now=Date.now();
-  var active=packers.filter(function(p){
-    return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
-      orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
-  });
-  if(!active.length){ pm('⚠ No packer data to save today.'); return; }
-
-  var rows=[['Date','Packer','Hours','Packages','Clock In','Clock Out']];
-  active.forEach(function(p){
-    var ms=0;
-    (p.shiftSessions||[]).forEach(function(s){
-      var i=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
-      var o=s.clockOut?new Date(s.clockOut).getTime():(s.out||0);
-      if(i&&o) ms+=(o-i);
-    });
-    if(p.online&&p.loginTime) ms+=(now-p.loginTime);
-    var hrs=ms>0?(ms/3600000).toFixed(2):'0.00';
-    var sessions=p.shiftSessions||[];
-    var firstIn='—',lastOut='—',earliestMs=null;
-    sessions.forEach(function(s){ var t=s.clockIn?new Date(s.clockIn).getTime():0; if(t&&(earliestMs===null||t<earliestMs)) earliestMs=t; });
-    if(p.online&&p.loginTime&&(earliestMs===null||p.loginTime<earliestMs)) earliestMs=p.loginTime;
-    if(earliestMs) firstIn=new Date(earliestMs).toLocaleTimeString();
-    if(!p.online&&sessions.length){ var last=sessions[sessions.length-1]; if(last.clockOut) lastOut=new Date(last.clockOut).toLocaleTimeString(); }
-    else if(p.online) lastOut='Active';
-    var done=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';}).length;
-    rows.push([shiftDate,p.name,hrs,done,firstIn,lastOut]);
-  });
-
-  pm('⟳ Saving to Excel…');
-  try{
-    var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-    await msEnsureSheet();
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/usedRange?$select=rowCount', {headers:{Authorization:'Bearer '+_msalToken}});
-    var rd=await rr.json();
-    var existingRows=(rd.rowCount&&!rd.error)?rd.rowCount:0;
-    var dataRows=existingRows===0?rows:rows.slice(1);
-    if(!dataRows.length){ pm('✓ Nothing new to save.'); return; }
-    var startRow=existingRows+1, endRow=startRow+dataRows.length-1;
-    var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(_excelSheet)+'/range(address=\'A'+startRow+':F'+endRow+'\')',
-      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:dataRows})}
+    // Build rows
+    var now   = new Date();
+    var dateStr = now.toLocaleDateString();
+    var hdr   = [['Date','Packer','Orders Packed','Avg Speed (min)','Status']];
+    var data  = packers.map(function(p){
+      var done = orders.filter(function(o){
+        return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';
+      }).length;
+      var avgMin = p.totalPackTime&&p.ordersCompleted
+        ? (p.totalPackTime/p.ordersCompleted/60000).toFixed(1) : '';
+      return [dateStr, p.name, done, avgMin, p.online?'Active':'Off shift'];
+    }).filter(function(r){ return r[2]>0; });
+    if(!data.length){ pm('⚠ No orders completed yet — nothing to save.'); return; }
+    var rows = hdr.concat(data);
+    var addr = 'A1:E'+rows.length;
+    var wr = await fetch(
+      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='"+addr+"')",
+      {method:'PATCH',headers:hdrs,body:JSON.stringify({values:rows})}
     );
-    if(wr.ok){
-      pm('✓ Saved '+dataRows.length+' row(s) to Excel → "'+_excelSheet+'" tab');
-    } else {
-      var errData=await wr.json();
-      var errMsg=(errData.error&&errData.error.message)||('HTTP '+wr.status);
-
-      if(wr.status===401||wr.status===403){
-        pm('⚠ Token expired or access denied. Click ⊞ CONNECT EXCEL to sign in again.');
-        _msalToken=null; sessionStorage.removeItem('warehub_ms_token'); excelUpdateUI();
-      } else {
-        pm('✗ Excel error ('+wr.status+'): '+errMsg);
-      }
-    }
-  }catch(e){
-    var msg=e.message||String(e);
-    if(msg.includes('fetch')){
-      pm('✗ Network error — check your internet connection. If you just signed in, your token may have expired. Click ⊞ CONNECT EXCEL to reconnect.');
-      _msalToken=null; sessionStorage.removeItem('warehub_ms_token'); excelUpdateUI();
-    } else {
-      pm('✗ Save failed: '+msg);
-    }
-  }
-}
-
-function fmPlay(url){
-  var frame=document.getElementById('fm-frame');
-  if(!frame) return;
-  var vid='';
-  var m=url.match(/[?&]v=([^&]+)/)||url.match(/youtu\.be\/([^?]+)/)||url.match(/embed\/([^?]+)/);
-  if(m){ vid=m[1]; frame.src='https://www.youtube.com/embed/'+vid+'?autoplay=1'; frame.style.display='block'; }
-}
-function fmQ(q){
-  var frame=document.getElementById('fm-frame');
-  if(!frame) return;
-  frame.src='https://www.youtube.com/results?search_query='+encodeURIComponent(q);
-  frame.style.display='block';
-}
-
-function devLoad(){
-  try{
-    var data=JSON.parse(localStorage.getItem('warehub_devpanel')||'{}');
-    document.querySelectorAll('[data-key]').forEach(function(el){
-      if(data[el.dataset.key]) el.textContent=data[el.dataset.key];
-    });
-    var notes=document.getElementById('dev-custom-notes');
-    if(notes&&data.custom_notes) notes.value=data.custom_notes;
-
-    var redir=document.getElementById('dev-azure-redirect');
-    if(redir) redir.textContent=window.location.origin+window.location.pathname;
-
-    var workerUrl=localStorage.getItem('warehub_ai_proxy')||'';
-    var workerEl=document.getElementById('dev-worker-url');
-    if(workerEl&&workerUrl&&workerEl.textContent.includes('anthropic-proxy.imluoai')) workerEl.textContent=workerUrl;
-  }catch(e){}
-}
-
-function devSave(){
-  try{
-    var data={};
-    document.querySelectorAll('[data-key]').forEach(function(el){
-      data[el.dataset.key]=el.textContent.trim();
-    });
-    var notes=document.getElementById('dev-custom-notes');
-    if(notes) data.custom_notes=notes.value;
-    localStorage.setItem('warehub_devpanel',JSON.stringify(data));
-    pm('✓ Dev panel notes saved.');
+    if(wr.ok) pm('✓ Productivity saved to Excel → "'+sheet+'" tab ('+data.length+' packers)');
+    else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
-}
-
-function devExport(){
-  devSave();
-  var lines=['WAREHUB APP — DEVELOPER REFERENCE','Generated: '+new Date().toLocaleString(),'',''];
-  document.querySelectorAll('.dev-section').forEach(function(sec){
-    var hdr=sec.querySelector('.dev-section-hdr span:first-child');
-    if(hdr) lines.push('=== '+hdr.textContent+' ===');
-    sec.querySelectorAll('.dev-field').forEach(function(f){
-      var lbl=f.querySelector('.dev-label');
-      var val=f.querySelector('.dev-link,.dev-code,.dev-note,.dev-editable');
-      if(lbl&&val) lines.push(lbl.textContent+': '+(val.href||val.textContent).trim());
-    });
-    lines.push('');
-  });
-  var notes=document.getElementById('dev-custom-notes');
-  if(notes&&notes.value){ lines.push('=== CUSTOM NOTES ==='); lines.push(notes.value); }
-  var blob=new Blob([lines.join('\n')],{type:'text/plain'});
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='warehub-dev-reference.txt';
-  a.click();
-}
-
-function devToggle(hdr){
-  var section=hdr.closest('.dev-section');
-  section.classList.toggle('collapsed');
-}
-
-function devRender(){
-  devLoad();
-}
-
-var vehicleTrips = [];
-
-function vehicleLoad(){
-  try{ vehicleTrips=JSON.parse(localStorage.getItem('warehub_vehicle')||'[]'); }catch(e){ vehicleTrips=[]; }
-}
-
-function vehicleSave(){
-  try{ localStorage.setItem('warehub_vehicle', JSON.stringify(vehicleTrips)); }catch(e){}
-}
-
-function vehiclePopulateDrivers(){
-  var sel=document.getElementById('veh-driver');
-  if(!sel) return;
-  var cur=sel.value;
-  sel.innerHTML='<option value="">— select driver —</option>';
-
-  managers.forEach(function(m){ sel.innerHTML+='<option value="'+m.name+'">'+m.name+' (Manager)</option>'; });
-  packers.forEach(function(p){ sel.innerHTML+='<option value="'+p.name+'">'+p.name+'</option>'; });
-
-  sel.innerHTML+='<option value="__other__">Other (type below)…</option>';
-  if(cur) sel.value=cur;
-}
-
-function vehicleSetNow(fieldId){
-  var el=document.getElementById(fieldId);
-  if(!el) return;
-  var now=new Date();
-
-  var pad=function(n){return n<10?'0'+n:n;};
-  el.value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'T'+pad(now.getHours())+':'+pad(now.getMinutes());
-}
-
-function vehicleAddTrip(){
-  var driver=document.getElementById('veh-driver').value;
-  var dest=document.getElementById('veh-dest').value.trim();
-  var depart=document.getElementById('veh-depart').value;
-  var ret=document.getElementById('veh-return').value;
-  var odoStart=document.getElementById('veh-odo-start').value;
-  var odoEnd=document.getElementById('veh-odo-end').value;
-  var notes=document.getElementById('veh-notes').value.trim();
-  var msg=document.getElementById('veh-form-msg');
-
-  if(!driver||driver==='__other__'){ msg.textContent='⚠ Select a driver.'; return; }
-  if(!dest){ msg.textContent='⚠ Enter a destination.'; return; }
-  if(!depart){ msg.textContent='⚠ Enter departure time.'; return; }
-
-  var miles=null;
-  if(odoStart&&odoEnd){
-    miles=parseFloat(odoEnd)-parseFloat(odoStart);
-    if(miles<0){ msg.textContent='⚠ End odometer must be greater than start.'; return; }
-  }
-
-  var trip={
-    id: Date.now(),
-    date: depart.split('T')[0],
-    driver: driver,
-    destination: dest,
-    departure: depart,
-    returned: ret||'',
-    odoStart: odoStart?parseFloat(odoStart):null,
-    odoEnd: odoEnd?parseFloat(odoEnd):null,
-    miles: miles,
-    notes: notes
-  };
-
-  vehicleTrips.unshift(trip);
-  vehicleSave();
-  vehicleClearForm();
-  renderVehicleLog();
-  renderVehicleStats();
-  msg.style.color='var(--gn)';
-  msg.textContent='✓ Trip logged!';
-  setTimeout(function(){ msg.textContent=''; },2500);
-}
-
-function vehicleClearForm(){
-  document.getElementById('veh-driver').value='';
-  document.getElementById('veh-dest').value='';
-  document.getElementById('veh-depart').value='';
-  document.getElementById('veh-return').value='';
-  document.getElementById('veh-odo-start').value='';
-  document.getElementById('veh-odo-end').value='';
-  document.getElementById('veh-notes').value='';
-}
-
-function vehicleDeleteTrip(id){
-  vehicleTrips=vehicleTrips.filter(function(t){return t.id!==id;});
-  vehicleSave();
-  renderVehicleLog();
-  renderVehicleStats();
-}
-
-function renderVehicleStats(){
-  var el=document.getElementById('veh-stats');
-  if(!el) return;
-  var totalTrips=vehicleTrips.length;
-  var totalMiles=vehicleTrips.reduce(function(s,t){return s+(t.miles||0);},0);
-
-  var now=new Date();
-  var thisMonth=vehicleTrips.filter(function(t){
-    var d=new Date(t.date);
-    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
-  }).length;
-
-  var driverCount={};
-  vehicleTrips.forEach(function(t){driverCount[t.driver]=(driverCount[t.driver]||0)+1;});
-  var topDriver=Object.keys(driverCount).sort(function(a,b){return driverCount[b]-driverCount[a];})[0]||'—';
-
-  var cards=[
-    {label:'TOTAL TRIPS',value:totalTrips,color:'var(--cy)'},
-    {label:'TOTAL MILES',value:totalMiles.toFixed(1)+' mi',color:'var(--gn)'},
-    {label:'THIS MONTH',value:thisMonth+' trips',color:'var(--am)'},
-    {label:'TOP DRIVER',value:topDriver,color:'var(--pu)'}
-  ];
-  el.innerHTML=cards.map(function(card){
-    return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 16px;">'
-      +'<div style="font-size:8px;letter-spacing:2px;color:var(--td);">'+card.label+'</div>'
-      +'<div style="font-size:20px;font-weight:700;color:'+card.color+';margin-top:4px;">'+card.value+'</div>'
-      +'</div>';
-  }).join('');
-}
-
-function renderVehicleLog(){
-  var el=document.getElementById('veh-log');
-  if(!el) return;
-  var filter=(document.getElementById('veh-filter')||{}).value||'';
-  var trips=vehicleTrips;
-  if(filter){
-    var f=filter.toLowerCase();
-    trips=trips.filter(function(t){
-      return t.driver.toLowerCase().includes(f)||t.destination.toLowerCase().includes(f)||t.notes.toLowerCase().includes(f);
-    });
-  }
-  if(!trips.length){
-    el.innerHTML='<div style="padding:32px;text-align:center;font-size:11px;color:var(--td);">No trips logged yet. Fill in the form above to add the first entry.</div>';
-    return;
-  }
-  var rows=trips.map(function(t){
-    var dur='—';
-    if(t.departure&&t.returned){
-      var ms=new Date(t.returned)-new Date(t.departure);
-      if(ms>0){
-        var h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);
-        dur=h>0?h+'h '+m+'m':m+'m';
-      }
-    }
-    return '<tr style="border-bottom:1px solid var(--bdr);">'
-      +'<td style="padding:9px 12px;font-size:10px;color:var(--td);white-space:nowrap;">'+t.date+'</td>'
-      +'<td style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--cy);">'+t.driver+'</td>'
-      +'<td style="padding:9px 12px;font-size:11px;">'+t.destination+'</td>'
-      +'<td style="padding:9px 12px;font-size:10px;white-space:nowrap;">'+(t.departure?t.departure.replace('T',' ').slice(0,16):'—')+'</td>'
-      +'<td style="padding:9px 12px;font-size:10px;white-space:nowrap;">'+(t.returned?t.returned.replace('T',' ').slice(0,16):'—')+'</td>'
-      +'<td style="padding:9px 12px;font-size:10px;text-align:center;">'+dur+'</td>'
-      +'<td style="padding:9px 12px;font-size:10px;text-align:center;color:var(--gn);">'+(t.miles!==null?t.miles.toFixed(1)+' mi':'—')+'</td>'
-      +'<td style="padding:9px 12px;font-size:10px;color:var(--td);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+t.notes+'">'+( t.notes||'—')+'</td>'
-      +'<td style="padding:9px 12px;text-align:center;">'
-        +'<button onclick="vehicleDeleteTrip('+t.id+')" style="font-size:9px;padding:2px 8px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">✕</button>'
-      +'</td>'
-      +'</tr>';
-  }).join('');
-
-  el.innerHTML='<table style="width:100%;border-collapse:collapse;">'
-    +'<thead><tr style="border-bottom:2px solid var(--bdr);">'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DATE</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DRIVER</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DESTINATION</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">DEPARTURE</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">RETURN</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:center;color:var(--td);">DURATION</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:center;color:var(--td);">MILES</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;text-align:left;color:var(--td);">NOTES</th>'
-    +'<th style="padding:8px 12px;font-size:8px;letter-spacing:2px;color:var(--td);"></th>'
-    +'</tr></thead>'
-    +'<tbody>'+rows+'</tbody></table>';
-}
-
-function vehicleExportCSV(){
-  if(!vehicleTrips.length){pm('⚠ No trips to export.');return;}
-  var hdr=['Date','Driver','Destination','Departure','Return','Duration (min)','Miles','Notes'];
-  var rows=vehicleTrips.map(function(t){
-    var dur='';
-    if(t.departure&&t.returned){var ms=new Date(t.returned)-new Date(t.departure);if(ms>0) dur=Math.round(ms/60000);}
-      return [t.date,t.driver,t.destination,t.departure,t.returned||'',dur,t.miles!==null?t.miles.toFixed(1):'',t.notes];
-  });
-  var csv=[hdr.join(',')].concat(rows).join('\n');
-  var a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download='vehicle-log-'+shiftDate+'.csv';
-  a.click();
 }
 
 async function vehicleSaveExcel(){
@@ -4554,6 +4598,31 @@ function returnsScan(val){
   document.getElementById('return-mgr-flag-row').style.display = 'none';
   returnsUpdatePhotoPreview();
 
+  // Set auto-detected carrier
+  var cSel = document.getElementById('return-carrier-sel');
+  if(cSel){
+    // Try to match carrier name to option
+    var matched = false;
+    for(var ci=0;ci<cSel.options.length;ci++){
+      if(cSel.options[ci].value === carrier){ cSel.value = carrier; matched = true; break; }
+    }
+    if(!matched) cSel.value = '';
+  }
+
+  // Populate scanner dropdown from staff
+  var sSel = document.getElementById('return-scanner-sel');
+  if(sSel){
+    sSel.innerHTML = '<option value="">— Select staff —</option>';
+    managers.forEach(function(m){
+      sSel.innerHTML += '<option value="'+m.name+'">'+m.name+' (Manager)</option>';
+    });
+    packers.forEach(function(p){
+      sSel.innerHTML += '<option value="'+p.name+'">'+p.name+'</option>';
+    });
+    // Auto-select current packer if clocked in
+    if(currentPacker) sSel.value = currentPacker.name;
+  }
+
   // Auto-focus SKU
   setTimeout(function(){ document.getElementById('return-sku').focus(); }, 100);
 }
@@ -4567,6 +4636,11 @@ function returnsSubmit(){
   var location  = document.getElementById('return-location').value.trim().toUpperCase();
   var notes     = document.getElementById('return-notes').value.trim();
   var pile      = document.getElementById('return-pile').value;
+  var carrierSel = document.getElementById('return-carrier-sel');
+  var scannerSel = document.getElementById('return-scanner-sel');
+  var carrierVal = carrierSel ? (carrierSel.value || carrier || 'Unknown') : 'Unknown';
+  var scannerVal = scannerSel && scannerSel.value ? scannerSel.value
+                 : (currentPacker ? currentPacker.name : 'Unknown');
   var now       = new Date();
   var needsMgr  = Array.isArray(MGR_REVIEW_CONDITIONS) && MGR_REVIEW_CONDITIONS.indexOf(condition) >= 0;
 
@@ -4583,7 +4657,8 @@ function returnsSubmit(){
     pile:      pile,
     notes:     notes,
     photos:    _returnPhotos.slice(),
-    scannedBy: currentPacker ? currentPacker.name : 'Unknown',
+    carrier:   carrierVal,
+    scannedBy: scannerVal,
     mgrReview: needsMgr,
     mgrCleared:false
   };
@@ -4714,7 +4789,7 @@ function renderReturnsList(){
       +'<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">'
         +'<div style="flex:1;min-width:120px;">'
           +'<div style="font-family:monospace;font-size:11px;color:var(--cy);">'+r.tracking.slice(-18)+mgrTag+'</div>'
-          +'<div style="font-size:9px;color:var(--td);margin-top:2px;">'+r.date+' '+r.time+' · '+r.scannedBy+'</div>'
+          +'<div style="font-size:9px;color:var(--td);margin-top:2px;">'+r.date+' '+r.time+(r.carrier?' · '+r.carrier:'')+(r.scannedBy?' · '+r.scannedBy:'')+'</div>'
         +'</div>'
         +'<div style="font-size:9px;color:var(--am);white-space:nowrap;">'+(RETURN_TYPES[r.type]||r.type||'Unknown')+'</div>'
         +'<div style="font-size:9px;font-weight:700;color:'+cc+';white-space:nowrap;">'+(RETURN_CONDITIONS[r.condition]||r.condition||'Unknown')+'</div>'
@@ -4794,9 +4869,10 @@ async function returnsSaveExcel(){
         headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
         body:JSON.stringify({name:sheet})});
     }
-    var hdr=[['Date','Time','Tracking','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
+    var hdr=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
     var data=returnsList.map(function(r){
       return [r.date,r.time,r.tracking,
+        r.carrier||'',
         RETURN_TYPES[r.type]||r.type,
         (RETURN_CONDITIONS[r.condition]||r.condition).replace(/[✅⚠❌🚨]/g,'').trim(),
         r.sku||'',r.qty||1,r.pile||'',r.location||'',r.notes||'',
@@ -4804,7 +4880,7 @@ async function returnsSaveExcel(){
     });
     var rows=hdr.concat(data);
     var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:L"+rows.length+"')",
+      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:M"+rows.length+"')",
       {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
        body:JSON.stringify({values:rows})});
     if(wr.ok) pm('✓ Returns saved to Excel → "'+sheet+'" tab');
@@ -4867,9 +4943,9 @@ async function returnsAutoSaveExcel(entry){
       });
       // Write header row
       await fetch(
-        base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:L1')",
+        base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:M1')",
         {method:'PATCH',headers:hdrs,
-         body:JSON.stringify({values:[['Date','Time','Tracking','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']]})}
+         body:JSON.stringify({values:[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']]})}
       );
     }
     // Find next empty row
@@ -4882,13 +4958,14 @@ async function returnsAutoSaveExcel(entry){
     // Write the new entry
     var row = [[
       entry.date, entry.time, entry.tracking,
+      entry.carrier||'',
       RETURN_TYPES[entry.type]||entry.type,
       (RETURN_CONDITIONS[entry.condition]||entry.condition||'').replace(/[✅⚠❌🚨]/g,'').trim(),
       entry.sku||'', entry.qty||1, entry.pile||'',
       entry.location||'', entry.notes||'',
       entry.scannedBy, entry.mgrReview?'YES':'no'
     ]];
-    var addr = 'A'+nextRow+':L'+nextRow;
+    var addr = 'A'+nextRow+':M'+nextRow;
     await fetch(
       base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='"+addr+"')",
       {method:'PATCH',headers:hdrs,body:JSON.stringify({values:row})}
@@ -4896,6 +4973,118 @@ async function returnsAutoSaveExcel(entry){
     console.log('[Warehub] Return auto-saved to Excel row '+nextRow);
   }catch(e){
     console.warn('[Warehub] Returns auto-save failed:',e.message);
+  }
+}
+
+// ══════════════════════════════════════════
+// PRODUCTIVITY CHART
+// ══════════════════════════════════════════
+function renderProductivity(){
+  var chart    = document.getElementById('prod-chart');
+  var empty    = document.getElementById('prod-empty');
+  var speed    = document.getElementById('prod-speed');
+  var spEmpty  = document.getElementById('prod-speed-empty');
+  var table    = document.getElementById('prod-table');
+  if(!chart) return;
+
+  // Build per-packer stats from orders
+  var stats = packers.map(function(p){
+    var done = orders.filter(function(o){
+      return (o.packedBy===p.id||o.assignedTo===p.id) && o.status==='done';
+    }).length;
+    var avgMs = p.totalPackTime && p.ordersCompleted
+      ? p.totalPackTime / p.ordersCompleted : 0;
+    return {
+      name:    p.name,
+      id:      p.id,
+      done:    done,
+      active:  p.online || false,
+      avgMs:   avgMs
+    };
+  }).filter(function(s){ return s.done > 0 || s.active; })
+    .sort(function(a,b){ return b.done - a.done; });
+
+  var total  = stats.reduce(function(s,p){ return s+p.done; }, 0);
+  var active = stats.filter(function(s){ return s.active; }).length;
+  var avg    = stats.length ? (total/stats.length).toFixed(1) : 0;
+  var top    = stats.length ? stats[0].name.split(' ')[0] : '—';
+  var max    = stats.length ? stats[0].done : 1;
+
+  // KPIs
+  var el = document.getElementById('prod-total'); if(el) el.textContent = total;
+  el = document.getElementById('prod-top');    if(el) el.textContent = top;
+  el = document.getElementById('prod-avg');    if(el) el.textContent = avg;
+  el = document.getElementById('prod-active'); if(el) el.textContent = active;
+
+  // Bar chart
+  var COLORS = ['var(--cy)','var(--gn)','var(--am)','var(--pu)','var(--rd)',
+                '#f472b6','#4ade80','#60a5fa'];
+  if(!stats.length){
+    chart.innerHTML=''; empty.style.display='block';
+  } else {
+    empty.style.display='none';
+    chart.innerHTML = stats.map(function(s,i){
+      var pct = max ? Math.round(s.done/max*100) : 0;
+      var col = COLORS[i % COLORS.length];
+      return '<div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+          +'<span style="font-size:11px;color:var(--tx);">'+s.name+(s.active?' <span style="font-size:8px;color:var(--gn);">● ON</span>':'')+'</span>'
+          +'<span style="font-size:13px;font-weight:700;color:'+col+';">'+s.done+'</span>'
+        +'</div>'
+        +'<div style="background:var(--bdr);height:10px;border-radius:5px;overflow:hidden;">'
+          +'<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:5px;transition:width .4s;"></div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Speed chart
+  var withSpeed = stats.filter(function(s){ return s.avgMs > 0; });
+  if(!withSpeed.length){
+    speed.innerHTML=''; spEmpty.style.display='block';
+  } else {
+    spEmpty.style.display='none';
+    var maxMs = Math.max.apply(null, withSpeed.map(function(s){ return s.avgMs; }));
+    speed.innerHTML = withSpeed.map(function(s,i){
+      var mins  = (s.avgMs/60000).toFixed(1);
+      var pct   = maxMs ? Math.round(s.avgMs/maxMs*100) : 0;
+      var col   = s.avgMs < 120000 ? 'var(--gn)' : s.avgMs < 300000 ? 'var(--am)' : 'var(--rd)';
+      return '<div>'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+          +'<span style="font-size:11px;color:var(--tx);">'+s.name+'</span>'
+          +'<span style="font-size:11px;color:'+col+';">'+mins+' min/order</span>'
+        +'</div>'
+        +'<div style="background:var(--bdr);height:8px;border-radius:4px;overflow:hidden;">'
+          +'<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:4px;"></div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Breakdown table
+  if(!stats.length){
+    table.innerHTML='<div style="font-size:11px;color:var(--td);">No packer data yet.</div>';
+  } else {
+    table.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+      +'<thead><tr>'
+      +['PACKER','ORDERS','STATUS','AVG SPEED'].map(function(h){
+        return '<th style="text-align:left;padding:6px 8px;color:var(--td);letter-spacing:1px;border-bottom:1px solid var(--bdr);white-space:nowrap;">'+h+'</th>';
+      }).join('')
+      +'</tr></thead><tbody>'
+      +stats.map(function(s,i){
+        var mins = s.avgMs ? (s.avgMs/60000).toFixed(1)+' min' : '—';
+        var bg   = i%2===0?'':'background:rgba(255,255,255,0.02);';
+        return '<tr style="'+bg+'">'
+          +'<td style="padding:7px 8px;color:var(--tx);">'+s.name+'</td>'
+          +'<td style="padding:7px 8px;font-weight:700;color:var(--cy);">'+s.done+'</td>'
+          +'<td style="padding:7px 8px;">'
+            +'<span style="font-size:8px;padding:2px 7px;border:1px solid '+(s.active?'var(--gn)':'var(--bdr)')+';color:'+(s.active?'var(--gn)':'var(--td)')+';">'
+            +(s.active?'ACTIVE':'OFF')+'</span>'
+          +'</td>'
+          +'<td style="padding:7px 8px;color:var(--td);">'+mins+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</tbody></table>';
   }
 }
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
@@ -5002,7 +5191,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
   setInterval(function(){
     if(document.getElementById('view-dash').classList.contains('on')) renderDash();
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
-    if(document.getElementById('view-payroll').classList.contains('on')) renderPayroll();
+    if(document.getElementById('view-payroll').classList.contains('on')) renderProductivity();
   },10000);
 
 
@@ -5052,8 +5241,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
   if(skuSortBtn) skuSortBtn.addEventListener('click', printSkuSort);
 
 
-  var csvBtn=document.getElementById('export-csv-btn');
-  if(csvBtn) csvBtn.addEventListener('click', exportPayrollCSV);
+
 }catch(e){console.error("[Warehub init]",e);}})();
 });
 </script>
@@ -5170,6 +5358,34 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
           </div>
         </div>
 
+          <!-- Carrier -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">CARRIER</div>
+            <select id="return-carrier-sel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— Auto-detected —</option>
+              <option value="GOFO">GOFO</option>
+              <option value="FedEx">FedEx</option>
+              <option value="UPS">UPS</option>
+              <option value="USPS">USPS</option>
+              <option value="SpeedX">SpeedX</option>
+              <option value="SWIFT">SWIFT</option>
+              <option value="Uniuni">Uniuni</option>
+              <option value="LSO">LSO</option>
+              <option value="OnTrac">OnTrac</option>
+              <option value="Amazon">Amazon</option>
+              <option value="DHL">DHL</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <!-- Scanner -->
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SCANNED BY</div>
+            <select id="return-scanner-sel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— Select staff —</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Notes -->
         <div style="margin-bottom:10px;">
           <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NOTES</div>
@@ -5235,6 +5451,11 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
             <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
               <option value="">— select driver —</option>
             </select>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LICENSE PLATE</div>
+            <input id="veh-plate" placeholder="e.g. ABC-1234…" autocomplete="off"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
           </div>
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
@@ -5375,15 +5596,15 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
   </div>
 
   <!-- ══ DEV PANEL ══ -->
-  <div id="view-devpanel" class="view" style="display:flex;flex-direction:column;padding:16px 18px;">
-    <div style="padding:16px 18px;width:100%;padding:0 0 20px;">
+  <div id="view-devpanel" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;width:100%;box-sizing:border-box;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">DEVELOPER REFERENCE</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">App Config &amp; Service Registry</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">All connected services, accounts, and fix guides for Warehub</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub · Double Sided ISCM LLC · March 2026</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-c" onclick="devSave()" style="font-size:9px;">💾 SAVE NOTES</button>
@@ -5393,121 +5614,109 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
       <!-- ── SECTION: GitHub ── -->
       <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>🐙 GitHub — Source Code &amp; Deployment</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">REPO URL</div><a href="https://github.com/imluoai/warehub-app" target="_blank" class="dev-link">https://github.com/imluoai/warehub-app</a></div>
-            <div class="dev-field"><div class="dev-label">LIVE APP (GitHub Pages)</div><a href="https://imluoai.github.io/warehub-app/" target="_blank" class="dev-link">https://imluoai.github.io/warehub-app/</a></div>
-            <div class="dev-field"><div class="dev-label">DEPLOY COMMAND</div><code class="dev-code">git add index.html &amp;&amp; git commit -m "update" &amp;&amp; git push</code></div>
-            <div class="dev-field"><div class="dev-label">BRANCH</div><code class="dev-code">main</code></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX BUGS</div><div class="dev-note">Edit index.html locally → git push → GitHub Pages auto-deploys in ~1 min. Hard refresh browser (Ctrl+Shift+R) after deploy.</div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SECTION: Microsoft Azure / Excel ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>🟦 Microsoft Azure — Excel Online Integration</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">AZURE PORTAL</div><a href="https://portal.azure.com" target="_blank" class="dev-link">portal.azure.com</a></div>
-            <div class="dev-field"><div class="dev-label">APP REGISTRATION NAME</div><div id="dev-azure-appname" class="dev-editable" contenteditable="true" data-key="azure_appname">Warehub</div></div>
-            <div class="dev-field"><div class="dev-label">CLIENT ID</div><div id="dev-azure-clientid" class="dev-editable" contenteditable="true" data-key="azure_clientid">Paste Client ID here</div></div>
-            <div class="dev-field"><div class="dev-label">TENANT ID</div><div id="dev-azure-tenantid" class="dev-editable" contenteditable="true" data-key="azure_tenantid">Paste Tenant ID here</div></div>
-            <div class="dev-field"><div class="dev-label">REDIRECT URI (must match Azure)</div><code id="dev-azure-redirect" class="dev-code">—</code></div>
-            <div class="dev-field"><div class="dev-label">EXCEL FILE NAME</div><div id="dev-azure-filename" class="dev-editable" contenteditable="true" data-key="azure_filename">ISCM Warehub 2026.xlsx</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">REQUIRED API PERMISSIONS</div><div class="dev-note">Files.ReadWrite · Sites.ReadWrite.All · User.Read — all with Admin Consent granted</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO RECONNECT EXCEL</div><div class="dev-note">Payroll tab → ⊞ CONNECT EXCEL → sign in. Token expires after ~1hr — just reconnect. If "Failed to fetch", check API permissions in Azure portal.</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX TOKEN EXPIRED</div><div class="dev-note">Payroll → ⚙ gear icon → DISCONNECT → CONNECT EXCEL → sign in again.</div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SECTION: Google Maps ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>🗺 Google Maps — Vehicle Destination Search</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">GOOGLE CLOUD CONSOLE</div><a href="https://console.cloud.google.com" target="_blank" class="dev-link">console.cloud.google.com</a></div>
-            <div class="dev-field"><div class="dev-label">API KEY (hardcoded)</div><code class="dev-code">AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw</code></div>
-            <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps Embed API · Maps JavaScript API · Places API</div></div>
-            <div class="dev-field"><div class="dev-label">KEY RESTRICTIONS</div><div class="dev-note">Restricted to: https://imluoai.github.io/*</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX MAP NOT LOADING</div><div class="dev-note">Go to Google Cloud Console → APIs &amp; Services → Library → ensure all 3 APIs above are enabled. Check key restrictions include your GitHub Pages URL.</div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SECTION: Anthropic / AI ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>🤖 Anthropic Claude — AI Assistant</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">ANTHROPIC CONSOLE</div><a href="https://console.anthropic.com" target="_blank" class="dev-link">console.anthropic.com</a></div>
-            <div class="dev-field"><div class="dev-label">MODEL USED</div><code class="dev-code">claude-sonnet-4-20250514</code></div>
-            <div class="dev-field"><div class="dev-label">API KEY LOCATION</div><div class="dev-note">Stored in Cloudflare Worker as secret variable ANTHROPIC_KEY (never exposed in browser)</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX AI NOT RESPONDING</div><div class="dev-note">1. Check Cloudflare Worker is deployed and Access policy is OFF · 2. Click 🤖 → ⚙ SETUP → TEST button · 3. Check ANTHROPIC_KEY secret is set in Worker variables · 4. Verify worker URL saved in app matches deployed worker</div></div>
-          </div>
-        </div>
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🐙 GitHub — Source &amp; Deployment</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">REPO</div><a href="https://github.com/imluoai/warehub-app" target="_blank" class="dev-link">github.com/imluoai/warehub-app</a></div>
+          <div class="dev-field"><div class="dev-label">LIVE URL</div><a href="https://imluoai.github.io/warehub-app/" target="_blank" class="dev-link">imluoai.github.io/warehub-app</a></div>
+          <div class="dev-field dev-wide"><div class="dev-label">DEPLOY</div><code class="dev-code">git add index.html README.md &amp;&amp; git commit -m "msg" &amp;&amp; git push</code></div>
+          <div class="dev-field dev-wide"><div class="dev-label">AFTER DEPLOY</div><div class="dev-note">GitHub Pages takes ~1 min. Hard refresh: Ctrl+Shift+R (PC) · Cmd+Shift+R (Mac)</div></div>
+        </div></div>
       </div>
 
       <!-- ── SECTION: Cloudflare Worker ── -->
       <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>☁ Cloudflare Worker — AI Proxy + Staff KV Sync</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">CLOUDFLARE DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
-            <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">anthropic-proxy</code></div>
-            <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://anthropic-proxy.imluoai.workers.dev/</div></div>
-            <div class="dev-field"><div class="dev-label">ANTHROPIC API SECRET</div><code class="dev-code">ANTHROPIC_KEY</code></div>
-            <div class="dev-field"><div class="dev-label">KV NAMESPACE BINDING</div><code class="dev-code">WAREHUB_KV</code></div>
-            <div class="dev-field"><div class="dev-label">KV NAMESPACE NAME</div><code class="dev-code">warehub-data</code></div>
-            <div class="dev-field"><div class="dev-label">KV STAFF ENDPOINT</div><code class="dev-code">GET /staff · PUT /staff</code></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW STAFF SYNC WORKS</div><div class="dev-note">Staff (packers + managers) auto-saves to KV on every add/edit/remove. On app open, staff loads from KV automatically — no login required. Works on any browser. The ☁ icon in header shows sync status: grey=not set, amber=syncing, green=OK, red=error.</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO SET WORKER URL</div><div class="dev-note">Click 🤖 (bottom right) → ⚙ SETUP → paste Worker URL → Save. This enables both AI assistant and staff cloud sync.</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">WORKER CODE</div><div class="dev-note">Worker handles: POST / → Anthropic AI proxy · GET /staff → read KV · PUT /staff → write KV · GET / → health check. CORS headers required on ALL responses. Access policy must be DISABLED.</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO FIX CORS ERROR</div><div class="dev-note">Worker must return Access-Control-Allow-Origin: * on every response including OPTIONS. Redeploy from 🤖 → ⚙ SETUP → copy worker code → paste in Cloudflare editor → Deploy.</div></div>
-          </div>
-        </div>
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>☁ Cloudflare Worker — AI Proxy + KV Sync</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
+          <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">anthropic-proxy</code></div>
+          <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://anthropic-proxy.imluoai.workers.dev/</div></div>
+          <div class="dev-field"><div class="dev-label">API SECRET</div><code class="dev-code">ANTHROPIC_KEY</code></div>
+          <div class="dev-field"><div class="dev-label">KV BINDING</div><code class="dev-code">WAREHUB_KV</code></div>
+          <div class="dev-field"><div class="dev-label">KV NAMESPACE</div><code class="dev-code">warehub-data</code></div>
+          <div class="dev-field dev-wide"><div class="dev-label">ENDPOINTS</div><div class="dev-note">POST / → AI proxy &nbsp;·&nbsp; GET/PUT /staff → staff sync &nbsp;·&nbsp; GET/PUT /pin → PIN hash &nbsp;·&nbsp; GET / → health check</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">CORS REQUIRED</div><div class="dev-note">Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS on every response including OPTIONS preflight. Cloudflare Access must be DISABLED.</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">HOW TO REDEPLOY</div><div class="dev-note">dash.cloudflare.com → Workers &amp; Pages → anthropic-proxy → Edit Code → select all → paste new code → Deploy.</div></div>
+          <div class="dev-field"><div class="dev-label">LIVE TEST</div><div class="dev-note">Click ☁ icon in app header — runs GET /staff and reports exact error if failing.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Microsoft Azure / Excel ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🟦 Microsoft Azure — Excel Online</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">AZURE PORTAL</div><a href="https://portal.azure.com" target="_blank" class="dev-link">portal.azure.com</a></div>
+          <div class="dev-field"><div class="dev-label">APP NAME</div><div id="dev-azure-appname" class="dev-editable" contenteditable="true" data-key="azure_appname">Warehub</div></div>
+          <div class="dev-field"><div class="dev-label">CLIENT ID</div><div id="dev-azure-clientid" class="dev-editable" contenteditable="true" data-key="azure_clientid">Paste Client ID here</div></div>
+          <div class="dev-field"><div class="dev-label">TENANT ID</div><div id="dev-azure-tenantid" class="dev-editable" contenteditable="true" data-key="azure_tenantid">Paste Tenant ID here</div></div>
+          <div class="dev-field"><div class="dev-label">REDIRECT URI</div><code id="dev-azure-redirect" class="dev-code">—</code></div>
+          <div class="dev-field"><div class="dev-label">EXCEL FILE</div><div id="dev-azure-filename" class="dev-editable" contenteditable="true" data-key="azure_filename">ISCM Warehub 2026.xlsx</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">PERMISSIONS</div><div class="dev-note">Files.ReadWrite · Sites.ReadWrite.All · User.Read — all with Admin Consent granted</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">EXCEL SHEETS</div><div class="dev-note">Productivity · Returns Log · Vehicle Log — created automatically on first save</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">TOKEN EXPIRY</div><div class="dev-note">~1 hour. Fix: Stats tab → ⊞ CONNECT EXCEL → sign in again. Or Stats → ⚙ → DISCONNECT → reconnect.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Google Maps ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🗺 Google Maps — Vehicle Destination</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.cloud.google.com" target="_blank" class="dev-link">console.cloud.google.com</a></div>
+          <div class="dev-field"><div class="dev-label">API KEY</div><code class="dev-code">AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw</code></div>
+          <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps JavaScript API · Places API · Maps Embed API</div></div>
+          <div class="dev-field"><div class="dev-label">KEY RESTRICTION</div><div class="dev-note">https://imluoai.github.io/*</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">FIX BLANK MAP</div><div class="dev-note">Verify all 3 APIs are enabled in Google Cloud Console. Check key restrictions include the GitHub Pages URL.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Anthropic / AI ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🤖 Anthropic Claude — AI Assistant</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.anthropic.com" target="_blank" class="dev-link">console.anthropic.com</a></div>
+          <div class="dev-field"><div class="dev-label">MODEL</div><code class="dev-code">claude-sonnet-4-20250514</code></div>
+          <div class="dev-field"><div class="dev-label">API KEY</div><div class="dev-note">Stored as ANTHROPIC_KEY secret in Cloudflare Worker only — never in the browser</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">SETUP</div><div class="dev-note">Click 🤖 → ⚙ SETUP → paste Worker URL → TEST → SAVE. AI uses web search + warehouse context.</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">FIX AI NOT RESPONDING</div><div class="dev-note">1. Check Worker deployed · 2. ANTHROPIC_KEY secret set · 3. Cloudflare Access OFF · 4. Worker URL saved in app</div></div>
+        </div></div>
       </div>
 
       <!-- ── SECTION: OMP / Lingxing ERP ── -->
       <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>📦 Lingxing ERP / OMP — Order Source</span><span class="dev-chevron">▾</span>
-        </div>
-        <div class="dev-section-body">
-          <div class="dev-grid">
-            <div class="dev-field"><div class="dev-label">OMP WMS URL</div><a href="https://omp.xlms.com/wms/outbound/parcel" target="_blank" class="dev-link">omp.xlms.com/wms/outbound/parcel</a></div>
-            <div class="dev-field"><div class="dev-label">INTEGRATION METHOD</div><div class="dev-note">Daily PDF export from OMP → drag &amp; drop into Warehub Import tab</div></div>
-            <div class="dev-field"><div class="dev-label">LABEL FORMAT</div><div class="dev-note">GOFO SN-D2D ECO — text-based PDF, one label per page</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">HOW TO IMPORT ORDERS</div><div class="dev-note">In OMP → export shipping labels as PDF → go to Warehub Import tab → drag PDF onto drop zone. App auto-detects carrier, SKU, shelf, tracking number per label.</div></div>
-            <div class="dev-field dev-wide"><div class="dev-label">SUPPORTED CARRIERS</div><div class="dev-note">FedEx · UPS · USPS · GOFO · SWIFT · SpeedX · Uniuni</div></div>
-          </div>
-        </div>
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📦 Lingxing ERP / OMP — Order Source</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">OMP URL</div><a href="https://omp.xlms.com/wms/outbound/parcel" target="_blank" class="dev-link">omp.xlms.com/wms/outbound/parcel</a></div>
+          <div class="dev-field"><div class="dev-label">INTEGRATION</div><div class="dev-note">Export shipping labels as PDF → drag into Import tab or click drop zone</div></div>
+          <div class="dev-field"><div class="dev-label">LABEL FORMAT</div><div class="dev-note">GOFO SN-D2D ECO — text-based PDF, one label per page</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">CARRIERS DETECTED</div><div class="dev-note">GOFO · UPS · FedEx · USPS · SpeedX · SWIFT · Uniuni · LSO · OnTrac · Amazon · DHL</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">FIX PARSE FAILURES</div><div class="dev-note">Re-export PDF from OMP. Check Debug Log in Import tab for raw extracted text. GS1-128 barcodes auto-stripped.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Security ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🔐 Security — PIN Lock</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">PIN LENGTH</div><code class="dev-code">6 digits</code></div>
+          <div class="dev-field"><div class="dev-label">HASH ALGORITHM</div><code class="dev-code">SHA-256 (WebCrypto)</code></div>
+          <div class="dev-field"><div class="dev-label">STORAGE</div><code class="dev-code">Cloudflare KV → key: "pin"</code></div>
+          <div class="dev-field"><div class="dev-label">SESSION</div><div class="dev-note">Unlocked once per browser session. Closing the tab re-locks the app on all devices.</div></div>
+          <div class="dev-field"><div class="dev-label">RESET PIN</div><button class="btn btn-r" onclick="pinReset()" style="font-size:9px;padding:4px 12px;">🔐 RESET PIN</button></div>
+          <div class="dev-field dev-wide"><div class="dev-label">HOW TO CHANGE PIN</div><div class="dev-note">Click RESET PIN → page reloads → enter new 6-digit PIN (enter twice to confirm). New hash saves to KV automatically — all devices pick it up on next open.</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">SECURITY NOTE</div><div class="dev-note">PIN is never stored as plaintext. Only the SHA-256 hash lives in KV. Even with KV access the PIN cannot be reversed from the hash.</div></div>
+        </div></div>
       </div>
 
       <!-- ── SECTION: Custom Notes ── -->
       <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)">
-          <span>📝 Custom Notes &amp; Reminders</span><span class="dev-chevron">▾</span>
-        </div>
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📝 Custom Notes &amp; Reminders</span><span class="dev-chevron">▾</span></div>
         <div class="dev-section-body">
-          <textarea id="dev-custom-notes" placeholder="Add your own notes, passwords, reminders, or anything else here…" style="width:100%;box-sizing:border-box;min-height:140px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:10px;font-size:11px;font-family:inherit;resize:vertical;outline:none;"></textarea>
-          <div style="font-size:9px;color:var(--td);margin-top:6px;">⚠ Stored in localStorage on this device only. Do not store passwords here if others use this device.</div>
+          <textarea id="dev-custom-notes" placeholder="Add your own notes, reminders, or anything else here…" style="width:100%;box-sizing:border-box;min-height:140px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:10px;font-size:11px;font-family:inherit;resize:vertical;outline:none;"></textarea>
+          <div style="font-size:9px;color:var(--td);margin-top:6px;">Stored in localStorage on this device only.</div>
         </div>
       </div>
 
     </div>
+  </div>
   </div>
 
   <!-- ── Floating Music Player ── -->
