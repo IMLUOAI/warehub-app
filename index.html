@@ -3427,72 +3427,63 @@ async function excelSavePayroll(){
   if(!_msalToken||!_excelFileId){ excelConnect(); return; }
   var sheet = 'Productivity';
   var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var auth  = {Authorization:'Bearer '+_msalToken};
   var hdrs  = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
   pm('⟳ Saving productivity snapshot to Excel…');
   try{
-    // Ensure sheet
-    var sr = await fetch(base+'/worksheets?$select=name',{headers:{Authorization:'Bearer '+_msalToken}});
+    var sr=await fetch(base+'/worksheets?$select=name',{headers:auth});
+    var sd=await sr.json();
+    var names=(sd.value||[]).map(function(s){return s.name;});
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
+    }
+    var dateStr = new Date().toLocaleDateString();
+    var hdr=[['Date','Packer','Orders Packed','Avg Speed (min)','Status']];
+    await fetch(rangeUrl('A1:E1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
+    var data=packers.map(function(p){
+      var done=orders.filter(function(o){return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';}).length;
+      var avgMin=p.totalPackTime&&p.ordersCompleted?(p.totalPackTime/p.ordersCompleted/60000).toFixed(1):'';
+      return [dateStr,p.name,done,avgMin,p.online?'Active':'Off shift'];
+    }).filter(function(r){return r[2]>0;});
+    if(!data.length){pm('⚠ No completed orders yet.');return;}
+    var wr=await fetch(rangeUrl('A2:E'+(1+data.length)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:data})});
+    if(wr.ok) pm('✓ Productivity saved → "'+sheet+'" tab ('+data.length+' packers)');
+    else{var e=await wr.json();pm('✗ Excel: '+((e.error&&e.error.message)||wr.status));}
+  }catch(e){pm('✗ Save failed: '+e.message);}
+}
+
+async function vehicleSaveExcel(){
+  if(!_msalToken || !_excelFileId){ excelConnect(); return; }
+  if(!vehicleTrips.length){ pm('⚠ No trips to save.'); return; }
+  var sheet = 'Vehicle Log';
+  var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var auth  = {Authorization:'Bearer '+_msalToken};
+  var hdrs  = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
+  pm('⟳ Saving vehicle log to Excel…');
+  try{
+    var sr = await fetch(base+'/worksheets?$select=name',{headers:auth});
     var sd = await sr.json();
     var names = (sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
-    // Build rows
-    var now   = new Date();
-    var dateStr = now.toLocaleDateString();
-    var hdr   = [['Date','Packer','Orders Packed','Avg Speed (min)','Status']];
-    var data  = packers.map(function(p){
-      var done = orders.filter(function(o){
-        return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';
-      }).length;
-      var avgMin = p.totalPackTime&&p.ordersCompleted
-        ? (p.totalPackTime/p.ordersCompleted/60000).toFixed(1) : '';
-      return [dateStr, p.name, done, avgMin, p.online?'Active':'Off shift'];
-    }).filter(function(r){ return r[2]>0; });
-    if(!data.length){ pm('⚠ No orders completed yet — nothing to save.'); return; }
-    var rows = hdr.concat(data);
-    var addr = 'A1:E'+rows.length;
-    var wr = await fetch(
-      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='"+addr+"')",
-      {method:'PATCH',headers:hdrs,body:JSON.stringify({values:rows})}
-    );
-    if(wr.ok) pm('✓ Productivity saved to Excel → "'+sheet+'" tab ('+data.length+' packers)');
-    else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
-  }catch(e){ pm('✗ Save failed: '+e.message); }
-}
-
-async function vehicleSaveExcel(){
-  if(!_msalToken || !_excelFileId){
-
-    if(_msalCfg.clientId && !_msalInstance && typeof msal !== 'undefined') msalInit();
-    excelConnect();
-    return;
-  }
-  if(!vehicleTrips.length){ pm('⚠ No trips to save.'); return; }
-  var sheet='Vehicle Log';
-  var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-  pm('⟳ Saving vehicle log to Excel…');
-  try{
-
-    await msEnsureVehicleSheet();
-
-    var rr=await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount', {headers:{Authorization:'Bearer '+_msalToken}});
-    var rd=await rr.json();
-    var existing=(rd.rowCount&&!rd.error)?rd.rowCount:0;
-    var hdr=[['Date','Driver','Plate','Destination','Departure','Return','Miles','Notes']];
-    var dataRows=vehicleTrips.map(function(t){
-      return [t.date, t.driver, t.plate||'', t.dest||'', t.depart||'', t.ret||'',
-              t.miles!==''&&t.miles!==null&&t.miles!==undefined ? parseFloat(t.miles).toFixed(1) : '',
-              t.notes||''];
+    var hdrRow = [['Date','Driver','License Plate','Destination','Departure','Return','Miles','Notes']];
+    await fetch(rangeUrl('A1:H1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdrRow})});
+    var dataRows = vehicleTrips.map(function(t){
+      return [
+        t.date||'', t.driver||'', t.plate||'', t.dest||'',
+        t.depart||'', t.ret||'',
+        (t.miles!==''&&t.miles!==null&&t.miles!==undefined)?parseFloat(t.miles).toFixed(1):'',
+        t.notes||''
+      ];
     });
-    var rows=existing===0?hdr.concat(dataRows):dataRows;
-    var startRow=existing+1,endRow=startRow+rows.length-1;
-    var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A"+startRow+":H"+endRow+"')",
-      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:rows})}
-    );
-    if(wr.ok) pm('✓ Vehicle log saved to Excel → "'+sheet+'" tab');
-    else{ var e=await wr.json(); pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status)); }
+    if(!dataRows.length){ pm('⚠ No trip data to write.'); return; }
+    var endRow = 1 + dataRows.length;
+    var wr = await fetch(rangeUrl('A2:H'+endRow),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:dataRows})});
+    if(wr.ok) pm('✓ Vehicle log saved → "'+sheet+'" tab ('+dataRows.length+' trips)');
+    else{ var er=await wr.json(); pm('✗ Excel: '+((er.error&&er.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
 }
 
@@ -3516,7 +3507,7 @@ async function msEnsureVehicleSheet(){
     var rd=await rr.json();
     var hasHeader=rd.values&&rd.values[0]&&rd.values[0][0]==='Date';
     if(!hasHeader){
-      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\'A1:H1\')', {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
+      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:H1')", {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
          body:JSON.stringify({values:[['Date','Driver','Plate','Destination','Departure','Return','Miles','Notes']]})});
     }
   }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
@@ -4961,72 +4952,33 @@ async function returnsSaveExcel(){
   if(!returnsList.length){pm('⚠ No returns to save.');return;}
   var sheet='Returns Log';
   var base='https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var auth={Authorization:'Bearer '+_msalToken};
+  var hdrs={Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
   pm('⟳ Saving returns to Excel…');
   try{
-    var sr=await fetch(base+'/worksheets?$select=name', {headers:{Authorization:'Bearer '+_msalToken}});
+    var sr=await fetch(base+'/worksheets?$select=name',{headers:auth});
     var sd=await sr.json();
     var names=(sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
-      await fetch(base+'/worksheets', {method:'POST',
-        headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
-        body:JSON.stringify({name:sheet})});
+      await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
     var hdr=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
+    await fetch(rangeUrl('A1:M1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
     var data=returnsList.map(function(r){
-      return [r.date,r.time,r.tracking,
-        r.carrier||'',
+      return [r.date,r.time,r.tracking,r.carrier||'',
         RETURN_TYPES[r.type]||r.type,
-        (RETURN_CONDITIONS[r.condition]||r.condition).replace(/[✅⚠❌🚨]/g,'').trim(),
+        (RETURN_CONDITIONS[r.condition]||r.condition||'').replace(/[✅⚠❌🚨]/g,'').trim(),
         r.sku||'',r.qty||1,r.pile||'',r.location||'',r.notes||'',
         r.scannedBy,r.mgrReview?'YES':'no'];
     });
-    var rows=hdr.concat(data);
-    var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A1:M"+rows.length+"')",
-      {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},
-       body:JSON.stringify({values:rows})});
-    if(wr.ok) pm('✓ Returns saved to Excel → "'+sheet+'" tab');
-    else{var e=await wr.json();pm('✗ Excel error: '+((e.error&&e.error.message)||wr.status));}
+    if(!data.length){pm('⚠ No return data.');return;}
+    var wr=await fetch(rangeUrl('A2:M'+(1+data.length)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:data})});
+    if(wr.ok) pm('✓ Returns saved → "'+sheet+'" tab ('+data.length+' records)');
+    else{var e=await wr.json();pm('✗ Excel: '+((e.error&&e.error.message)||wr.status));}
   }catch(e){pm('✗ Save failed: '+e.message);}
 }
 
-function kvTestConnection(){
-  var proxy = kvGetProxy();
-  if(!proxy){ pm('✗ No Worker URL set. Go to 🤖 → ⚙ SETUP'); return; }
-  var url = proxy.replace(/\/+$/,'')+'/staff';
-  pm('⟳ Testing: GET '+url+' …');
-  var dot=document.getElementById('cloud-status');
-  if(dot){dot.style.color='var(--am)';}
-  fetch(url, {mode:'cors'})
-    .then(function(r){
-      if(r.ok){
-        r.text().then(function(txt){
-          try{
-            var d = JSON.parse(txt);
-            var count = d.packers ? d.packers.length : 0;
-            pm('✓ Worker OK — '+count+' packer(s) in KV cloud.');
-            if(dot){dot.style.color='var(--gn)';dot.title='Connected: '+count+' packers';}
-          }catch(e){
-            pm('⚠ Worker responded but returned invalid JSON: '+txt.slice(0,60));
-            if(dot) dot.style.color='var(--am)';
-          }
-        });
-      } else {
-        pm('✗ Worker HTTP '+r.status+'. Check: 1) WAREHUB_KV binding set  2) Worker redeployed with /staff endpoints');
-        if(dot){dot.style.color='var(--rd)';}
-      }
-    })
-    .catch(function(e){
-      if(e.message.indexOf('CORS')>=0||e.message.indexOf('fetch')>=0){
-        pm('✗ CORS blocked. Worker must return Access-Control-Allow-Origin:* on GET /staff. Redeploy Worker with latest code.');
-      } else {
-        pm('✗ Network error: '+e.message+'. Is the Worker URL correct?');
-      }
-      if(dot){dot.style.color='var(--rd)';}
-    });
-}
-
-// ── Returns auto-save to Excel on every new entry ──
 async function returnsAutoSaveExcel(entry){
   if(!_msalToken || !_excelFileId) return; // not connected, skip silently
   var sheet = 'Returns Log';
@@ -5342,12 +5294,15 @@ function renderVehicleLog(){
         +'</tr>';
     }).join('')+'</tbody></table>';
 
-  el.querySelectorAll('[data-del-trip]').forEach(function(btn){
-    btn.onclick = function(){
-      vehicleTrips = vehicleTrips.filter(function(t){ return t.id!==btn.dataset.delTrip; });
-      vehicleSave(); renderVehicleLog(); renderVehicleStats();
-    };
-  });
+  el.onclick = function(e){
+    var btn = e.target.closest('[data-del-trip]');
+    if(!btn) return;
+    var id = btn.getAttribute('data-del-trip');
+    vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
+    vehicleSave();
+    renderVehicleLog();
+    renderVehicleStats();
+  };
 }
 
 function vehicleExportCSV(){
@@ -5882,12 +5837,8 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
         </div>
         <div id="veh-log" style="overflow-x:auto;"></div>
       </div>
-
     </div>
   </div>
-    </div>
-    </div>
-    </div>
 
 
   <!-- ══ RACK MAP ══ -->
