@@ -3179,16 +3179,21 @@ function ensureMsal(cb){
 
 function msalInit(){
   if(!_msalCfg.clientId) return;
+  if(typeof msal === 'undefined'){ console.warn('[MSAL] library not loaded yet'); return; }
+  if(_msalInstance) return; // already initialized
   try{
     _msalInstance = new msal.PublicClientApplication({
       auth:{
         clientId:    _msalCfg.clientId,
-        authority:   'https://login.microsoftonline.com/'+_msalCfg.tenantId,
+        authority:   'https://login.microsoftonline.com/'+(_msalCfg.tenantId||'organizations'),
         redirectUri: window.location.origin + window.location.pathname
       },
       cache:{ cacheLocation:'sessionStorage', storeAuthStateInCookie:false }
     });
-  }catch(e){ console.error('MSAL init error:', e); }
+  }catch(e){
+    console.warn('[MSAL] init failed:', e.message);
+    _msalInstance = null;
+  }
 }
 
 function excelUpdateUI(){
@@ -3483,7 +3488,7 @@ async function vehicleSaveExcel(){
     var rows=existing===0?hdr.concat(dataRows):dataRows;
     var startRow=existing+1,endRow=startRow+rows.length-1;
     var wr=await fetch(
-      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A"+startRow+":I"+endRow+"')",
+      base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='A"+startRow+":H"+endRow+"')",
       {method:'PATCH',headers:{Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'},body:JSON.stringify({values:rows})}
     );
     if(wr.ok) pm('✓ Vehicle log saved to Excel → "'+sheet+'" tab');
