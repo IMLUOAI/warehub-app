@@ -816,7 +816,7 @@ async function pinReset(){
     <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;">
 
     <!-- Drop zone -->
-    <div id="dz" style="margin-bottom:14px;" onclick="document.getElementById('fi').click();">
+    <div id="dz" style="margin-bottom:14px;cursor:pointer;">
       <div style="font-size:28px;margin-bottom:8px;">📦</div>
       <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
       <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX · Uniuni</div>
@@ -1219,7 +1219,7 @@ function matchTracking(words){
   for(var ri=0;ri<rowKeys.length;ri++){
     var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
     var concat=sorted.map(function(w){return clean(w.text);}).join('')
-  el.querySelectorAll('[data-rdel]').forEach(function(b){b.onclick=function(){returnsDelete(b.dataset.rdel);};});;
+  
     if(concat.length<8) continue;
     for(var j=0;j<TPATS.length;j++){
       var m=concat.match(TPATS[j].r);
@@ -2235,7 +2235,6 @@ function doScan(raw){
   }
   var scannedExtracted = extractFromGS1(scanned) || scanned;
   var scannedNorm = norm(scannedExtracted);
-  var scannedNorm=norm(scanned);
 
 
   if(packState==='idle' || packState==='scan-label'){
@@ -3528,6 +3527,8 @@ function gmapsSaveKey(key){
 function gmapsInit(){
   if(_gmapsLoaded||!_gmapsKey) return;
   if(typeof google!=='undefined'&&google.maps&&google.maps.places){ gmapsAttach(); return; }
+  // Prevent duplicate script injection
+  if(document.querySelector('script[src*="maps.googleapis.com"]')) return;
   var s=document.createElement('script');
   s.src='https://maps.googleapis.com/maps/api/js?key='+_gmapsKey+'&libraries=places&loading=async&callback=gmapsOnLoad';
   s.async=true; s.defer=true;
@@ -3543,22 +3544,28 @@ window.gmapsOnLoad=gmapsOnLoad;
 function gmapsAttach(){
   var input=document.getElementById('veh-dest');
   if(!input||input._gmapsAttached) return;
-  var ac=new google.maps.places.Autocomplete(input,{
-    fields:['formatted_address','name','geometry','place_id'],
-    types:['establishment','geocode']
-  });
-  ac.addListener('place_changed',function(){
-    var place=ac.getPlace();
-    if(!place||!place.formatted_address) return;
-    input.value=place.formatted_address||place.name||input.value;
-    var linkEl=document.getElementById('veh-dest-map-link');
-    if(linkEl){
-      var mapsUrl='https://www.google.com/maps/place/?q=place_id:'+(place.place_id||'');
-      linkEl.style.display='block';
-      linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:var(--cy);text-decoration:none;">📍 View on Google Maps</a>';
-    }
-  });
   input._gmapsAttached=true;
+
+  // Use new PlaceAutocompleteElement if available, fall back to legacy Autocomplete
+  // Use legacy Autocomplete (key registered before March 2025 cutoff)
+  try{
+    var ac=new google.maps.places.Autocomplete(input,{
+      fields:['formatted_address','name','geometry','place_id'],
+      types:['establishment','geocode']
+    });
+    ac.addListener('place_changed',function(){
+      var place=ac.getPlace();
+      if(!place) return;
+      var addr = place.formatted_address||place.name||input.value;
+      input.value = addr;
+      var linkEl=document.getElementById('veh-dest-map-link');
+      if(linkEl&&place.place_id){
+        var mapsUrl='https://www.google.com/maps/place/?q=place_id:'+place.place_id;
+        linkEl.style.display='block';
+        linkEl.innerHTML='<a href="'+mapsUrl+'" target="_blank" style="color:var(--cy);text-decoration:none;">\u{1F4CD} View on Google Maps</a>';
+      }
+    });
+  }catch(e){ console.warn('[Maps] Autocomplete init failed:',e.message); }
   var st=document.getElementById('pac-style')||document.createElement('style');
   st.id='pac-style';
   st.textContent=
@@ -5270,39 +5277,50 @@ function renderVehicleLog(){
         || (t.plate||'').toLowerCase().includes(q);
   });
   if(!trips.length){
-    el.innerHTML='<div style="padding:16px;font-size:11px;color:var(--td);">No trips logged yet.</div>';
+    el.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--td);">No trips logged yet.</div>';
     return;
   }
-  var hdr = ['DATE','DRIVER','PLATE','DESTINATION','DEPART','RETURN','MILES','NOTES'];
+  var hdr = ['DATE','DRIVER','PLATE','DESTINATION','DEPART','RETURN','MILES','NOTES',''];
+  var rows = trips.map(function(t, i){
+    var bg = i%2===0 ? '' : 'background:rgba(255,255,255,0.02);';
+    var cells = [
+      '<td style="padding:7px 10px;white-space:nowrap;">'+(t.date||'')+'</td>',
+      '<td style="padding:7px 10px;">'+(t.driver||'')+'</td>',
+      '<td style="padding:7px 10px;font-family:monospace;">'+(t.plate||'—')+'</td>',
+      '<td style="padding:7px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.dest||'')+'</td>',
+      '<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.depart||'—')+'</td>',
+      '<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.ret||'—')+'</td>',
+      '<td style="padding:7px 10px;color:var(--cy);">'+(t.miles ? t.miles+' mi' : '—')+'</td>',
+      '<td style="padding:7px 10px;color:var(--td);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.notes||'')+'</td>',
+      '<td style="padding:7px 4px;" class="_vdel" data-tid="'+i+'"></td>'
+    ];
+    return '<tr style="'+bg+'">'+cells.join('')+'</tr>';
+  });
+  var thHtml = hdr.map(function(h){
+    return '<th style="text-align:left;padding:7px 10px;color:var(--td);letter-spacing:1px;border-bottom:1px solid var(--bdr);white-space:nowrap;">'+h+'</th>';
+  }).join('');
   el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10px;min-width:600px;">'
-    +'<thead><tr>'+hdr.map(function(h){
-      return '<th style="text-align:left;padding:7px 10px;color:var(--td);letter-spacing:1px;'
-        +'border-bottom:1px solid var(--bdr);white-space:nowrap;">'+h+'</th>';
-    }).join('')+'<th style="border-bottom:1px solid var(--bdr);"></th></tr></thead><tbody>'
-    +trips.map(function(t,i){
-      var bg = i%2===0?'':'background:rgba(255,255,255,0.02);';
-      return '<tr style="'+bg+'">'
-        +'<td style="padding:7px 10px;white-space:nowrap;">'+t.date+'</td>'
-        +'<td style="padding:7px 10px;">'+t.driver+'</td>'
-        +'<td style="padding:7px 10px;font-family:monospace;">'+(t.plate||'—')+'</td>'
-        +'<td style="padding:7px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+t.dest+'</td>'
-        +'<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.depart||'—')+'</td>'
-        +'<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.ret||'—')+'</td>'
-        +'<td style="padding:7px 10px;color:var(--cy);">'+(t.miles?t.miles+' mi':'—')+'</td>'
-        +'<td style="padding:7px 10px;color:var(--td);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.notes||'')+'</td>'
-        +'<td style="padding:7px 4px;"><button data-del-trip="'+t.id+'" class="btn btn-r" style="font-size:8px;padding:2px 6px;">✕</button></td>'
-        +'</tr>';
-    }).join('')+'</tbody></table>';
+    +'<thead><tr>'+thHtml+'</tr></thead>'
+    +'<tbody>'+rows.join('')+'</tbody>'
+    +'</table>';
 
-  el.onclick = function(e){
-    var btn = e.target.closest('[data-del-trip]');
-    if(!btn) return;
-    var id = btn.getAttribute('data-del-trip');
-    vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
-    vehicleSave();
-    renderVehicleLog();
-    renderVehicleStats();
-  };
+  // Attach delete buttons via DOM (no inline onclick quoting issues)
+  el.querySelectorAll('._vdel').forEach(function(td){
+    var i   = parseInt(td.dataset.tid);
+    var tid = trips[i] ? trips[i].id : null;
+    if(!tid) return;
+    var btn = document.createElement('button');
+    btn.className   = 'btn btn-r';
+    btn.textContent = '✕';
+    btn.style.cssText = 'font-size:8px;padding:2px 6px;';
+    btn.onclick = function(){
+      vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== tid; });
+      vehicleSave();
+      renderVehicleLog();
+      renderVehicleStats();
+    };
+    td.appendChild(btn);
+  });
 }
 
 function vehicleExportCSV(){
@@ -5407,6 +5425,13 @@ function fmQ(q){
   var input = document.getElementById('fm-url');
   if(input){ input.value = 'https://www.youtube.com/results?search_query='+encodeURIComponent(q); }
   fmPlay('https://www.youtube.com/results?search_query='+encodeURIComponent(q));
+}
+
+function vehicleDeleteTrip(id){
+  vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
+  vehicleSave();
+  renderVehicleLog();
+  renderVehicleStats();
 }
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
