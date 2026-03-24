@@ -943,10 +943,10 @@ async function pinReset(){
     <div id="step-bar" style="display:flex;gap:0;flex-shrink:0;">
       <div id="step1" class="step-btn active-step">
         <span class="step-num">1</span>
-        <span class="step-lbl">SCAN ITEMS</span>
+        <span class="step-lbl">SCAN LABEL</span>
       </div>
       <div style="width:0;height:0;border-top:18px solid transparent;border-bottom:18px solid transparent;border-left:12px solid var(--bg);z-index:2;flex-shrink:0;"></div>
-      <div id="step2" class="step-btn">
+      <div id="step2" class="step-btn" style="display:none;">
         <span class="step-num">2</span>
         <span class="step-lbl">SCAN LABEL</span>
       </div>
@@ -1355,59 +1355,96 @@ function matchTracking(words){
 
 async function parsePdf(file){
   if(typeof pdfjsLib==='undefined'){
-    await new Promise(function(res,rej){var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    await new Promise(function(res,rej){
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload=res; s.onerror=rej;
+      document.head.appendChild(s);
+    });
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 
   document.getElementById('debug-log').textContent='';
   orders=[]; ai=0;
   pm('⟳ Reading PDF…');
+
   try{
-    var ab=await file.arrayBuffer();
-    var pdf=await pdfjsLib.getDocument({data:ab}).promise;
-    pm('⟳ Parsing '+pdf.numPages+' page(s)…');
-    dbg('Pages: '+pdf.numPages);
-    var out=[];
-    for(var p=1;p<=pdf.numPages;p++){
-      var page=await pdf.getPage(p);
-      var vp=page.getViewport({scale:1});
-      var H=vp.height;
-      var ct=await page.getTextContent();
-      var words=ct.items.filter(function(it){return it.str&&it.str.trim();}).map(function(it){
-        return{text:it.str.trim(),x:it.transform[4],top:H-it.transform[5]};
-      });
-      dbg('\nPage '+p+' H='+H.toFixed(0));
-      words.forEach(function(w){dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"');});
+    var ab  = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({data:ab}).promise;
+    var n   = pdf.numPages;
+    pm('⟳ Parsing '+n+' page(s)…');
+    dbg('Pages: '+n);
 
-      var canvas=document.createElement('canvas');
+    // Image scale: cap at 1.5 — sharp enough for printing, 4x less memory than scale=3
+    // Use JPEG (quality 0.82) — 5-10x smaller than PNG, imperceptible for labels
+    var IMG_SCALE = Math.min(1.5, window.devicePixelRatio || 1);
+    var out = [];
 
-
-      var printScale=Math.max(3, window.devicePixelRatio||1);
-      var vp2=page.getViewport({scale:printScale});
-      canvas.width=vp2.width; canvas.height=vp2.height;
-      var ctx2=canvas.getContext('2d');
-      ctx2.imageSmoothingEnabled=false;
-      await page.render({canvasContext:ctx2,viewport:vp2}).promise;
-      var pageImg=canvas.toDataURL('image/png');
-
-      var o=extractOrder(words,H);
-      if(o){
-        o.pageImg=pageImg;
-        o.pageW=vp2.width; o.pageH=vp2.height;
-        out.push(o);
-        dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf+' sku='+o.skus.map(function(s){return s.sku+'*'+s.qty;}).join(','));
-      } else {
-        dbg('✗ SKIP p'+p+' — ALL tokens:');
-        words.forEach(function(w){ dbg('    top='+w.top.toFixed(0)+' x='+w.x.toFixed(0)+' ['+w.text+']'); });
+    for(var p=1; p<=n; p++){
+      // Yield to browser every 10 pages so UI stays responsive on iPad
+      if(p % 10 === 0){
+        pm('⟳ Parsing… '+p+'/'+n+' pages');
+        await new Promise(function(r){ setTimeout(r, 0); });
       }
-      showDebug();
+
+      var page = await pdf.getPage(p);
+      var vp   = page.getViewport({scale:1});
+      var H    = vp.height;
+
+      // Text extraction
+      var ct    = await page.getTextContent();
+      var words = ct.items
+        .filter(function(it){ return it.str && it.str.trim(); })
+        .map(function(it){
+          return {text:it.str.trim(), x:it.transform[4], top:H-it.transform[5]};
+        });
+
+      // Debug: only log first 3 pages in detail to avoid DOM flood
+      if(p <= 3){
+        dbg('\nPage '+p+' H='+H.toFixed(0));
+        words.forEach(function(w){ dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"'); });
+      }
+
+      var o = extractOrder(words, H);
+      if(o){
+        // Lazy canvas: render image at capped scale, use JPEG not PNG
+        var vp2 = page.getViewport({scale:IMG_SCALE});
+        var canvas = document.createElement('canvas');
+        canvas.width  = vp2.width;
+        canvas.height = vp2.height;
+        var ctx2 = canvas.getContext('2d');
+        ctx2.imageSmoothingEnabled = true;
+        ctx2.imageSmoothingQuality = 'medium';
+        await page.render({canvasContext:ctx2, viewport:vp2}).promise;
+        o.pageImg = canvas.toDataURL('image/jpeg', 0.82);
+        o.pageW   = vp2.width;
+        o.pageH   = vp2.height;
+        // Release canvas memory immediately
+        canvas.width = 0; canvas.height = 0;
+        out.push(o);
+        dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf);
+      } else {
+        if(p <= 3){
+          dbg('✗ SKIP p'+p+' — tokens:');
+          words.forEach(function(w){ dbg('    ['+w.text+']'); });
+        } else {
+          dbg('✗ SKIP p'+p);
+        }
+      }
+
+      // Update progress every 5 pages
+      if(p % 5 === 0) showDebug();
     }
-    if(!out.length){pm('⚠ No orders found — check debug log below');return;}
+
+    showDebug();
+    if(!out.length){ pm('⚠ No orders found — check debug log below'); return; }
     initOrders(out);
-    pm('✓ '+out.length+' order(s) loaded. Now go to Packers tab to assign.');
-    setTimeout(function(){gv('manager');},800);
+    pm('✓ '+out.length+' order(s) loaded. Go to Packers tab to assign.');
+    setTimeout(function(){ gv('manager'); }, 800);
+
   }catch(err){
-    pm('✗ '+err.message); dbg('ERROR: '+err.message+' '+err.stack);
+    pm('✗ '+err.message);
+    dbg('ERROR: '+err.message+' '+err.stack);
   }
 }
 
@@ -2198,199 +2235,45 @@ var verifySkus = [];
 
 function setPackState(state){
   packState = state;
-  var s1=document.getElementById('step1');
-  var s2=document.getElementById('step2');
-  var inp=document.getElementById('scan-in');
-  var lbl=document.getElementById('scan-mode-lbl');
+  var inp = document.getElementById('scan-in');
+  var lbl = document.getElementById('scan-mode-lbl');
+  var s1  = document.getElementById('step1');
+  var s2  = document.getElementById('step2');
   if(state==='idle'){
-    if(s1){s1.className='step-btn'; s2.className='step-btn';}
-    if(inp) inp.placeholder='Scan shipping label to begin…';
-    if(lbl) lbl.textContent='SCAN LABEL →';
-  } else if(state==='verify-items'){
-    if(s1){s1.className='step-btn active-step'; s2.className='step-btn';}
-    if(inp) inp.placeholder='Scan item FNSKU barcode…';
-    if(lbl){lbl.textContent='SCAN ITEM →'; lbl.style.color='var(--am)';}
-  } else if(state==='scan-label'){
-    if(s1){s1.className='step-btn done-step'; s2.className='step-btn active-step';}
-    if(inp) inp.placeholder='All items verified — scan shipping label…';
-    if(lbl){lbl.textContent='SCAN LABEL →'; lbl.style.color='var(--cy)';}
+    if(s1){ s1.className='step-btn'; }
+    if(s2){ s2.className='step-btn'; }
+    if(inp) inp.placeholder = 'Scan shipping label barcode…';
+    if(lbl){ lbl.textContent='SCAN LABEL'; lbl.style.color=''; }
   }
   renderActiveCard();
 }
 
 function doScan(raw){
-  var scanned=raw.toUpperCase().trim();
+  var scanned = raw.toUpperCase().trim();
   if(!scanned) return;
-  document.getElementById('scan-in').value='';
-
+  document.getElementById('scan-in').value = '';
 
   function norm(s){ return s.replace(/[\s\-().]/g,'').toUpperCase(); }
-  // Handle GS1-128 / AI barcodes - extract tracking from compound barcode
+
+  // GS1-128 extraction
   function extractFromGS1(s){
-    // FedEx GS1: (00)SSCC or (92)tracking
     var m = s.match(/\(92\)([0-9A-Z]{18,34})/i) || s.match(/92([0-9]{18,34})/);
     if(m) return m[1];
-    // Generic: if barcode starts with AI codes, strip them
     return s.replace(/^\(\d{2,4}\)/,'').replace(/^\d{2}(?=[A-Z0-9]{16,})/,'');
   }
   var scannedExtracted = extractFromGS1(scanned) || scanned;
   var scannedNorm = norm(scannedExtracted);
 
-
-  if(packState==='idle' || packState==='scan-label'){
-
-
-    var order=null;
-    for(var i=0;i<orders.length;i++){
-      if(norm(orders[i].tracking)===scannedNorm){order=orders[i];break;}
-    }
-
-
-    if(!order){
-      for(var i=0;i<orders.length;i++){
-        var t=norm(orders[i].tracking);
-        if(t.length>=10 && scannedNorm.length>=10){
-          if(scannedNorm.indexOf(t)>=0 || t.indexOf(scannedNorm)>=0){
-            order=orders[i]; break;
-          }
-        }
-      }
-    }
-
-    if(!order){
-      if(packState==='scan-label'){
-        bpErr(); flash('err');
-        setErr('✗ Scan the SHIPPING LABEL (tracking barcode), not the item');
-        setFb('✗ WRONG SCAN','var(--rd)');
-      } else {
-        bpErr(); flash('err');
-
-        var stored=orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
-        setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
-        setFb('✗ NOT FOUND','var(--rd)');
-      }
-      focusScan(); return;
-    }
-
-    if(order.status==='done'){
-      bpErr(); flash('err');
-      setErr('⚠ Already completed at '+order.completedAt);
-      setFb('⚠ ALREADY DONE','var(--am)');
-      focusScan(); return;
-    }
-
-
-    var skus=order.skus||[];
-    var hasSkus=skus.some(function(s){return s.sku&&s.sku!=='UNKNOWN'&&s.qty>0;});
-    // Option C: count total items across all SKUs
-    var totalItems=skus.reduce(function(sum,s){return sum+(s.qty||0);},0);
-    var needsVerify = hasSkus && totalItems > 1;
-
-    if(needsVerify && packState==='idle'){
-      // Multi-item order — require SKU scan verification
-      activeOrder=order;
-      activeOrder.orderStartTime=activeOrder.orderStartTime||Date.now();
-      verifySkus=[];
-      skus.forEach(function(s){
-        for(var q=0;q<s.qty;q++) verifySkus.push({sku:s.sku,qty:s.qty,unit:q+1,scanned:false});
-      });
-      bpOk(); clearErr();
-      setFb('✓ '+totalItems+' items — scan each item barcode to verify','var(--am)');
-      setPackState('verify-items');
-      focusScan(); return;
-    }
-
-    if(hasSkus && !needsVerify && packState==='idle'){
-      // Single-item order — complete immediately, no SKU scan needed
-      bpOk(); flash('ok');
-      setFb('✓ Single item — completing directly','var(--gn)');
-    }
-
-
-    completeOrder(order, scanned);
-    return;
-  }
-
-
-  if(packState==='verify-items'){
-
-
-    var isLabel=orders.some(function(o){return norm(o.tracking)===scannedNorm;});
-    if(!isLabel) isLabel=orders.some(function(o){var t=norm(o.tracking);return t.length>=10&&scannedNorm.length>=10&&(scannedNorm.indexOf(t)>=0||t.indexOf(scannedNorm)>=0);});
-    if(isLabel){
-      var isThisLabel=(norm(activeOrder.tracking)===scannedNorm)||(scannedNorm.indexOf(norm(activeOrder.tracking))>=0||norm(activeOrder.tracking).indexOf(scannedNorm)>=0);
-      if(isThisLabel){
-
-        bpErr(); flash('err');
-        var remaining=verifySkus.filter(function(v){return !v.scanned;});
-        setErr('⚠ Scan the ITEM first! Still need: '+remaining.map(function(v){return v.sku;}).join(', '));
-        setFb('⚠ SCAN ITEMS FIRST','var(--am)');
-      } else {
-        bpErr(); flash('err');
-        setErr('✗ That label belongs to a different order. Finish this one first.');
-        setFb('✗ WRONG LABEL','var(--rd)');
-      }
-      focusScan(); return;
-    }
-
-
-    var slot=null;
-    for(var vi=0;vi<verifySkus.length;vi++){
-      if(!verifySkus[vi].scanned && verifySkus[vi].sku.toUpperCase()===scanned){
-        slot=verifySkus[vi]; break;
-      }
-    }
-
-    if(slot){
-      slot.scanned=true;
-      bpOk(); clearErr(); flash('ok');
-      var remaining2=verifySkus.filter(function(v){return !v.scanned;});
-      if(remaining2.length===0){
-
-        setFb('✓ All items verified! Now scan the shipping label','var(--gn)');
-        bpLogin();
-        setPackState('scan-label');
-      } else {
-        setFb('✓ '+scanned+' · '+remaining2.length+' more item'+(remaining2.length>1?'s':'')+' to scan','var(--gn)');
-        renderActiveCard();
-      }
-    } else {
-
-      var alreadyDone=verifySkus.some(function(v){return v.scanned&&v.sku.toUpperCase()===scanned;});
-      if(alreadyDone){
-        bpErr(); flash('err');
-        setErr('⚠ '+scanned+' already scanned for this order');
-        setFb('⚠ ALREADY SCANNED','var(--am)');
-      } else {
-
-        bpErr(); flash('err');
-        var expected=verifySkus.filter(function(v){return !v.scanned;});
-        setErr('✗ WRONG ITEM — need: '+[...new Set(expected.map(function(v){return v.sku;}))].join(', '));
-        setFb('✗ WRONG ITEM','var(--rd)');
-
-        document.querySelectorAll('.ski-item.pending-item').forEach(function(el){
-          el.style.background='#ff3d5a18';
-          setTimeout(function(){el.style.background='';},600);
-        });
-      }
-    }
-    focusScan(); return;
-  }
-
-
+  // ── RACK SCAN MODE ──────────────────────────────
   if(packState==='rack-scan'){
     if(!rackScanState) rackScanState = {};
-
     if(!rackScanState.sku){
-
       rackScanState.sku = scanned;
       bpOk(); flash('ok');
       setFb('✓ SKU: '+scanned+' — now scan LOCATION (e.g. R1-05)','var(--am)');
       setErr('Scan the rack location label now');
     } else {
-
       var loc = scanned.toUpperCase().replace(/\s/g,'');
-
       var validLoc = document.getElementById('spot-'+loc);
       if(!validLoc){
         bpErr(); flash('err');
@@ -2398,39 +2281,65 @@ function doScan(raw){
         setFb('✗ INVALID LOCATION','var(--rd)');
         focusScan(); return;
       }
-
       if(!window._inventoryData) window._inventoryData = {};
       if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
       var invLoc = window._inventoryData[loc];
-
       var existing = (invLoc.skus||[]).find(function(s){return s.sku===rackScanState.sku;});
-      if(existing){
-        existing.qty = (parseInt(existing.qty)||0) + 1;
-      } else {
-        invLoc.skus.push({sku:rackScanState.sku, name:'', qty:1, unit:'PCS'});
-      }
+      if(existing){ existing.qty = (parseInt(existing.qty)||0) + 1; }
+      else { invLoc.skus.push({sku:rackScanState.sku, name:'', qty:1, unit:'PCS'}); }
       invLoc.lastUpdated = new Date().toLocaleDateString();
-
       rackHighlightInventory();
-
       var spotEl = document.getElementById('spot-'+loc);
       if(spotEl){
-        spotEl.classList.remove('active');
-        void spotEl.offsetWidth;
+        spotEl.classList.remove('active'); void spotEl.offsetWidth;
         spotEl.classList.add('active');
-        setTimeout(function(){if(spotEl)spotEl.classList.remove('active');}, 2000);
+        setTimeout(function(){if(spotEl) spotEl.classList.remove('active');}, 2000);
       }
       bpOk(); flash('ok');
       setFb('✓ '+rackScanState.sku+' → '+loc+' saved! Scan next SKU','var(--gn)');
       setErr('');
-
       try{ localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); }catch(e){}
-
       rackScanState = {};
     }
     focusScan(); return;
   }
+
+  // ── SHIPPING LABEL SCAN — completes order immediately ──
+  var order = null;
+
+  // Exact match
+  for(var i=0;i<orders.length;i++){
+    if(norm(orders[i].tracking)===scannedNorm){ order=orders[i]; break; }
+  }
+  // Partial / embedded match
+  if(!order){
+    for(var i=0;i<orders.length;i++){
+      var t = norm(orders[i].tracking);
+      if(t.length>=10 && scannedNorm.length>=10){
+        if(scannedNorm.indexOf(t)>=0 || t.indexOf(scannedNorm)>=0){ order=orders[i]; break; }
+      }
+    }
+  }
+
+  if(!order){
+    bpErr(); flash('err');
+    var stored = orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
+    setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
+    setFb('✗ NOT FOUND','var(--rd)');
+    focusScan(); return;
+  }
+
+  if(order.status==='done'){
+    bpErr(); flash('err');
+    setErr('⚠ Already completed at '+order.completedAt);
+    setFb('⚠ ALREADY DONE','var(--am)');
+    focusScan(); return;
+  }
+
+  // Complete immediately — no SKU verification
+  completeOrder(order, scanned);
 }
+
 
 function completeOrder(order, scannedTracking){
   var now=Date.now();
