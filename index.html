@@ -1364,6 +1364,10 @@ async function parsePdf(file){
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 
+  // Prevent concurrent parses (double-drop race condition)
+  if(window._parsing){ pm('⚠ Already parsing, please wait…'); return; }
+  window._parsing = true;
+
   document.getElementById('debug-log').textContent='';
   orders=[]; ai=0;
   pm('⟳ Reading PDF…');
@@ -1439,10 +1443,12 @@ async function parsePdf(file){
     showDebug();
     if(!out.length){ pm('⚠ No orders found — check debug log below'); return; }
     initOrders(out);
+    window._parsing = false;
     pm('✓ '+out.length+' order(s) loaded. Go to Packers tab to assign.');
     setTimeout(function(){ gv('manager'); }, 800);
 
   }catch(err){
+    window._parsing = false;
     pm('✗ '+err.message);
     dbg('ERROR: '+err.message+' '+err.stack);
   }
@@ -5370,7 +5376,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
     dz.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('drag-over');});
     dz.addEventListener('dragleave',function(){this.classList.remove('drag-over');});
     dz.addEventListener('drop',function(e){
-      e.preventDefault(); this.classList.remove('drag-over');
+      e.preventDefault(); e.stopPropagation(); this.classList.remove('drag-over');
       var file=e.dataTransfer.files[0];
       if(file&&file.type==='application/pdf') parsePdf(file);
       else pm('⚠ Please drop a PDF file.');
@@ -5390,6 +5396,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
       });
       importView.addEventListener('drop',function(e){
         e.preventDefault();
+        e.stopPropagation();
         dz.classList.remove('drag-over');
         importView.classList.remove('view-import-drag');
         var file=e.dataTransfer.files[0];
