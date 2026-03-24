@@ -1142,10 +1142,14 @@ var CR = {
   GOFO:   {c:'#818cf8', t:function(s){return /^GFUS/i.test(s);}},
   FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|FX-|FEDEX-)/.test(s);}},
   UPS:    {c:'#ffb300', t:function(s){return /^1Z/i.test(s);}},
-  USPS:   {c:'#00ff88', t:function(s){return /^9[1-8]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s);}},
+  USPS:   {c:'#00ff88', t:function(s){return /^9[0-9]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s)||/^70\d{14}$/.test(s);}},
   SWIFT:  {c:'#eab308', t:function(s){return /^SW/i.test(s);}},
-  SpeedX: {c:'#ff3d5a', t:function(s){return /^SPX/i.test(s);}},
-  Uniuni: {c:'#4ade80', t:function(s){return /^UUS/i.test(s);}}
+  SpeedX: {c:'#ff3d5a', t:function(s){return /^(SPX|SDX)/i.test(s);}},
+  Uniuni: {c:'#4ade80', t:function(s){return /^UUS/i.test(s);}},
+  LSO:    {c:'#fb923c', t:function(s){return /^(LSO|1L[0-9])/i.test(s);}},
+  OnTrac: {c:'#38bdf8', t:function(s){return /^[CD]\d{14}$/.test(s);}},
+  Amazon: {c:'#f59e0b', t:function(s){return /^(TBA|1DS)/i.test(s);}},
+  DHL:    {c:'#facc15', t:function(s){return /^(GM\d{16,18}|JD\d{18,22}|\d{10,11}$)/.test(s);}}
 };
 function dc(s){ for(var n in CR) if(CR[n].t(s)) return n; return 'Unknown'; }
 function cc(c){ return (CR[c]&&CR[c].c)||'#4a6080'; }
@@ -1170,12 +1174,21 @@ var TPATS=[
   {r:/^(GFUS\d{10,22})$/i},
   {r:/^(1Z[A-Z0-9]{14,18})$/i},
   {r:/^(SPX[A-Z0-9]{6,22})$/i},
+  {r:/^(SDX[A-Z0-9]{6,22})$/i},
   {r:/^(SWF?[A-Z0-9]{6,20})$/i},
   {r:/^(UUS[A-Z0-9]{10,22})$/i},
+  {r:/^(LSO[A-Z0-9]{6,20})$/i},
+  {r:/^(1L[0-9]{10,18})$/i},
+  {r:/^(TBA[0-9]{10,18})$/i},
+  {r:/^(1DS[0-9]{10,18})$/i},
+  {r:/^(GM[0-9]{16,18})$/i},
+  {r:/^(JD[0-9]{18,22})$/i},
+  {r:/^([CD][0-9]{14})$/},
   {r:/^(96\d{18,22})$/},
   {r:/^(61\d{17,20})$/},
   {r:/^(7[245]\d{14,18})$/},
-  {r:/^(9[1-8]\d{18,22})$/},
+  {r:/^(9[0-9]\d{18,22})$/},
+  {r:/^(70\d{14})$/},
   {r:/^(\d{20,22})$/}
 ];
 
@@ -1348,6 +1361,65 @@ function matchTracking(words){
       var uuM2=rowConcat.match(/(UUS[A-Z0-9]{10,22})/i);
       if(uuM2){ dbg('  Uniuni row match: '+uuM2[1]); return uuM2[1].toUpperCase(); }
     }
+  }
+
+  // ── LSO (Lone Star Overnight) ─────────────────────────────
+  if(hintLSO){
+    var pageAllLSO=words.map(function(w){return clean(w.text);}).join('');
+    var lsoM=pageAllLSO.match(/(LSO[A-Z0-9]{6,20})/i)||pageAllLSO.match(/(1L[0-9]{10,18})/i);
+    if(lsoM){ dbg('  LSO full-page match: '+lsoM[1]); return lsoM[1].toUpperCase(); }
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var lsoM2=rowConcat.match(/(LSO[A-Z0-9]{6,20})/i)||rowConcat.match(/(1L[0-9]{10,18})/i);
+      if(lsoM2){ dbg('  LSO row match: '+lsoM2[1]); return lsoM2[1].toUpperCase(); }
+    }
+  }
+
+  // ── OnTrac ───────────────────────────────────────────────
+  if(hintOntrac){
+    var pageAllOT=words.map(function(w){return clean(w.text);}).join('');
+    var otM=pageAllOT.match(/([CD][0-9]{14})/);
+    if(otM){ dbg('  OnTrac full-page match: '+otM[1]); return otM[1].toUpperCase(); }
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var otM2=rowConcat.match(/([CD][0-9]{14})/);
+      if(otM2){ dbg('  OnTrac row match: '+otM2[1]); return otM2[1].toUpperCase(); }
+    }
+  }
+
+  // ── Amazon Logistics ─────────────────────────────────────
+  if(hintAmazon){
+    var pageAllAMZ=words.map(function(w){return clean(w.text);}).join('');
+    var amzM=pageAllAMZ.match(/(TBA[0-9]{10,18})/i)||pageAllAMZ.match(/(1DS[0-9]{10,18})/i);
+    if(amzM){ dbg('  Amazon full-page match: '+amzM[1]); return amzM[1].toUpperCase(); }
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var amzM2=rowConcat.match(/(TBA[0-9]{10,18})/i)||rowConcat.match(/(1DS[0-9]{10,18})/i);
+      if(amzM2){ dbg('  Amazon row match: '+amzM2[1]); return amzM2[1].toUpperCase(); }
+    }
+  }
+
+  // ── DHL ──────────────────────────────────────────────────
+  if(hintDHL){
+    var pageAllDHL=words.map(function(w){return clean(w.text);}).join('');
+    var dhlM=pageAllDHL.match(/(GM[0-9]{16,18})/i)||pageAllDHL.match(/(JD[0-9]{18,22})/i);
+    if(dhlM){ dbg('  DHL full-page match: '+dhlM[1]); return dhlM[1].toUpperCase(); }
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var dhlM2=rowConcat.match(/(GM[0-9]{16,18})/i)||rowConcat.match(/(JD[0-9]{18,22})/i);
+      if(dhlM2){ dbg('  DHL row match: '+dhlM2[1]); return dhlM2[1].toUpperCase(); }
+    }
+  }
+
+  // ── SpeedX SDX variant ───────────────────────────────────
+  if(hintSpeedX){
+    var pageAllSPX=words.map(function(w){return clean(w.text);}).join('');
+    var sdxM=pageAllSPX.match(/(SDX[A-Z0-9]{6,22})/i)||pageAllSPX.match(/(SPX[A-Z0-9]{6,22})/i);
+    if(sdxM){ dbg('  SpeedX full-page match: '+sdxM[1]); return sdxM[1].toUpperCase(); }
   }
 
   return null;
@@ -2177,6 +2249,7 @@ function loginPacker(rawId){
   p.active=true;
   p.loginTime=Date.now();
   currentPacker=p;
+  _lastCompleteTime=null;  // reset so first order uses loginTime as start
   bpLogin();
   setLoginMsg('','');
   document.getElementById('login-scan-in').value='';
@@ -2238,6 +2311,7 @@ function focusScan(){ var f=document.getElementById('scan-in'); if(f) f.focus();
 var packState = 'idle';
 var activeOrder = null;
 var verifySkus = [];
+var _lastCompleteTime = null;  // tracks when last order was finished (for elapsed calc)
 
 function setPackState(state){
   packState = state;
@@ -2342,6 +2416,11 @@ function doScan(raw){
     focusScan(); return;
   }
 
+  // Set orderStartTime if not already set (used for elapsed time calculation)
+  if(!order.orderStartTime){
+    order.orderStartTime = _lastCompleteTime || (currentPacker && currentPacker.loginTime ? currentPacker.loginTime : Date.now());
+  }
+
   // Complete immediately — no SKU verification
   completeOrder(order, scanned);
 }
@@ -2356,11 +2435,19 @@ function completeOrder(order, scannedTracking){
   if(!order.assignedTo&&currentPacker) order.assignedTo=currentPacker.id;
 
   if(currentPacker){
-    var elapsed=now-(order.orderStartTime||now);
+    // Use time since last completed order (or clock-in time) as start reference
+    var startRef = order.orderStartTime
+      || _lastCompleteTime
+      || (currentPacker.loginTime ? currentPacker.loginTime : now);
+    var elapsed = now - startRef;
+    // Clamp to a reasonable range (5s min, 60min max) to filter scanner glitches
+    if(elapsed < 5000) elapsed = 5000;
+    if(elapsed > 3600000) elapsed = 3600000;
     currentPacker.ordersCompleted++;
     currentPacker.orderTimes.push(elapsed);
     currentPacker.totalPackTime+=elapsed;
     currentPacker.skusScanned+=(order.skus||[]).reduce(function(s,k){return s+k.qty;},0);
+    _lastCompleteTime = now;
     saveStaff();
   }
 
@@ -3356,7 +3443,8 @@ async function excelSavePayroll(){
     var hdr=[['Date','Packer','Orders Packed','Avg Speed (min)','Status']];
     await fetch(rangeUrl('A1:E1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
     var data=packers.map(function(p){
-      var done=orders.filter(function(o){return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';}).length;
+      var sessionDone=orders.filter(function(o){return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';}).length;
+      var done=p.ordersCompleted>0?p.ordersCompleted:sessionDone;
       var avgMin=p.totalPackTime&&p.ordersCompleted?(p.totalPackTime/p.ordersCompleted/60000).toFixed(1):'';
       return [dateStr,p.name,done,avgMin,p.online?'Active':'Off shift'];
     }).filter(function(r){return r[2]>0;});
@@ -4963,11 +5051,15 @@ function renderProductivity(){
   var table    = document.getElementById('prod-table');
   if(!chart) return;
 
-  // Build per-packer stats from orders
+  // Build per-packer stats — use persisted ordersCompleted as primary source
+  // (orders array is session-only and resets on each PDF import)
   var stats = packers.map(function(p){
-    var done = orders.filter(function(o){
+    // Count from current session orders (may be 0 after a new PDF load)
+    var sessionDone = orders.filter(function(o){
       return (o.packedBy===p.id||o.assignedTo===p.id) && o.status==='done';
     }).length;
+    // Use persisted counter as primary; session count as fallback for display
+    var done = p.ordersCompleted > 0 ? p.ordersCompleted : sessionDone;
     var avgMs = p.totalPackTime && p.ordersCompleted
       ? p.totalPackTime / p.ordersCompleted : 0;
     return {
@@ -4977,7 +5069,7 @@ function renderProductivity(){
       active:  p.online || false,
       avgMs:   avgMs
     };
-  }).filter(function(s){ return s.done > 0 || s.active; })
+  }).filter(function(s){ return s.done > 0 || s.active || s.avgMs > 0; })
     .sort(function(a,b){ return b.done - a.done; });
 
   var total  = stats.reduce(function(s,p){ return s+p.done; }, 0);
