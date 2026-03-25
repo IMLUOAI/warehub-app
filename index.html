@@ -936,6 +936,11 @@ async function pinReset(){
       <div id="cp-stats"></div>
       <button id="cp-switch" onclick="currentPacker=null;saveStaff();var ld=document.getElementById('packer-login'),bd=document.getElementById('current-packer-bar');if(ld)ld.classList.remove('hide');if(bd)bd.style.display='none';renderQuickLoginBtns();setTimeout(function(){var el=document.getElementById('login-scan-in');if(el){el.value='';el.focus();}},50);">SWITCH PACKER</button>
     </div>
+    <!-- SCANNING AS selector — shown when 2+ packers are clocked in -->
+    <div id="cp-selector-bar" style="display:none;flex-shrink:0;padding:6px 12px;background:var(--sur);border-bottom:1px solid var(--bdr);align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:8px;letter-spacing:2px;color:var(--td);white-space:nowrap;">SCANNING AS:</span>
+      <div id="cp-selector-btns" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
     <!-- Pack layout -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PACK STATION — 2-STEP VERIFY</div>
@@ -2332,6 +2337,7 @@ function showLoginOrPack(){
 
     if(barDiv){barDiv.style.display='flex'; updatePackerBar();}
     if(loginDiv) loginDiv.classList.add('hide');
+    renderCpSelectorBar();
     setPackState(packState==='idle'?'idle':packState);
     focusScan();
   } else {
@@ -2427,7 +2433,8 @@ function loginPacker(rawId){
   p.online=true;
   p.active=true;
   p.loginTime=Date.now();
-  currentPacker=p;
+  // Only override currentPacker if nobody is actively selected yet
+  if(!currentPacker || !currentPacker.online) currentPacker=p;
   delete _lastCompleteTime[p.id];  // reset so first order uses loginTime as start
   bpLogin();
   setLoginMsg('','');
@@ -2477,6 +2484,51 @@ function updatePackerBar(){
     });
   });
   statsEl.textContent=onlinePackers.length+' active';
+  renderCpSelectorBar();
+}
+
+function selectCurrentPacker(id){
+  var p = packers.find(function(x){ return x.id===id && x.online; });
+  if(!p) return;
+  currentPacker = p;
+  saveStaff();
+  updatePackerBar();
+  renderCpSelectorBar();
+  // Flash feedback in scan-fb
+  var fb = document.getElementById('scan-fb');
+  if(fb){ fb.textContent='Scanning as: '+p.name; fb.style.color=packerColor(p); }
+  focusScan();
+}
+
+function renderCpSelectorBar(){
+  var onlinePackers = packers.filter(function(p){ return p.online; });
+  var bar  = document.getElementById('cp-selector-bar');
+  var btns = document.getElementById('cp-selector-btns');
+  if(!bar || !btns) return;
+
+  if(onlinePackers.length < 2){
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+  btns.innerHTML = onlinePackers.map(function(p){
+    var col    = packerColor(p);
+    var active = currentPacker && currentPacker.id === p.id;
+    var done   = orders.filter(function(o){ return o.packedBy===p.id||o.assignedTo===p.id&&o.status==='done'; }).length;
+    var total  = p.ordersCompleted || done;
+    return '<button onclick="selectCurrentPacker(\''+p.id+'\')" style="'
+      +'padding:5px 14px;font-size:9px;letter-spacing:1px;font-family:inherit;cursor:pointer;'
+      +'border:2px solid '+col+';'
+      +'background:'+(active ? col : col+'18')+';'
+      +'color:'+(active ? '#fff' : col)+';'
+      +'font-weight:'+(active ? '700' : '400')+';'
+      +'transition:all .15s;white-space:nowrap;">'
+      +p.name
+      +(total ? ' · '+total : '')
+      +(active ? ' ◀' : '')
+      +'</button>';
+  }).join('');
 }
 
 function setLoginMsg(msg,col){
@@ -2675,7 +2727,7 @@ function completeOrder(order, scannedTracking){
   var packerTag = creditPacker ? '  ['+creditPacker.name+']' : '';
   setFb('✓  '+order.tracking+'  ·  '+(order.skus||[]).map(function(s){return s.sku+'×'+s.qty;}).join(', ')+packerTag,'var(--gn)');
   clearErr(); bpDone(); flash('ok');
-
+  renderCpSelectorBar(); // refresh order counts on selector buttons
 
   activeOrder=null; verifySkus=[];
   setPackState('idle');
