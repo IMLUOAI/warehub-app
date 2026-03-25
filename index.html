@@ -1472,9 +1472,9 @@ async function parsePdf(file){
     pm('⟳ Parsing '+n+' page(s)…');
     dbg('Pages: '+n);
 
-    // Image scale: cap at 1.5 — sharp enough for printing, 4x less memory than scale=3
-    // Use JPEG (quality 0.82) — 5-10x smaller than PNG, imperceptible for labels
-    var IMG_SCALE = Math.min(1.5, window.devicePixelRatio || 1);
+    // Image scale: 2.0 gives ~144 DPI on label output — sharp enough for thermal printing
+    // without excessive memory. Use JPEG quality 0.92 for minimal barcode artifacts.
+    var IMG_SCALE = Math.min(2.0, window.devicePixelRatio || 1);
     var out = [];
 
     for(var p=1; p<=n; p++){
@@ -1513,7 +1513,7 @@ async function parsePdf(file){
         ctx2.imageSmoothingEnabled = true;
         ctx2.imageSmoothingQuality = 'medium';
         await page.render({canvasContext:ctx2, viewport:vp2}).promise;
-        o.pageImg = canvas.toDataURL('image/jpeg', 0.82);
+        o.pageImg = canvas.toDataURL('image/jpeg', 0.92);
         o.pageW   = vp2.width;
         o.pageH   = vp2.height;
         // Release canvas memory immediately
@@ -1537,7 +1537,12 @@ async function parsePdf(file){
     if(!out.length){ pm('⚠ No orders found — check debug log below'); return; }
     initOrders(out);
     window._parsing = false;
-    pm('✓ '+out.length+' order(s) loaded. Go to Packers tab to assign.');
+    var skipped = n - out.length;
+    var msg = '✓ '+out.length+'/'+n+' label(s) parsed.';
+    if(skipped > 0){
+      msg += '  ⚠ '+skipped+' page(s) skipped — scroll debug log to inspect.';
+    }
+    pm(msg);
     setTimeout(function(){ gv('manager'); }, 800);
 
   }catch(err){
