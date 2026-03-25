@@ -37,6 +37,7 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 | **📦 Returns** | Scan return packages. Log carrier, type, condition, SKU, restock location, pile assignment, photos. Auto-saves to Excel. Manager alert on damaged/counterfeit items. |
 | **🚗 Vehicle** | Trip log — driver, license plate, Google Maps destination, odometer, departure/return time, notes. Save to Excel. |
 | **🗺 Rack Map** | Interactive SVG warehouse layout — 83 spots across 6 zones. Click cells to see contents. Scan gun LOCATE/ASSIGN modes. Inventory CSV import. |
+| **📤 FBA Outbound** | End-of-day manager form — log FBA Shipment ID, FC destination, carrier + tracking to FC, boxes, units, box dims, weight per box, dynamic SKU rows. Saves to Excel + CSV export. |
 | **⚙ Dev Panel** | All service accounts, API keys, fix guides, PIN reset, changelog, editable notes. |
 
 ---
@@ -45,7 +46,7 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Vanilla HTML/CSS/JS — single `index.html` (~330KB), no framework |
+| Frontend | Vanilla HTML/CSS/JS — single `index.html` (~345KB), no framework |
 | Layout | CSS Grid (body) + `position:absolute` views, visibility toggle |
 | Theme | Midnight Slate — `#1a1f2e` base, `#818cf8` indigo accent |
 | PDF Parsing | pdf.js 3.11.174 — lazy loaded on first PDF drop; renders labels at 2.0× scale / JPEG 92% |
@@ -207,7 +208,7 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 | Settings (Excel, AI) | localStorage | ❌ Per browser |
 | Orders (current batch) | Memory only | ❌ Re-import PDF |
 
-**Excel workbook tabs:** `Productivity` · `Returns Log` · `Vehicle Log`
+**Excel workbook tabs:** `Productivity` · `Returns Log` · `Vehicle Log` · `FBA Outbound`
 
 ---
 
@@ -233,6 +234,7 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 ## 📝 Changelog
 
 ### March 2026
+- **feat:** Amazon FBA Outbound tab — end-of-day shipment form with dynamic SKU rows, stats bar, filterable log, CSV + Excel export to new "FBA Outbound" sheet
 - **feat:** Print by Packer — 4"×6" named divider cover page per packer, labels in shelf order
 - **feat:** Batch completeness check — `X/N labels parsed` status, warns on skipped pages
 - **fix:** Label image quality — scale 1.5→2.0, JPEG 82%→92% for sharper thermal output (~144 DPI)
@@ -251,7 +253,7 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 
 ```
 warehub-app/
-├── index.html      ← Entire app (~330KB, single file)
+├── index.html      ← Entire app (~345KB, single file)
 └── README.md       ← This file
 ```
 
