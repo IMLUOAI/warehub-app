@@ -805,6 +805,7 @@ async function pinReset(){
     <button class="tab"     data-view="returns"  onclick="gv('returns')">📦 Returns</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
     <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
+    <button class="tab" data-view="fba" onclick="gv('fba')">📤 FBA Outbound</button>
     <button class="tab" data-view="devpanel" onclick="gv('devpanel')">⚙ Dev Panel</button>
   </div>
 </div>
@@ -1189,6 +1190,7 @@ function gv(name){
   if(name==='payroll') renderProductivity();
   if(name==='floor')  renderFloor();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
+  if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); }
 }
 
 var TPATS=[
@@ -5691,11 +5693,275 @@ function vehicleDeleteTrip(id){
   renderVehicleLog();
   renderVehicleStats();
 }
+
+// ══════════════════════════════════════════════════════
+// FBA OUTBOUND — data, form, log, export, Excel
+// ══════════════════════════════════════════════════════
+var fbaRecords = [];
+var _fbaSkuSeq = 0;
+
+function fbaLoadLocal(){
+  try{ fbaRecords = JSON.parse(localStorage.getItem('warehub_fba')||'[]'); }
+  catch(e){ fbaRecords = []; }
+}
+
+function fbaSaveLocal(){
+  try{ localStorage.setItem('warehub_fba', JSON.stringify(fbaRecords)); }
+  catch(e){}
+}
+
+function fbaPopulateSubmittedBy(){
+  var sel = document.getElementById('fba-submitted-by');
+  if(!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">— select —</option>';
+  managers.forEach(function(m){
+    sel.innerHTML += '<option value="'+m.name+'">'+m.name+' (Manager)</option>';
+  });
+  packers.forEach(function(p){
+    sel.innerHTML += '<option value="'+p.name+'">'+p.name+'</option>';
+  });
+  if(cur) sel.value = cur;
+  // Pre-fill today's date if blank
+  var dateEl = document.getElementById('fba-date');
+  if(dateEl && !dateEl.value){
+    var now = new Date();
+    var pad = function(n){ return n<10?'0'+n:n; };
+    dateEl.value = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  }
+  // Add initial SKU row if none present
+  var rows = document.getElementById('fba-sku-rows');
+  if(rows && !rows.children.length) fbaAddSkuRow();
+}
+
+function fbaAddSkuRow(){
+  var container = document.getElementById('fba-sku-rows');
+  if(!container) return;
+  var id = 'fba-sku-'+( ++_fbaSkuSeq );
+  var row = document.createElement('div');
+  row.id = id;
+  row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px;';
+  row.innerHTML =
+    '<input placeholder="SKU (e.g. DS-XXXX-BLK-M)…" autocomplete="off"'
+    +' style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>'
+    +'<input type="number" min="1" placeholder="Qty" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>'
+    +'<button onclick="document.getElementById(\''+id+'\').remove()" style="padding:4px 8px;font-size:11px;background:transparent;border:1px solid var(--bdr);color:var(--rd);cursor:pointer;font-family:inherit;">✕</button>';
+  container.appendChild(row);
+}
+
+function fbaReadSkuRows(){
+  var container = document.getElementById('fba-sku-rows');
+  if(!container) return [];
+  var skus = [];
+  Array.from(container.children).forEach(function(row){
+    var inputs = row.querySelectorAll('input');
+    var sku = inputs[0] ? inputs[0].value.trim().toUpperCase() : '';
+    var qty = inputs[1] ? parseInt(inputs[1].value) : 0;
+    if(sku && qty > 0) skus.push({sku:sku, qty:qty});
+  });
+  return skus;
+}
+
+function fbaSubmit(){
+  var msg     = document.getElementById('fba-form-msg');
+  var shipId  = (document.getElementById('fba-shipment-id').value||'').trim().toUpperCase();
+  var fc      = (document.getElementById('fba-fc').value||'').trim().toUpperCase();
+  var date    = document.getElementById('fba-date').value||new Date().toLocaleDateString();
+  var by      = document.getElementById('fba-submitted-by').value||'';
+  var carrier = document.getElementById('fba-carrier').value||'';
+  var tracking= (document.getElementById('fba-tracking').value||'').trim();
+  var boxes   = parseInt(document.getElementById('fba-boxes').value)||0;
+  var units   = parseInt(document.getElementById('fba-total-units').value)||0;
+  var dimL    = parseFloat(document.getElementById('fba-dim-l').value)||0;
+  var dimW    = parseFloat(document.getElementById('fba-dim-w').value)||0;
+  var dimH    = parseFloat(document.getElementById('fba-dim-h').value)||0;
+  var weight  = parseFloat(document.getElementById('fba-weight').value)||0;
+  var notes   = (document.getElementById('fba-notes').value||'').trim();
+  var skus    = fbaReadSkuRows();
+
+  if(!shipId){ if(msg) msg.textContent='FBA Shipment ID is required.'; return; }
+  if(!fc)    { if(msg) msg.textContent='FC Destination is required.';  return; }
+  if(!skus.length){ if(msg) msg.textContent='Add at least one SKU.'; return; }
+  if(msg) msg.textContent='';
+
+  var dims = (dimL&&dimW&&dimH) ? dimL+'×'+dimW+'×'+dimH+' in' : '';
+  var rec = {
+    id:       'FBA-'+Date.now(),
+    date:     date,
+    shipId:   shipId,
+    fc:       fc,
+    by:       by,
+    carrier:  carrier,
+    tracking: tracking,
+    boxes:    boxes||'',
+    units:    units||'',
+    dims:     dims,
+    weight:   weight||'',
+    notes:    notes,
+    skus:     skus
+  };
+
+  fbaRecords.unshift(rec);
+  fbaSaveLocal();
+  fbaClearForm();
+  renderFbaLog();
+  renderFbaStats();
+  pm('✓ FBA shipment logged: '+rec.shipId+' → '+rec.fc+' ('+skus.length+' SKU'+(skus.length!==1?'s':'')+', '+rec.units+' units)');
+}
+
+function fbaClearForm(){
+  var ids = ['fba-shipment-id','fba-fc','fba-carrier','fba-tracking',
+             'fba-boxes','fba-total-units','fba-dim-l','fba-dim-w','fba-dim-h',
+             'fba-weight','fba-notes'];
+  ids.forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('fba-submitted-by').value='';
+  // Reset date to today
+  var dateEl = document.getElementById('fba-date');
+  if(dateEl){
+    var now=new Date(), pad=function(n){return n<10?'0'+n:n;};
+    dateEl.value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  }
+  // Clear and re-seed one blank SKU row
+  var rows = document.getElementById('fba-sku-rows');
+  if(rows){ rows.innerHTML=''; fbaAddSkuRow(); }
+  var msg = document.getElementById('fba-form-msg');
+  if(msg) msg.textContent='';
+}
+
+function renderFbaStats(){
+  var el = document.getElementById('fba-stats');
+  if(!el) return;
+  var totalShipments = fbaRecords.length;
+  var totalUnits = fbaRecords.reduce(function(s,r){ return s+(parseInt(r.units)||0); },0);
+  var totalBoxes = fbaRecords.reduce(function(s,r){ return s+(parseInt(r.boxes)||0); },0);
+  var fcs = {};
+  fbaRecords.forEach(function(r){ if(r.fc) fcs[r.fc]=(fcs[r.fc]||0)+1; });
+  var topFc = Object.keys(fcs).sort(function(a,b){return fcs[b]-fcs[a];})[0]||'—';
+  function kpi(label,val){
+    return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:12px 16px;">'
+      +'<div style="font-size:8px;letter-spacing:1px;color:var(--td);">'+label+'</div>'
+      +'<div style="font-size:22px;font-weight:700;margin-top:4px;color:var(--am);">'+val+'</div></div>';
+  }
+  el.innerHTML =
+    kpi('SHIPMENTS',totalShipments)+
+    kpi('TOTAL UNITS',totalUnits.toLocaleString())+
+    kpi('TOTAL BOXES',totalBoxes.toLocaleString())+
+    kpi('TOP FC',topFc);
+}
+
+function renderFbaLog(){
+  var el = document.getElementById('fba-log');
+  if(!el) return;
+  var filter = (document.getElementById('fba-filter')||{}).value||'';
+  var q = filter.trim().toLowerCase();
+  var list = q
+    ? fbaRecords.filter(function(r){
+        return (r.shipId||'').toLowerCase().indexOf(q)>=0
+          || (r.fc||'').toLowerCase().indexOf(q)>=0
+          || (r.carrier||'').toLowerCase().indexOf(q)>=0
+          || (r.by||'').toLowerCase().indexOf(q)>=0
+          || (r.skus||[]).some(function(s){ return s.sku.toLowerCase().indexOf(q)>=0; });
+      })
+    : fbaRecords;
+
+  if(!list.length){
+    el.innerHTML='<div style="padding:32px;text-align:center;color:var(--td);font-size:11px;">No shipments logged yet.</div>';
+    return;
+  }
+
+  var cols = ['Date','Shipment ID','FC','SKUs','Units','Boxes','Dims (in)','Wt/Box (lbs)','Carrier','Tracking','Submitted By','Notes',''];
+  var th = cols.map(function(c){ return '<th style="padding:8px 10px;text-align:left;font-size:8px;letter-spacing:1px;color:var(--td);border-bottom:1px solid var(--bdr);white-space:nowrap;">'+c+'</th>'; }).join('');
+  var rows = list.map(function(r){
+    var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(', ');
+    function td(v,extra){
+      return '<td style="padding:7px 10px;font-size:10px;border-bottom:1px solid var(--bdr)10;white-space:nowrap;'+(extra||'')+'">'+((v||v===0)?v:'—')+'</td>';
+    }
+    return '<tr>'
+      +td(r.date)
+      +td('<span style="color:var(--am);font-weight:700;">'+r.shipId+'</span>')
+      +td('<span style="color:var(--cy);font-weight:600;">'+r.fc+'</span>')
+      +'<td style="padding:7px 10px;font-size:10px;border-bottom:1px solid var(--bdr)10;max-width:200px;word-break:break-all;">'+skuStr+'</td>'
+      +td(r.units)
+      +td(r.boxes)
+      +td(r.dims)
+      +td(r.weight)
+      +td(r.carrier)
+      +td(r.tracking,'font-family:monospace;font-size:9px;')
+      +td(r.by)
+      +td(r.notes)
+      +'<td style="padding:4px 8px;border-bottom:1px solid var(--bdr)10;">'
+        +'<button onclick="fbaDelete(\''+r.id+'\')" style="font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--bdr);color:var(--rd);cursor:pointer;font-family:inherit;">🗑</button>'
+      +'</td></tr>';
+  }).join('');
+
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+    +'<thead><tr>'+th+'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table>';
+}
+
+function fbaDelete(id){
+  fbaRecords = fbaRecords.filter(function(r){ return r.id!==id; });
+  fbaSaveLocal();
+  renderFbaLog();
+  renderFbaStats();
+}
+
+function fbaExportCSV(){
+  if(!fbaRecords.length){ pm('No FBA records to export.'); return; }
+  var q = function(v){ return '"'+((''+v).replace(/"/g,'""'))+'"'; };
+  var header = ['Date','Shipment ID','FC','SKUs','Total Units','Boxes','Dims (in)','Weight/Box (lbs)','Carrier','Tracking','Submitted By','Notes'];
+  var rows = fbaRecords.map(function(r){
+    var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(' | ');
+    return [r.date,r.shipId,r.fc,skuStr,r.units,r.boxes,r.dims,r.weight,r.carrier,r.tracking,r.by,r.notes].map(q).join(',');
+  });
+  var csv = [header.map(q).join(',')].concat(rows).join('\n');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = 'FBA_Outbound_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  pm('✓ FBA CSV exported ('+fbaRecords.length+' records)');
+}
+
+async function fbaSaveExcel(){
+  if(!_msalToken || !_excelFileId){ excelConnect(); return; }
+  if(!fbaRecords.length){ pm('⚠ No FBA records to save.'); return; }
+  var sheet = 'FBA Outbound';
+  var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
+  var auth  = {Authorization:'Bearer '+_msalToken};
+  var hdrs  = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
+  function rangeUrl(addr){ var q=String.fromCharCode(39); return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')'; }
+  pm('⟳ Saving FBA outbound to Excel…');
+  try{
+    var sr = await fetch(base+'/worksheets?$select=name', {headers:auth});
+    var sd = await sr.json();
+    var names = (sd.value||[]).map(function(s){ return s.name; });
+    if(!names.includes(sheet)){
+      await fetch(base+'/worksheets', {method:'POST', headers:hdrs, body:JSON.stringify({name:sheet})});
+    }
+    var hdrRow = [['Date','Shipment ID','FC','SKUs','Total Units','Boxes','Dims (in)','Wt/Box (lbs)','Carrier','Tracking','Submitted By','Notes']];
+    await fetch(rangeUrl('A1:L1'), {method:'PATCH', headers:hdrs, body:JSON.stringify({values:hdrRow})});
+    var dataRows = fbaRecords.map(function(r){
+      var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(' | ');
+      return [
+        r.date||'', r.shipId||'', r.fc||'', skuStr,
+        r.units||'', r.boxes||'', r.dims||'', r.weight||'',
+        r.carrier||'', r.tracking||'', r.by||'', r.notes||''
+      ];
+    });
+    var endRow = 1 + dataRows.length;
+    var wr = await fetch(rangeUrl('A2:L'+endRow), {method:'PATCH', headers:hdrs, body:JSON.stringify({values:dataRows})});
+    if(wr.ok) pm('✓ FBA Outbound saved → "'+sheet+'" tab ('+dataRows.length+' records)');
+    else{ var er=await wr.json(); pm('✗ Excel: '+((er.error&&er.error.message)||wr.status)); }
+  }catch(e){ pm('✗ Save failed: '+e.message); }
+}
+
 document.addEventListener('DOMContentLoaded',function(){(async function(){try{
 
   try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
   loadStaff();         // 1. load from localStorage first (instant)
   returnsLoad();
+  fbaLoadLocal();
   excelLoadConfig();
   await kvLoadStaff(); // 2. AWAIT KV — overrides localStorage if cloud has newer data
   gmapsLoadConfig();
@@ -6124,6 +6390,143 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
     </div>
   </div>
 
+
+  <!-- ══ FBA OUTBOUND ══ -->
+  <div id="view-fba" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;width:100%;box-sizing:border-box;flex-shrink:0;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">AMAZON FBA</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Outbound Shipment Record</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Double Sided ISCM LLC · End-of-day summary per shipment plan</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+          <button class="btn" onclick="fbaExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
+          <button class="btn" onclick="fbaSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div id="fba-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
+
+      <!-- New Shipment Form -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:14px;">NEW FBA SHIPMENT ENTRY</div>
+
+        <!-- Row 1: Shipment ID + FC + Date + Submitted By -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">FBA SHIPMENT ID</div>
+            <input id="fba-shipment-id" placeholder="e.g. FBA15XXXXXX…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">FC DESTINATION</div>
+            <input id="fba-fc" placeholder="e.g. ONT8, PHX6, MDW2…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" list="fba-fc-list"/>
+            <datalist id="fba-fc-list">
+              <option value="ONT8"/><option value="PHX6"/><option value="MDW2"/><option value="BWI2"/>
+              <option value="EWR4"/><option value="LAX9"/><option value="DAL3"/><option value="MKE1"/>
+              <option value="SDF8"/><option value="RNO4"/><option value="TEB9"/><option value="HOU2"/>
+            </datalist>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SHIP DATE</div>
+            <input id="fba-date" type="date" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SUBMITTED BY</div>
+            <select id="fba-submitted-by" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— select —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Carrier + Tracking + Boxes + Total Units -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">CARRIER TO FC</div>
+            <select id="fba-carrier" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
+              <option value="">— select —</option>
+              <option value="UPS">UPS</option>
+              <option value="FedEx">FedEx</option>
+              <option value="USPS">USPS</option>
+              <option value="Amazon Partnered UPS">Amazon Partnered UPS</option>
+              <option value="Amazon Partnered FedEx">Amazon Partnered FedEx</option>
+              <option value="LTL / Freight">LTL / Freight</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">TRACKING TO FC</div>
+            <input id="fba-tracking" placeholder="Tracking # to Amazon FC…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NUMBER OF BOXES</div>
+            <input id="fba-boxes" type="number" min="1" placeholder="e.g. 12" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">TOTAL UNITS</div>
+            <input id="fba-total-units" type="number" min="1" placeholder="e.g. 240" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- Row 3: Box dims + Weight per box -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">BOX L × W × H (in)</div>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <input id="fba-dim-l" type="number" min="0" placeholder="L" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
+              <span style="color:var(--td);font-size:10px;">×</span>
+              <input id="fba-dim-w" type="number" min="0" placeholder="W" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
+              <span style="color:var(--td);font-size:10px;">×</span>
+              <input id="fba-dim-h" type="number" min="0" placeholder="H" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">WEIGHT PER BOX (lbs)</div>
+            <input id="fba-weight" type="number" min="0" step="0.1" placeholder="e.g. 18.5" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div style="grid-column:span 2;">
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NOTES</div>
+            <input id="fba-notes" placeholder="Any additional notes, reference numbers, PO#…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+        </div>
+
+        <!-- SKU Rows -->
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">SKU / PRODUCT LINES</div>
+            <button class="btn" onclick="fbaAddSkuRow()" style="font-size:8px;padding:3px 10px;border-color:var(--am);color:var(--am);">+ ADD SKU</button>
+          </div>
+          <div id="fba-sku-rows">
+            <!-- SKU rows injected by fbaAddSkuRow() -->
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div id="fba-form-msg" style="font-size:10px;color:var(--am);"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="fbaClearForm()" style="font-size:9px;">✕ CLEAR</button>
+            <button class="btn btn-c" onclick="fbaSubmit()" style="font-size:9px;">+ LOG SHIPMENT</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shipment log table -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
+          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">SHIPMENT HISTORY</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="fba-filter" placeholder="Filter by shipment ID, FC, SKU…" oninput="renderFbaLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:220px;"/>
+            <button class="btn" onclick="if(confirm('Delete ALL FBA records?')){fbaRecords=[];fbaSaveLocal();renderFbaLog();renderFbaStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="fba-log" style="overflow-x:auto;"></div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- ══ RACK MAP ══ -->
   <div id="view-rackmap" class="view" style="display:flex;flex-direction:column;padding:16px 18px;">
