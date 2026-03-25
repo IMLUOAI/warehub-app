@@ -2054,31 +2054,31 @@ function printSkuSort(){
   });
 
   // ── 4" × 6" thermal label CSS ──────────────────────────────────────────────
-  // @page size locked to 4in 6in so the OS cannot override with Letter/A4.
-  // .label-img uses object-fit:fill to stretch the captured image to exactly
-  // fill the label area without any white margin.
+  // body height is intentionally NOT fixed — fixing it to 6in fights the
+  // printer driver's non-printable top margin and clips the label head.
+  // object-fit:contain keeps the full image inside the safe printable area.
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
-    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;}'
+    +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
     +'.label-page{'
       +'width:4in;height:6in;'
-      +'display:block;overflow:hidden;'
+      +'display:flex;align-items:center;justify-content:center;'
       +'page-break-after:always;page-break-inside:avoid;'
     +'}'
     +'.label-page:last-child{page-break-after:avoid;}'
     +'.label-img{'
       +'width:4in;height:6in;'
       +'display:block;'
-      +'object-fit:fill;'
+      +'object-fit:contain;'
       +'image-rendering:-webkit-optimize-contrast;'
       +'image-rendering:crisp-edges;'
     +'}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
-      +'html,body{width:4in;height:6in;margin:0;padding:0;}'
+      +'html,body{width:4in;margin:0;padding:0;}'
       +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:6in;object-fit:fill;}'
+      +'.label-img{width:4in;height:6in;object-fit:contain;}'
     +'}';
 
   printViaIframe(css, bodyHtml);
@@ -2156,19 +2156,20 @@ function printByPacker(){
   }
 
   // ── 4"×6" thermal CSS + divider styles ─────────────────────────────────────
+  // body height not fixed — prevents top-clip from printer's non-printable margin.
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
-    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;}'
+    +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
     +'.label-page{'
       +'width:4in;height:6in;'
-      +'display:block;overflow:hidden;'
+      +'display:flex;align-items:center;justify-content:center;'
       +'page-break-after:always;page-break-inside:avoid;'
     +'}'
     +'.label-page:last-child{page-break-after:avoid;}'
     +'.label-img{'
       +'width:4in;height:6in;'
       +'display:block;'
-      +'object-fit:fill;'
+      +'object-fit:contain;'
       +'image-rendering:-webkit-optimize-contrast;'
       +'image-rendering:crisp-edges;'
     +'}'
@@ -2192,10 +2193,10 @@ function printByPacker(){
     +'}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
-      +'html,body{width:4in;height:6in;margin:0;padding:0;}'
+      +'html,body{width:4in;margin:0;padding:0;}'
       +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:6in;object-fit:fill;}'
+      +'.label-img{width:4in;height:6in;object-fit:contain;}'
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
