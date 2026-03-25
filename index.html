@@ -4435,6 +4435,33 @@ function kvGetProxy(){
   return _kvProxy;
 }
 
+async function kvTestConnection(){
+  var dot = document.getElementById('cloud-status');
+  var proxy = kvGetProxy();
+  if(!proxy){
+    if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync: no proxy URL configured'; }
+    pm('⚠ No proxy URL set. Configure it in Dev Panel → AI / Proxy Settings.');
+    return;
+  }
+  if(dot){ dot.style.color='var(--am)'; dot.title='Cloud sync: testing…'; }
+  pm('⟳ Testing cloud connection…');
+  try{
+    var url = proxy.replace(/\/+$/,'') + '/staff';
+    var r = await fetch(url, {method:'GET', mode:'cors'});
+    if(r.ok || r.status===404){
+      // 404 just means no staff saved yet — Worker is reachable
+      if(dot){ dot.style.color='var(--gn)'; dot.title='Cloud sync: connected ✓ ('+new Date().toLocaleTimeString()+')'; }
+      pm('✓ Cloud connection OK — Worker is reachable'+(r.status===404?' (no staff saved yet)':'.'));
+    } else {
+      if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync: HTTP '+r.status; }
+      pm('⚠ Cloud responded with HTTP '+r.status+'. Check Worker URL in Dev Panel.');
+    }
+  }catch(e){
+    if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync: unreachable — '+e.message; }
+    pm('✗ Cloud unreachable: '+e.message+'. Check proxy URL in Dev Panel → AI Settings.');
+  }
+}
+
 async function kvSaveStaff(){
   var proxy = kvGetProxy();
   if(!proxy) return;
