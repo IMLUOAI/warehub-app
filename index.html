@@ -1099,6 +1099,26 @@ async function pinReset(){
         <div id="prod-speed-empty" style="font-size:11px;color:var(--td);display:none;">Complete some orders to see pack speed.</div>
       </div>
 
+      <!-- ── TIMESHEET (all active packers) ─────────────────── -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;flex-shrink:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:8px;letter-spacing:2px;color:var(--td);">TIMESHEET · <span id="pr-date"></span></div>
+          <div style="display:flex;gap:16px;font-size:9px;color:var(--td);">
+            <span>Packers: <b style="color:var(--cy);" id="pr-packers">0</b></span>
+            <span>Active: <b style="color:var(--gn);" id="pr-active">0</b></span>
+            <span>Orders: <b style="color:var(--am);" id="pr-orders">0</b></span>
+            <span>Total hrs: <b style="color:var(--pu);" id="pr-hrs">0.00</b></span>
+          </div>
+        </div>
+        <div id="pr-sheet" style="overflow-x:auto;"></div>
+      </div>
+
+      <!-- ── SESSION LOG ─────────────────────────────────────── -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:16px;flex-shrink:0;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:12px;">CLOCK-IN LOG</div>
+        <div id="pr-log" style="overflow-x:auto;"></div>
+      </div>
+
     </div>
   </div>
 
@@ -1990,37 +2010,68 @@ function printSkuSort(){
 
   pm('Building sorted labels... '+withImg.length+' labels');
 
-
+  // Group by ALL distinct SKUs in each order so multi-SKU orders appear in every
+  // relevant group. Each physical label still prints only once per unique order.
+  // (We track printed orders by tracking number to avoid duplicates when an order
+  //  has multiple distinct SKUs — it prints in the FIRST matching group only.)
   var groups={};
-  orders.forEach(function(o){
-    if(!o.pageImg) return;
-    var sku=(o.skus&&o.skus.length)?o.skus[0].sku:'UNKNOWN';
-    if(!groups[sku]) groups[sku]=[];
-    groups[sku].push(o);
+  withImg.forEach(function(o){
+    // Build deduplicated list of SKUs for this order
+    var skuList=[];
+    var seen={};
+    (o.skus&&o.skus.length?o.skus:[{sku:'UNKNOWN'}]).forEach(function(s){
+      var k=s.sku||'UNKNOWN';
+      if(!seen[k]){seen[k]=true;skuList.push(k);}
+    });
+    // Register order under each of its SKUs
+    skuList.forEach(function(sku){
+      if(!groups[sku]) groups[sku]=[];
+      groups[sku].push(o);
+    });
   });
   var skuKeys=Object.keys(groups).sort();
 
-
-  var css='*{margin:0;padding:0;box-sizing:border-box;}'
-    +'html,body{margin:0;padding:0;background:#fff;}'
-    +'.label-page{width:100%;display:block;page-break-after:always;page-break-inside:avoid;}'
-    +'.label-page:last-child{page-break-after:avoid;}'
-    +'.label-img{width:100%;height:auto;display:block;vertical-align:top;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
-    +'@media print{'
-      +'@page{margin:0;padding:0;size:auto;}'
-      +'html{height:100%;overflow:hidden;}html,body{margin:0;padding:0;}'
-      +'.label-page{page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
-      +'.label-page:last-child{page-break-after:avoid;}'
-    +'}';
-
-
+  // Print each label exactly once: if an order appears in multiple groups,
+  // only emit it the first time its tracking number is encountered.
+  var printed={};
   var bodyHtml='';
   skuKeys.forEach(function(sku){
-    var grp=groups[sku].sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
+    var grp=groups[sku]
+      .filter(function(o){return !printed[o.tracking];})
+      .sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
     grp.forEach(function(o){
+      printed[o.tracking]=true;
       bodyHtml+='<div class="label-page"><img class="label-img" src="'+o.pageImg+'"/></div>';
     });
   });
+
+  // ── 4" × 6" thermal label CSS ──────────────────────────────────────────────
+  // @page size locked to 4in 6in so the OS cannot override with Letter/A4.
+  // .label-img uses object-fit:fill to stretch the captured image to exactly
+  // fill the label area without any white margin.
+  var css=
+     '*{margin:0;padding:0;box-sizing:border-box;}'
+    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;}'
+    +'.label-page{'
+      +'width:4in;height:6in;'
+      +'display:block;overflow:hidden;'
+      +'page-break-after:always;page-break-inside:avoid;'
+    +'}'
+    +'.label-page:last-child{page-break-after:avoid;}'
+    +'.label-img{'
+      +'width:4in;height:6in;'
+      +'display:block;'
+      +'object-fit:fill;'
+      +'image-rendering:-webkit-optimize-contrast;'
+      +'image-rendering:crisp-edges;'
+    +'}'
+    +'@media print{'
+      +'@page{size:4in 6in;margin:0;}'
+      +'html,body{width:4in;height:6in;margin:0;padding:0;}'
+      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
+      +'.label-page:last-child{page-break-after:avoid;}'
+      +'.label-img{width:4in;height:6in;object-fit:fill;}'
+    +'}';
 
   printViaIframe(css, bodyHtml);
 }
@@ -2339,10 +2390,18 @@ function doScan(raw){
   function extractFromGS1(s){
     var m = s.match(/\(92\)([0-9A-Z]{18,34})/i) || s.match(/92([0-9]{18,34})/);
     if(m) return m[1];
-    return s.replace(/^\(\d{2,4}\)/,'').replace(/^\d{2}(?=[A-Z0-9]{16,})/,'');
+    // Strip parenthetical AI prefix only (e.g. "(420)12345…")
+    var stripped = s.replace(/^\(\d{2,4}\)/,'');
+    // Only strip bare 2-digit numeric AI if the result does NOT start with a
+    // known carrier prefix — prevents mangling FedEx 96/61/74/75 barcodes
+    if(!/^(96|61|7[245]|1Z|9[0-9]|GFUS|SPX|SDX|SW|UUS|LSO|1L|TBA|1DS|GM|JD)/i.test(stripped)){
+      stripped = stripped.replace(/^\d{2}(?=[A-Z0-9]{16,})/,'');
+    }
+    return stripped;
   }
   var scannedExtracted = extractFromGS1(scanned) || scanned;
   var scannedNorm = norm(scannedExtracted);
+  var rawNorm = norm(scanned); // keep original for fallback matching
 
   // ── RACK SCAN MODE ──────────────────────────────
   if(packState==='rack-scan'){
@@ -2387,16 +2446,32 @@ function doScan(raw){
   // ── SHIPPING LABEL SCAN — completes order immediately ──
   var order = null;
 
-  // Exact match
+  // Exact match (GS1-extracted)
   for(var i=0;i<orders.length;i++){
     if(norm(orders[i].tracking)===scannedNorm){ order=orders[i]; break; }
   }
-  // Partial / embedded match
+  // Exact match against raw scan (catches barcodes where GS1 extraction wasn't needed)
+  if(!order && rawNorm !== scannedNorm){
+    for(var i=0;i<orders.length;i++){
+      if(norm(orders[i].tracking)===rawNorm){ order=orders[i]; break; }
+    }
+  }
+  // Partial / embedded match (GS1-extracted) — handles long barcodes containing tracking
   if(!order){
     for(var i=0;i<orders.length;i++){
       var t = norm(orders[i].tracking);
       if(t.length>=10 && scannedNorm.length>=10){
         if(scannedNorm.indexOf(t)>=0 || t.indexOf(scannedNorm)>=0){ order=orders[i]; break; }
+      }
+    }
+  }
+  // Partial / embedded match against raw scan — catches FedEx multi-piece barcodes where
+  // the tracking number is a prefix of a longer barcode (e.g. 96XXXX + sequence data)
+  if(!order && rawNorm !== scannedNorm){
+    for(var i=0;i<orders.length;i++){
+      var t = norm(orders[i].tracking);
+      if(t.length>=10 && rawNorm.length>=10){
+        if(rawNorm.indexOf(t)>=0 || t.indexOf(rawNorm)>=0){ order=orders[i]; break; }
       }
     }
   }
@@ -2693,146 +2768,6 @@ function renderDash(){
   }
 }
 
-function renderPayroll(){
-  var now=Date.now();
-
-  var dateEl=document.getElementById('pr-date');
-  if(dateEl) dateEl.textContent=shiftDate;
-
-
-  var activePackers=packers.filter(function(p){
-    return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
-      orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
-  });
-
-
-  var totalHrs=0, totalOrders=0, activeNow=0;
-  var rows=activePackers.map(function(p){
-    var ms=0;
-    (p.shiftSessions||[]).forEach(function(s){
-      var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
-      var outT=s.clockOut?new Date(s.clockOut).getTime():(s.out||0);
-      if(inT&&outT) ms+=(outT-inT);
-    });
-    if(p.online&&p.loginTime) ms+=(now-p.loginTime);
-    var hrs=ms/3600000;
-    totalHrs+=hrs;
-    var myDone=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';}).length;
-    totalOrders+=myDone;
-    if(p.online) activeNow++;
-    return {p:p, hrs:hrs, done:myDone};
-  });
-
-  var pEl=document.getElementById('pr-packers'); if(pEl) pEl.textContent=activePackers.length;
-  var hEl=document.getElementById('pr-hrs');     if(hEl) hEl.textContent=totalHrs.toFixed(2);
-  var oEl=document.getElementById('pr-orders');  if(oEl) oEl.textContent=totalOrders;
-  var aEl=document.getElementById('pr-active');  if(aEl) aEl.textContent=activeNow;
-
-
-  var sheet=document.getElementById('pr-sheet');
-  if(!sheet) return;
-
-  if(!activePackers.length){
-    sheet.innerHTML='<div style="color:var(--td);text-align:center;padding:20px;font-size:11px;">No clock-in data yet — packers clock in via scan gun at Pack Station.</div>';
-    var log=document.getElementById('pr-log'); if(log) log.innerHTML='';
-    return;
-  }
-
-  sheet.innerHTML='<table style="width:100%;border-collapse:collapse;">'
-    +'<tr><th style="text-align:left;padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">PACKER</th>'
-    +'<th style="text-align:center;padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">PACKAGES</th>'
-    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">FIRST IN</th>'
-    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">LAST OUT</th>'
-    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">TOTAL HRS</th>'
-    +'<th style="padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">ACTIONS</th></tr>'
-    +rows.map(function(r){
-      var col=packerColor(r.p);
-      var sessions=r.p.shiftSessions||[];
-      var firstIn='—';
-
-      var earliestMs=null;
-      if(sessions.length && sessions[0].clockIn) earliestMs=new Date(sessions[0].clockIn).getTime();
-      if(r.p.online && r.p.loginTime){
-        if(earliestMs===null || r.p.loginTime < earliestMs) earliestMs=r.p.loginTime;
-      }
-      if(earliestMs) firstIn=new Date(earliestMs).toLocaleTimeString();
-      var lastOut=r.p.online?'<span style="color:var(--gn);">● ACTIVE</span>':'—';
-      if(!r.p.online&&sessions.length){ var last=sessions[sessions.length-1]; var t2=last.clockOut?new Date(last.clockOut):null; if(t2) lastOut=t2.toLocaleTimeString(); }
-            return '<tr style="border-bottom:1px solid var(--bdr);">'
-        +'<td style="padding:9px 10px;"><span style="color:'+col+';font-weight:700;">'+r.p.name+'</span>'
-        +(isOffShift(r.p)?'<span style="font-size:8px;color:var(--td);margin-left:6px;">OFF SHIFT</span>':'')
-        +'</td>'
-        +'<td style="text-align:center;font-size:15px;font-weight:700;color:var(--cy);padding:9px 10px;">'+r.done+'</td>'
-        +'<td style="font-size:10px;padding:9px 10px;">'+firstIn+'</td>'
-        +'<td style="font-size:10px;padding:9px 10px;">'+lastOut+'</td>'
-        +'<td style="font-size:11px;color:var(--am);padding:9px 10px;">'+(r.hrs>0?r.hrs.toFixed(2)+' hrs':'—')+'</td>'
-        +'<td style="padding:6px 10px;white-space:nowrap;">'
-        +(r.p.online
-          ? '<button data-pr-clockout="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--am);background:transparent;color:var(--am);cursor:pointer;font-family:inherit;margin-right:4px;">⏹ CLOCK OUT</button>'
-          : '')
-        +(isOnShift(r.p)
-          ? '<button data-pr-deactivate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--bdr);background:transparent;color:var(--td);cursor:pointer;font-family:inherit;">○ OFF SHIFT</button>'
-          : '<button data-pr-activate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--gn)44;background:transparent;color:var(--gn);cursor:pointer;font-family:inherit;">● ON SHIFT</button>')
-        +'</td>'
-        +'</tr>';
-    }).join('')
-    +'<tr style="border-top:2px solid var(--bdr);font-weight:700;">'
-      +'<td style="padding:9px 10px;">TOTAL</td>'
-      +'<td style="text-align:center;color:var(--cy);font-size:15px;padding:9px 10px;">'+totalOrders+'</td>'
-      +'<td></td><td></td>'
-      +'<td style="color:var(--am);padding:9px 10px;">'+totalHrs.toFixed(2)+' hrs</td>'
-    +'</tr></table>';
-
-
-  sheet.querySelectorAll('[data-pr-clockout]').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var p=packers.find(function(pk){return pk.id===btn.dataset.prClockout;});
-      if(p) loginPacker(p.id);
-    });
-  });
-  sheet.querySelectorAll('[data-pr-deactivate]').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var p=packers.find(function(pk){return pk.id===btn.dataset.prDeactivate;});
-      if(p){ p.active=false; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
-    });
-  });
-  sheet.querySelectorAll('[data-pr-activate]').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var p=packers.find(function(pk){return pk.id===btn.dataset.prActivate;});
-      if(p){ p.active=true; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
-    });
-  });
-
-
-  var log=document.getElementById('pr-log');
-  if(!log) return;
-  var allSessions=[];
-  activePackers.forEach(function(p){
-    (p.shiftSessions||[]).forEach(function(s){
-      var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
-      var outT=s.clockOut?new Date(s.clockOut).getTime():(s.out||0);
-      var ms=inT&&outT?(outT-inT):0;
-      allSessions.push({name:p.name,color:packerColor(p),inT:inT,outT:outT,ms:ms});
-    });
-    if(p.online&&p.loginTime) allSessions.push({name:p.name,color:packerColor(p),inT:p.loginTime,outT:null,ms:0});
-  });
-  allSessions.sort(function(a,b){return b.inT-a.inT;});
-  if(!allSessions.length){ log.innerHTML='<div style="color:var(--td);font-size:10px;padding:10px;">No sessions yet.</div>'; return; }
-  log.innerHTML='<table style="width:100%;border-collapse:collapse;">'
-    +'<tr><th style="text-align:left;padding:6px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">PACKER</th>'
-    +'<th style="padding:6px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">CLOCK IN</th>'
-    +'<th style="padding:6px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">CLOCK OUT</th>'
-    +'<th style="padding:6px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);">DURATION</th></tr>'
-    +allSessions.map(function(s){
-      var dur=s.ms>0?Math.round(s.ms/60000)+' min':'—';
-      return '<tr style="border-bottom:1px solid var(--bdr);">'
-        +'<td style="padding:6px 10px;font-size:11px;color:'+s.color+';font-weight:600;">'+s.name+'</td>'
-        +'<td style="padding:6px 10px;font-size:10px;">'+(s.inT?new Date(s.inT).toLocaleTimeString():'—')+'</td>'
-        +'<td style="padding:6px 10px;font-size:10px;">'+(s.outT?new Date(s.outT).toLocaleTimeString():'<span style="color:var(--gn);">● Active</span>')+'</td>'
-        +'<td style="padding:6px 10px;font-size:10px;color:var(--td);">'+dur+'</td>'
-        +'</tr>';
-    }).join('')+'</table>';
-}
 
 function exportPayrollCSV(){
   var now=Date.now();
@@ -5066,15 +5001,18 @@ function renderProductivity(){
       name:    p.name,
       id:      p.id,
       done:    done,
-      active:  p.online || false,
+      onShift: p.active === true,          // on-shift (scheduled to work)
+      active:  p.online === true,          // currently clocked in
       avgMs:   avgMs
     };
-  }).filter(function(s){ return s.done > 0 || s.active || s.avgMs > 0; })
+  // Show everyone on-shift, plus anyone with orders/speed data even if off-shift
+  }).filter(function(s){ return s.onShift || s.done > 0 || s.active || s.avgMs > 0; })
     .sort(function(a,b){ return b.done - a.done; });
 
   var total  = stats.reduce(function(s,p){ return s+p.done; }, 0);
-  var active = stats.filter(function(s){ return s.active; }).length;
-  var avg    = stats.length ? (total/stats.length).toFixed(1) : 0;
+  var active = stats.filter(function(s){ return s.active; }).length;  // clocked-in count
+  var onShiftCount = stats.filter(function(s){ return s.onShift || s.active; }).length;
+  var avg    = onShiftCount ? (total/onShiftCount).toFixed(1) : 0;
   var top    = stats.length ? stats[0].name.split(' ')[0] : '—';
   var max    = stats.length ? stats[0].done : 1;
 
@@ -5094,13 +5032,18 @@ function renderProductivity(){
     chart.innerHTML = stats.map(function(s,i){
       var pct = max ? Math.round(s.done/max*100) : 0;
       var col = COLORS[i % COLORS.length];
+      var statusTag = s.active
+        ? '<span style="font-size:8px;color:var(--gn);margin-left:5px;">● CLOCKED IN</span>'
+        : s.onShift
+          ? '<span style="font-size:8px;color:var(--am);margin-left:5px;">◌ ON SHIFT</span>'
+          : '<span style="font-size:8px;color:var(--td);margin-left:5px;">○ OFF</span>';
       return '<div>'
-        +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
-          +'<span style="font-size:11px;color:var(--tx);">'+s.name+(s.active?' <span style="font-size:8px;color:var(--gn);">● ON</span>':'')+'</span>'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+          +'<span style="font-size:11px;color:var(--tx);">'+s.name+statusTag+'</span>'
           +'<span style="font-size:13px;font-weight:700;color:'+col+';">'+s.done+'</span>'
         +'</div>'
         +'<div style="background:var(--bdr);height:10px;border-radius:5px;overflow:hidden;">'
-          +'<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:5px;transition:width .4s;"></div>'
+          +'<div style="width:'+pct+'%;height:100%;background:'+col+';border-radius:5px;transition:width .4s;'+(s.done===0?'opacity:0.3;':'')+'"></div>'
         +'</div>'
         +'</div>';
     }).join('');
@@ -5142,17 +5085,154 @@ function renderProductivity(){
       +stats.map(function(s,i){
         var mins = s.avgMs ? (s.avgMs/60000).toFixed(1)+' min' : '—';
         var bg   = i%2===0?'':'background:rgba(255,255,255,0.02);';
+        var statusColor = s.active ? 'var(--gn)' : s.onShift ? 'var(--am)' : 'var(--bdr)';
+        var statusLabel = s.active ? 'CLOCKED IN' : s.onShift ? 'ON SHIFT' : 'OFF';
         return '<tr style="'+bg+'">'
           +'<td style="padding:7px 8px;color:var(--tx);">'+s.name+'</td>'
           +'<td style="padding:7px 8px;font-weight:700;color:var(--cy);">'+s.done+'</td>'
           +'<td style="padding:7px 8px;">'
-            +'<span style="font-size:8px;padding:2px 7px;border:1px solid '+(s.active?'var(--gn)':'var(--bdr)')+';color:'+(s.active?'var(--gn)':'var(--td)')+';">'
-            +(s.active?'ACTIVE':'OFF')+'</span>'
+            +'<span style="font-size:8px;padding:2px 7px;border:1px solid '+statusColor+';color:'+statusColor+';">'
+            +statusLabel+'</span>'
           +'</td>'
           +'<td style="padding:7px 8px;color:var(--td);">'+mins+'</td>'
           +'</tr>';
       }).join('')
       +'</tbody></table>';
+  }
+
+  // ── Timesheet ────────────────────────────────────────────
+  var now = Date.now();
+  var shiftPackers = packers.filter(function(p){
+    return p.active===true || p.online===true
+      || (p.shiftSessions&&p.shiftSessions.length>0)
+      || p.ordersCompleted > 0;
+  });
+
+  var dateEl = document.getElementById('pr-date');
+  if(dateEl) dateEl.textContent = new Date().toLocaleDateString();
+
+  var totalHrs = 0, totalOrders = 0, activeNow = 0;
+  var sheetRows = shiftPackers.map(function(p){
+    var ms = 0;
+    (p.shiftSessions||[]).forEach(function(s){
+      var inT  = s.clockIn  ? new Date(s.clockIn).getTime()  : (s.in||0);
+      var outT = s.clockOut ? new Date(s.clockOut).getTime() : (s.out||0);
+      if(inT && outT) ms += (outT - inT);
+    });
+    if(p.online && p.loginTime) ms += (now - p.loginTime);
+    var hrs = ms / 3600000;
+    totalHrs += hrs;
+    var sessionDone = orders.filter(function(o){ return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done'; }).length;
+    var done = p.ordersCompleted > 0 ? p.ordersCompleted : sessionDone;
+    totalOrders += done;
+    if(p.online) activeNow++;
+    return {p:p, hrs:hrs, done:done};
+  });
+
+  var pEl = document.getElementById('pr-packers'); if(pEl) pEl.textContent = shiftPackers.length;
+  var hEl = document.getElementById('pr-hrs');     if(hEl) hEl.textContent = totalHrs.toFixed(2);
+  var oEl = document.getElementById('pr-orders');  if(oEl) oEl.textContent = totalOrders;
+  var aNEl = document.getElementById('pr-active'); if(aNEl) aNEl.textContent = activeNow;
+
+  var sheet = document.getElementById('pr-sheet');
+  if(sheet){
+    if(!shiftPackers.length){
+      sheet.innerHTML = '<div style="color:var(--td);text-align:center;padding:20px;font-size:11px;">No packers on shift yet.</div>';
+    } else {
+      sheet.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+        +'<tr>'
+        +['PACKER','ORDERS','FIRST IN','LAST OUT','TOTAL HRS','ACTIONS'].map(function(h){
+          return '<th style="text-align:left;padding:8px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);white-space:nowrap;color:var(--td);">'+h+'</th>';
+        }).join('')
+        +'</tr>'
+        +sheetRows.map(function(r){
+          var col = packerColor(r.p);
+          var sessions = r.p.shiftSessions||[];
+          var earliestMs = null;
+          if(sessions.length && sessions[0].clockIn) earliestMs = new Date(sessions[0].clockIn).getTime();
+          if(r.p.online && r.p.loginTime && (earliestMs===null || r.p.loginTime < earliestMs)) earliestMs = r.p.loginTime;
+          var firstIn = earliestMs ? new Date(earliestMs).toLocaleTimeString() : '—';
+          var lastOut = r.p.online ? '<span style="color:var(--gn);">● ACTIVE</span>' : '—';
+          if(!r.p.online && sessions.length){
+            var last = sessions[sessions.length-1];
+            var t2 = last.clockOut ? new Date(last.clockOut) : null;
+            if(t2) lastOut = t2.toLocaleTimeString();
+          }
+          return '<tr style="border-bottom:1px solid var(--bdr);">'
+            +'<td style="padding:9px 10px;"><span style="color:'+col+';font-weight:700;">'+r.p.name+'</span>'
+            +(isOffShift(r.p)?'<span style="font-size:8px;color:var(--td);margin-left:6px;">OFF SHIFT</span>':'')
+            +'</td>'
+            +'<td style="text-align:left;font-size:15px;font-weight:700;color:var(--cy);padding:9px 10px;">'+r.done+'</td>'
+            +'<td style="font-size:10px;padding:9px 10px;">'+firstIn+'</td>'
+            +'<td style="font-size:10px;padding:9px 10px;">'+lastOut+'</td>'
+            +'<td style="font-size:11px;color:var(--am);padding:9px 10px;">'+(r.hrs>0?r.hrs.toFixed(2)+' hrs':'—')+'</td>'
+            +'<td style="padding:6px 10px;white-space:nowrap;">'
+            +(r.p.online
+              ? '<button data-ts-clockout="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--am);background:transparent;color:var(--am);cursor:pointer;font-family:inherit;margin-right:4px;">⏹ CLOCK OUT</button>'
+              : '')
+            +(isOnShift(r.p)
+              ? '<button data-ts-deactivate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--bdr);background:transparent;color:var(--td);cursor:pointer;font-family:inherit;">○ OFF SHIFT</button>'
+              : '<button data-ts-activate="'+r.p.id+'" style="font-size:8px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--gn)44;background:transparent;color:var(--gn);cursor:pointer;font-family:inherit;">● ON SHIFT</button>')
+            +'</td></tr>';
+        }).join('')
+        +'<tr style="border-top:2px solid var(--bdr);font-weight:700;">'
+          +'<td style="padding:9px 10px;">TOTAL</td>'
+          +'<td style="font-size:15px;color:var(--cy);padding:9px 10px;">'+totalOrders+'</td>'
+          +'<td></td><td></td>'
+          +'<td style="color:var(--am);padding:9px 10px;">'+totalHrs.toFixed(2)+' hrs</td>'
+          +'<td></td>'
+        +'</tr></table>';
+
+      sheet.querySelectorAll('[data-ts-clockout]').forEach(function(btn){
+        btn.addEventListener('click',function(){ loginPacker(btn.dataset.tsClockout); });
+      });
+      sheet.querySelectorAll('[data-ts-deactivate]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var p=packers.find(function(pk){return pk.id===btn.dataset.tsDeactivate;});
+          if(p){ p.active=false; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
+        });
+      });
+      sheet.querySelectorAll('[data-ts-activate]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var p=packers.find(function(pk){return pk.id===btn.dataset.tsActivate;});
+          if(p){ p.active=true; saveStaff(); renderProductivity(); renderPackerPanel(); renderQuickLoginBtns(); }
+        });
+      });
+    }
+  }
+
+  // ── Clock-in log ─────────────────────────────────────────
+  var log = document.getElementById('pr-log');
+  if(log){
+    var allSessions = [];
+    shiftPackers.forEach(function(p){
+      (p.shiftSessions||[]).forEach(function(s){
+        var inT  = s.clockIn  ? new Date(s.clockIn).getTime()  : (s.in||0);
+        var outT = s.clockOut ? new Date(s.clockOut).getTime() : (s.out||0);
+        allSessions.push({name:p.name, color:packerColor(p), inT:inT, outT:outT, ms:inT&&outT?(outT-inT):0});
+      });
+      if(p.online && p.loginTime) allSessions.push({name:p.name, color:packerColor(p), inT:p.loginTime, outT:null, ms:0});
+    });
+    allSessions.sort(function(a,b){ return b.inT - a.inT; });
+    if(!allSessions.length){
+      log.innerHTML = '<div style="color:var(--td);font-size:10px;padding:10px;">No clock-in sessions yet.</div>';
+    } else {
+      log.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+        +'<tr>'
+        +['PACKER','CLOCK IN','CLOCK OUT','DURATION'].map(function(h){
+          return '<th style="text-align:left;padding:6px 10px;font-size:9px;letter-spacing:2px;border-bottom:1px solid var(--bdr);color:var(--td);">'+h+'</th>';
+        }).join('')
+        +'</tr>'
+        +allSessions.map(function(s){
+          var dur = s.ms > 0 ? Math.round(s.ms/60000)+' min' : '—';
+          return '<tr style="border-bottom:1px solid var(--bdr);">'
+            +'<td style="padding:6px 10px;font-size:11px;color:'+s.color+';font-weight:600;">'+s.name+'</td>'
+            +'<td style="padding:6px 10px;font-size:10px;">'+(s.inT?new Date(s.inT).toLocaleTimeString():'—')+'</td>'
+            +'<td style="padding:6px 10px;font-size:10px;">'+(s.outT?new Date(s.outT).toLocaleTimeString():'<span style="color:var(--gn);">● Active</span>')+'</td>'
+            +'<td style="padding:6px 10px;font-size:10px;color:var(--td);">'+dur+'</td>'
+            +'</tr>';
+        }).join('')+'</table>';
+    }
   }
 }
 
