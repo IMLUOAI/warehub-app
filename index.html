@@ -828,6 +828,7 @@ async function pinReset(){
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:nowrap;align-items:center;">
       <button class="btn btn-r" id="clear-btn" style="font-size:9px;white-space:nowrap;" onclick="if(confirm('Clear ALL orders? This cannot be undone.')){orders=[];ai=0;pm('Orders cleared.');renderAssignPanel();renderDash();renderFloor();renderQueue();renderActive();document.getElementById('debug-log').textContent='';}">✕ CLEAR ALL ORDERS</button>
       <button class="btn" id="print-sku-sort-btn" style="font-size:9px;white-space:nowrap;border-color:var(--pu);color:var(--pu);background:#c77dff10;" onclick="printSkuSort()">🖨 PRINT BY SKU GROUP</button>
+      <button class="btn" id="print-packer-sort-btn" style="font-size:9px;white-space:nowrap;border-color:var(--cy);color:var(--cy);background:#00e5ff10;" onclick="printByPacker()">🖨 PRINT BY PACKER</button>
       <button class="btn" id="copy-debug-btn" style="font-size:9px;white-space:nowrap;border-color:var(--am);color:var(--am);" onclick="var txt=document.getElementById('debug-log').textContent;if(!txt){pm('Debug log is empty.');return;}var ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;left:-9999px;top:0;';document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,99999);try{document.execCommand('copy');pm('✓ Debug log copied!');}catch(e){pm('⚠ Auto-copy failed.');}document.body.removeChild(ta);">📋 COPY DEBUG LOG</button>
     </div>
 
@@ -2076,6 +2077,125 @@ function printSkuSort(){
   printViaIframe(css, bodyHtml);
 }
 
+function printByPacker(){
+  if(!orders.length){pm('Nothing to print — import a PDF batch first.');return;}
+  var withImg=orders.filter(function(o){return o.pageImg;});
+  if(!withImg.length){
+    pm('No label images — please re-import the PDF first.');
+    return;
+  }
+
+  // ── Group labels by assigned packer ────────────────────────────────────────
+  var packerGroups={};   // { packerId: { name, color, orders:[] } }
+  var unassigned=[];
+
+  withImg.forEach(function(o){
+    var pid=o.assignedTo||null;
+    if(!pid){
+      unassigned.push(o);
+      return;
+    }
+    if(!packerGroups[pid]){
+      var p=packers.find(function(x){return x.id===pid;});
+      packerGroups[pid]={
+        name: p ? p.name : 'Packer '+pid,
+        color: p ? packerColor(p) : '#888',
+        orders:[]
+      };
+    }
+    packerGroups[pid].orders.push(o);
+  });
+
+  // Gather packer IDs in insertion order and sort each group by shelf location
+  var packerIds=Object.keys(packerGroups);
+  if(!packerIds.length && !unassigned.length){
+    pm('No labels to print.');
+    return;
+  }
+  packerIds.forEach(function(pid){
+    packerGroups[pid].orders.sort(function(a,b){
+      return (a.shelf||'').localeCompare(b.shelf||'');
+    });
+  });
+  unassigned.sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
+
+  // ── Build HTML ──────────────────────────────────────────────────────────────
+  var bodyHtml='';
+
+  function dividerPage(label, color, count){
+    // A full 4"×6" cover sheet between packer groups
+    var safeLabel=label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<div class="label-page divider-page" style="background:'+color+'20;border:4px solid '+color+';">'
+      +'<div class="divider-inner">'
+      +'<div class="divider-name" style="color:'+color+';">'+safeLabel+'</div>'
+      +'<div class="divider-count">'+count+' label'+(count!==1?'s':'')+'</div>'
+      +'</div>'
+      +'</div>';
+  }
+
+  packerIds.forEach(function(pid){
+    var grp=packerGroups[pid];
+    bodyHtml+=dividerPage(grp.name, grp.color, grp.orders.length);
+    grp.orders.forEach(function(o){
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+o.pageImg+'"/></div>';
+    });
+  });
+
+  if(unassigned.length){
+    bodyHtml+=dividerPage('UNASSIGNED','#888',unassigned.length);
+    unassigned.forEach(function(o){
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+o.pageImg+'"/></div>';
+    });
+  }
+
+  // ── 4"×6" thermal CSS + divider styles ─────────────────────────────────────
+  var css=
+     '*{margin:0;padding:0;box-sizing:border-box;}'
+    +'html,body{width:4in;height:6in;margin:0;padding:0;background:#fff;}'
+    +'.label-page{'
+      +'width:4in;height:6in;'
+      +'display:block;overflow:hidden;'
+      +'page-break-after:always;page-break-inside:avoid;'
+    +'}'
+    +'.label-page:last-child{page-break-after:avoid;}'
+    +'.label-img{'
+      +'width:4in;height:6in;'
+      +'display:block;'
+      +'object-fit:fill;'
+      +'image-rendering:-webkit-optimize-contrast;'
+      +'image-rendering:crisp-edges;'
+    +'}'
+    +'.divider-page{'
+      +'display:flex;align-items:center;justify-content:center;'
+      +'width:4in;height:6in;'
+    +'}'
+    +'.divider-inner{'
+      +'text-align:center;padding:24px;'
+    +'}'
+    +'.divider-name{'
+      +'font-family:Arial,sans-serif;'
+      +'font-size:52px;font-weight:900;'
+      +'letter-spacing:2px;line-height:1.1;'
+      +'word-break:break-word;'
+    +'}'
+    +'.divider-count{'
+      +'font-family:Arial,sans-serif;'
+      +'font-size:28px;font-weight:600;'
+      +'color:#444;margin-top:16px;'
+    +'}'
+    +'@media print{'
+      +'@page{size:4in 6in;margin:0;}'
+      +'html,body{width:4in;height:6in;margin:0;padding:0;}'
+      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
+      +'.label-page:last-child{page-break-after:avoid;}'
+      +'.label-img{width:4in;height:6in;object-fit:fill;}'
+    +'}';
+
+  var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
+  pm('Printing '+total+' labels across '+(packerIds.length+(unassigned.length?1:0))+' groups…');
+  printViaIframe(css, bodyHtml);
+}
+
 function printPickLists(){
   if(!packers.length){alert('No packers added.');return;}
   var assigned=orders.filter(function(o){return o.assignedTo&&o.status==='pending';});
@@ -2300,7 +2420,7 @@ function loginPacker(rawId){
   p.active=true;
   p.loginTime=Date.now();
   currentPacker=p;
-  _lastCompleteTime=null;  // reset so first order uses loginTime as start
+  delete _lastCompleteTime[p.id];  // reset so first order uses loginTime as start
   bpLogin();
   setLoginMsg('','');
   document.getElementById('login-scan-in').value='';
@@ -2362,7 +2482,7 @@ function focusScan(){ var f=document.getElementById('scan-in'); if(f) f.focus();
 var packState = 'idle';
 var activeOrder = null;
 var verifySkus = [];
-var _lastCompleteTime = null;  // tracks when last order was finished (for elapsed calc)
+var _lastCompleteTime = {};  // per-packer map {packerId: timestamp} for elapsed calc
 
 function setPackState(state){
   packState = state;
@@ -2491,9 +2611,15 @@ function doScan(raw){
     focusScan(); return;
   }
 
-  // Set orderStartTime if not already set (used for elapsed time calculation)
+  // Set orderStartTime if not already set (used for elapsed time calculation).
+  // Use the assigned packer's last-complete time so timing isn't mixed across packers.
   if(!order.orderStartTime){
-    order.orderStartTime = _lastCompleteTime || (currentPacker && currentPacker.loginTime ? currentPacker.loginTime : Date.now());
+    var assignedP = order.assignedTo
+      ? packers.find(function(p){ return p.id===order.assignedTo && p.online; })
+      : null;
+    var refPacker = assignedP || currentPacker;
+    order.orderStartTime = (refPacker && _lastCompleteTime[refPacker.id])
+      || (refPacker && refPacker.loginTime ? refPacker.loginTime : Date.now());
   }
 
   // Complete immediately — no SKU verification
@@ -2506,27 +2632,40 @@ function completeOrder(order, scannedTracking){
   order.status='done';
   order.completedAt=new Date().toLocaleTimeString();
   order.orderEndTime=now;
-  if(!order.packedBy) order.packedBy=currentPacker?currentPacker.id:null;
-  if(!order.assignedTo&&currentPacker) order.assignedTo=currentPacker.id;
 
-  if(currentPacker){
-    // Use time since last completed order (or clock-in time) as start reference
+  // Determine which packer to credit:
+  // 1. The packer the order is assigned to (if they are currently clocked in)
+  // 2. Fall back to currentPacker
+  // 3. Last resort: any online packer
+  var creditPacker = null;
+  if(order.assignedTo){
+    creditPacker = packers.find(function(p){ return p.id===order.assignedTo && p.online; }) || null;
+  }
+  if(!creditPacker) creditPacker = currentPacker;
+  if(!creditPacker) creditPacker = packers.find(function(p){ return p.online; }) || null;
+
+  if(!order.packedBy) order.packedBy = creditPacker ? creditPacker.id : null;
+  if(!order.assignedTo && creditPacker) order.assignedTo = creditPacker.id;
+
+  if(creditPacker){
+    // Use per-packer last-complete time so multiple packers don't mix up timing
     var startRef = order.orderStartTime
-      || _lastCompleteTime
-      || (currentPacker.loginTime ? currentPacker.loginTime : now);
+      || _lastCompleteTime[creditPacker.id]
+      || (creditPacker.loginTime ? creditPacker.loginTime : now);
     var elapsed = now - startRef;
-    // Clamp to a reasonable range (5s min, 60min max) to filter scanner glitches
+    // Clamp: 5s min, 60min max
     if(elapsed < 5000) elapsed = 5000;
     if(elapsed > 3600000) elapsed = 3600000;
-    currentPacker.ordersCompleted++;
-    currentPacker.orderTimes.push(elapsed);
-    currentPacker.totalPackTime+=elapsed;
-    currentPacker.skusScanned+=(order.skus||[]).reduce(function(s,k){return s+k.qty;},0);
-    _lastCompleteTime = now;
+    creditPacker.ordersCompleted++;
+    creditPacker.orderTimes.push(elapsed);
+    creditPacker.totalPackTime += elapsed;
+    creditPacker.skusScanned += (order.skus||[]).reduce(function(s,k){return s+k.qty;},0);
+    _lastCompleteTime[creditPacker.id] = now;
     saveStaff();
   }
 
-  setFb('✓  '+order.tracking+'  ·  '+(order.skus||[]).map(function(s){return s.sku+'×'+s.qty;}).join(', '),'var(--gn)');
+  var packerTag = creditPacker ? '  ['+creditPacker.name+']' : '';
+  setFb('✓  '+order.tracking+'  ·  '+(order.skus||[]).map(function(s){return s.sku+'×'+s.qty;}).join(', ')+packerTag,'var(--gn)');
   clearErr(); bpDone(); flash('ok');
 
 
