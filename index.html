@@ -6206,7 +6206,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">DEVELOPER REFERENCE</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">App Config &amp; Service Registry</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub · Double Sided ISCM LLC · March 2026</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub v2.3 · Double Sided ISCM LLC · March 2026</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-c" onclick="devSave()" style="font-size:9px;">💾 SAVE NOTES</button>
@@ -6305,6 +6305,38 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
           <div class="dev-field"><div class="dev-label">RESET PIN</div><button class="btn btn-r" onclick="pinReset()" style="font-size:9px;padding:4px 12px;">🔐 RESET PIN</button></div>
           <div class="dev-field dev-wide"><div class="dev-label">HOW TO CHANGE PIN</div><div class="dev-note">Click RESET PIN → page reloads → enter new 6-digit PIN (enter twice to confirm). New hash saves to KV automatically — all devices pick it up on next open.</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">SECURITY NOTE</div><div class="dev-note">PIN is never stored as plaintext. Only the SHA-256 hash lives in KV. Even with KV access the PIN cannot be reversed from the hash.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Changelog ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📋 Changelog</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field dev-wide"><div class="dev-label">v2.3 — March 2026</div><div class="dev-note">
+            <strong>feat</strong> Print by Packer — named 4"×6" divider cover page per packer, labels sorted by shelf location; unassigned group at end<br>
+            <strong>feat</strong> Batch completeness — status bar now shows <code>X/N labels parsed</code> and warns on any skipped pages<br>
+            <strong>fix</strong> Label image quality raised to scale 2.0 / JPEG 92% (~144 DPI) for sharper thermal output<br>
+            <strong>fix</strong> <code>kvTestConnection()</code> implemented — ☁ icon pings Worker live and reports exact HTTP error<br>
+            <strong>fix</strong> FedEx GS1-128 multi-piece barcodes — raw-scan fallback pass prevents "not found" errors<br>
+            <strong>fix</strong> Multi-packer attribution — <code>order.assignedTo</code> is primary credit source in <code>completeOrder()</code><br>
+            <strong>fix</strong> <code>_lastCompleteTime</code> changed to per-packer map for accurate individual pack speed<br>
+            <strong>fix</strong> Stats panel shows all on-shift packers using persisted <code>p.ordersCompleted</code><br>
+            <strong>fix</strong> SKU-grouped printing deduplicates multi-SKU orders across groups<br>
+            <strong>fix</strong> Full carrier support — LSO, OnTrac, Amazon, DHL, SDX added to CR map + TPATS<br>
+            <strong>fix</strong> Full button audit — 80+ handlers verified; 1 broken handler found and fixed
+          </div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">v2.2 — March 2026</div><div class="dev-note">
+            Carrier parsing overhaul (11 carriers). Pack speed elapsed time fix. renderPayroll() removed — logic folded into renderProductivity(). Timesheet + clock-in log added to Stats.
+          </div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">v2.1 — March 2026</div><div class="dev-note">
+            iPad PDF parse speed (scale cap, JPEG compression, 10-page yield). Fix PDF double-trigger. Google Maps duplicate script guard. Vehicle delete DOM fix.
+          </div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">v2.0 — March 2026</div><div class="dev-note">
+            PIN lock with Rubik's cube animation. Vehicle tracking module. Returns intake with photo support. Rack map SVG (83 spots, 6 zones). AI assistant (Claude Sonnet). FM radio player. Dev panel rewrite.
+          </div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">v1.x — Feb 2026</div><div class="dev-note">
+            Initial build: Import → Packers → Pack Station → Dashboard → Stats → Floor Display. Cloudflare KV staff sync. MSAL Excel integration. GS1-128 barcode support.
+          </div></div>
         </div></div>
       </div>
 
