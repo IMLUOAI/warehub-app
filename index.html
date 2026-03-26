@@ -2324,13 +2324,15 @@ async function printByPacker(){
   // ── Build HTML ──────────────────────────────────────────────────────────────
   var bodyHtml='';
 
-  function dividerPage(label, color, count){
-    // A full 4"×6" cover sheet between packer groups
+  function dividerPage(label, _color, count){
+    // Monochrome divider — thermal printers can't reproduce colour.
+    // Uses solid black header bar (white text) + large count in body.
     var safeLabel=label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="label-page divider-page" style="background:'+color+'20;border:4px solid '+color+';">'
-      +'<div class="divider-inner">'
-      +'<div class="divider-name" style="color:'+color+';">'+safeLabel+'</div>'
-      +'<div class="divider-count">'+count+' label'+(count!==1?'s':'')+'</div>'
+    return '<div class="label-page divider-page">'
+      +'<div class="divider-header">'+safeLabel+'</div>'
+      +'<div class="divider-body">'
+        +'<div class="divider-count">'+count+'</div>'
+        +'<div class="divider-unit">LABEL'+(count!==1?'S':'')+'</div>'
       +'</div>'
       +'</div>';
   }
@@ -2371,23 +2373,35 @@ async function printByPacker(){
       +'image-rendering:-webkit-optimize-contrast;'
       +'image-rendering:crisp-edges;'
     +'}'
+    // Divider page — monochrome only (thermal printers ignore colour)
     +'.divider-page{'
-      +'display:flex;align-items:center;justify-content:center;'
+      +'display:flex;flex-direction:column;'
       +'width:4in;height:6in;'
+      +'border:6px solid #000;background:#fff;'
     +'}'
-    +'.divider-inner{'
-      +'text-align:center;padding:24px;'
-    +'}'
-    +'.divider-name{'
+    +'.divider-header{'
+      +'background:#000;color:#fff;'
       +'font-family:Arial,sans-serif;'
-      +'font-size:52px;font-weight:900;'
+      +'font-size:44px;font-weight:900;'
       +'letter-spacing:2px;line-height:1.1;'
-      +'word-break:break-word;'
+      +'padding:22px 18px;'
+      +'text-align:center;word-break:break-word;'
+      +'flex-shrink:0;'
+    +'}'
+    +'.divider-body{'
+      +'flex:1;display:flex;flex-direction:column;'
+      +'align-items:center;justify-content:center;'
+      +'background:#fff;'
     +'}'
     +'.divider-count{'
       +'font-family:Arial,sans-serif;'
-      +'font-size:28px;font-weight:600;'
-      +'color:#444;margin-top:16px;'
+      +'font-size:100px;font-weight:900;'
+      +'color:#000;line-height:1;'
+    +'}'
+    +'.divider-unit{'
+      +'font-family:Arial,sans-serif;'
+      +'font-size:24px;font-weight:700;'
+      +'color:#000;letter-spacing:5px;margin-top:10px;'
     +'}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
