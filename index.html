@@ -1622,6 +1622,9 @@ async function parsePdf(file){
 
   try{
     var ab  = await file.arrayBuffer();
+    // pdf.js transfers (neuters) the ArrayBuffer when you pass it as {data:ab}.
+    // Slice a copy first so we have valid bytes to store in IndexedDB.
+    var abForIdb = ab.slice(0);
     var pdf = await pdfjsLib.getDocument({data:ab}).promise;
     var n   = pdf.numPages;
     pm('⟳ Parsing '+n+' page(s)…');
@@ -1694,7 +1697,7 @@ async function parsePdf(file){
     if(!out.length){ pm('⚠ No orders found — check debug log below'); return; }
     initOrders(out);
     // Persist raw PDF + order metadata to IndexedDB for refresh survival
-    idbSaveBatch(ab, out).catch(function(e){ console.warn('[idbSaveBatch]', e); });
+    idbSaveBatch(abForIdb, out).catch(function(e){ console.warn('[idbSaveBatch]', e); });
     window._parsing = false;
     var skipped = n - out.length;
     var msg = '✓ '+out.length+'/'+n+' label(s) parsed.';
@@ -2173,22 +2176,31 @@ async function printSkuSort(){
     return;
   }
 
+  // ── Open print window NOW (still inside the user-gesture call frame) ────────
+  // window.open() is blocked as a "popup" if called after any await. Opening it
+  // here — synchronously — keeps it in the same gesture event and the browser
+  // allows it. We show a loading placeholder until the render is done.
+  var printWin = window.open('', '_blank', 'width=800,height=600');
+  if(!printWin){
+    pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
+    return;
+  }
+  printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+    +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
+    +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
+    +'</style></head><body>⟳ Rendering high-quality labels…</body></html>');
+
   pm('⟳ Building sorted labels ('+withImg.length+')…');
 
   // Group by ALL distinct SKUs in each order so multi-SKU orders appear in every
   // relevant group. Each physical label still prints only once per unique order.
-  // (We track printed orders by tracking number to avoid duplicates when an order
-  //  has multiple distinct SKUs — it prints in the FIRST matching group only.)
   var groups={};
   withImg.forEach(function(o){
-    // Build deduplicated list of SKUs for this order
-    var skuList=[];
-    var seen={};
+    var skuList=[]; var seen={};
     (o.skus&&o.skus.length?o.skus:[{sku:'UNKNOWN'}]).forEach(function(s){
       var k=s.sku||'UNKNOWN';
       if(!seen[k]){seen[k]=true;skuList.push(k);}
     });
-    // Register order under each of its SKUs
     skuList.forEach(function(sku){
       if(!groups[sku]) groups[sku]=[];
       groups[sku].push(o);
@@ -2196,20 +2208,16 @@ async function printSkuSort(){
   });
   var skuKeys=Object.keys(groups).sort();
 
-  // Build ordered list of page indices to render at high quality
-  var orderedOrders=[];
-  var printed={};
+  // Build ordered list (dedup, shelf-sorted)
+  var orderedOrders=[]; var printed={};
   skuKeys.forEach(function(sku){
     var grp=groups[sku]
       .filter(function(o){return !printed[o.tracking];})
       .sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
-    grp.forEach(function(o){
-      printed[o.tracking]=true;
-      orderedOrders.push(o);
-    });
+    grp.forEach(function(o){ printed[o.tracking]=true; orderedOrders.push(o); });
   });
 
-  // Try high-quality render from stored PDF (288 DPI PNG)
+  // High-quality render from stored PDF (4× PNG, ~288 DPI)
   var pageIndices=orderedOrders.map(function(o){return o.pageIndex!=null?o.pageIndex:null;});
   var hiRes=null;
   if(pageIndices.some(function(x){return x!=null;})){
@@ -2221,31 +2229,17 @@ async function printSkuSort(){
 
   var bodyHtml='';
   orderedOrders.forEach(function(o){
-    var src = (hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
+    var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
     bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
   });
-  pm('✓ '+orderedOrders.length+' label(s) ready — opening print dialog…');
 
   // ── 4" × 6" thermal label CSS ──────────────────────────────────────────────
-  // body height is intentionally NOT fixed — fixing it to 6in fights the
-  // printer driver's non-printable top margin and clips the label head.
-  // object-fit:contain keeps the full image inside the safe printable area.
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
     +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
-    +'.label-page{'
-      +'width:4in;height:6in;'
-      +'display:flex;align-items:center;justify-content:center;'
-      +'page-break-after:always;page-break-inside:avoid;'
-    +'}'
+    +'.label-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;page-break-inside:avoid;}'
     +'.label-page:last-child{page-break-after:avoid;}'
-    +'.label-img{'
-      +'width:4in;height:6in;'
-      +'display:block;'
-      +'object-fit:contain;'
-      +'image-rendering:-webkit-optimize-contrast;'
-      +'image-rendering:crisp-edges;'
-    +'}'
+    +'.label-img{width:4in;height:6in;display:block;object-fit:contain;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;margin:0;padding:0;}'
@@ -2254,7 +2248,9 @@ async function printSkuSort(){
       +'.label-img{width:4in;height:6in;object-fit:contain;}'
     +'}';
 
-  printViaIframe(css, bodyHtml);
+  // Populate the already-open window and trigger print
+  pm('✓ '+orderedOrders.length+' label(s) ready — opening print dialog…');
+  printViaIframe(css, bodyHtml, printWin);
 }
 
 async function printByPacker(){
@@ -2264,6 +2260,17 @@ async function printByPacker(){
     pm('No label images — please re-import the PDF first.');
     return;
   }
+
+  // Open print window synchronously (before any await) to avoid popup block
+  var printWin = window.open('', '_blank', 'width=800,height=600');
+  if(!printWin){
+    pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
+    return;
+  }
+  printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+    +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
+    +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
+    +'</style></head><body>⟳ Rendering high-quality labels…</body></html>');
 
   pm('⟳ Building packer stacks…');
 
@@ -2391,8 +2398,8 @@ async function printByPacker(){
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
-  pm('Printing '+total+' labels across '+(packerIds.length+(unassigned.length?1:0))+' groups…');
-  printViaIframe(css, bodyHtml);
+  pm('✓ '+total+' label(s) ready — opening print dialog…');
+  printViaIframe(css, bodyHtml, printWin);
 }
 
 function printPickLists(){
@@ -3431,9 +3438,11 @@ function printPickLists(){
   if(plOv) plOv.classList.add('show');
 }
 
-function printViaIframe(css, bodyHtml){
-
-  var w = window.open('', '_blank', 'width=800,height=600');
+// existingWin: pass a pre-opened window when calling from an async function to avoid
+// popup-blocker issues. If omitted a new window is opened synchronously (fine for
+// synchronous callers like printPickLists/printPackerCards).
+function printViaIframe(css, bodyHtml, existingWin){
+  var w = existingWin || window.open('', '_blank', 'width=800,height=600');
   if(!w){
     pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.');
     return;
@@ -3448,7 +3457,7 @@ function printViaIframe(css, bodyHtml){
       setTimeout(function(){ w.close(); }, 1500);
     }, 400);
   };
-
+  // Fallback for browsers that don't fire onload on document.write
   setTimeout(function(){
     if(w && !w.closed){
       try{ w.focus(); w.print(); }catch(e){}
