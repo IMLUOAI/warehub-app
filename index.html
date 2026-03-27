@@ -1257,28 +1257,19 @@ function matchTracking(words){
     rows[row].push(w);
   });
   var rowKeys=Object.keys(rows).map(Number).sort(function(a,b){return a-b;});
-  for(var ri=0;ri<rowKeys.length;ri++){
-    var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
-    var concat=sorted.map(function(w){return clean(w.text);}).join('')
-  
-    if(concat.length<8) continue;
-    for(var j=0;j<TPATS.length;j++){
-      var m=concat.match(TPATS[j].r);
-      if(m) return m[1];
-    }
-  }
-
-
-
-
-  // FedEx barcode-row extraction.
-  // Also handles FedEx SmartPost (9631-prefix) whose tracking number is printed
-  // across two visual groups on the label, e.g. "9631 0913 5" on row 1 and
-  // "(000 000 0000) 3" on a nearby row.  When a single row starts with a FedEx
-  // prefix (96/61/74/75) but has fewer than 20 digits, we sweep the nearest rows
-  // within 100 vertical units and append their digits before the TPAT match.
+  // ── FedEx barcode-row extraction — intentionally BEFORE generic row scan ─────
+  // FedEx SmartPost labels contain BOTH a FedEx tracking (9631-prefix) and a USPS
+  // delivery tracking (9261-prefix) on the same page.  The generic row-concat loop
+  // below would find the USPS number first and return the wrong carrier.  By running
+  // FedEx extraction first on any page that mentions FedEx or starts with 9631, the
+  // correct FedEx number is returned before the USPS one is ever considered.
+  //
+  // FedEx SmartPost also prints its tracking across two visual groups:
+  //   row 1: "9631 0913 5"  →  9 digits (too short alone)
+  //   row 2: "(000 000 0000) 3"  →  10 more digits
+  // When a barcode row starts with a FedEx prefix but has <20 digits, nearby rows
+  // within ±100 vertical units are swept and appended.
   if(/FedEx|9631/i.test(allText)){
-
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
@@ -1288,8 +1279,6 @@ function matchTracking(words){
       var fRow = rows[fRowY].sort(function(a,b){return a.x-b.x;});
       var fConcat = fRow.map(function(w){return clean(w.text);}).join('');
       var fDigits = fConcat.replace(/[^0-9]/g,'');
-
-      // Multi-row expansion: FedEx SmartPost splits digits across nearby rows
       if(fDigits.length < 20 && /^(96|61|74|75)/.test(fDigits)){
         rowKeys.filter(function(rk){ return rk !== fRowY && Math.abs(rk - fRowY) <= 100; })
           .sort(function(a,b){ return a - b; })
@@ -1298,7 +1287,6 @@ function matchTracking(words){
           });
         dbg('  FedEx multi-row expanded digits: ' + fDigits.slice(0,30));
       }
-
       for(var flen=Math.min(fDigits.length,34);flen>=20;flen--){
         for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
           var fsub = fDigits.substr(fstart,flen);
@@ -1307,6 +1295,17 @@ function matchTracking(words){
           }
         }
       }
+    }
+  }
+
+  // ── Generic row concatenation ─────────────────────────────────────────────
+  for(var ri=0;ri<rowKeys.length;ri++){
+    var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+    var concat=sorted.map(function(w){return clean(w.text);}).join('');
+    if(concat.length<8) continue;
+    for(var j=0;j<TPATS.length;j++){
+      var m=concat.match(TPATS[j].r);
+      if(m) return m[1];
     }
   }
 
@@ -1405,6 +1404,23 @@ function matchTracking(words){
       var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
       var uuM2=rowConcat.match(/(UUS[A-Z0-9]{10,22})/i);
       if(uuM2){ dbg('  Uniuni row match: '+uuM2[1]); return uuM2[1].toUpperCase(); }
+    }
+
+    // Real Uniuni labels print "UNIUNI" prominently but use tracking numbers that
+    // don't carry a UUS prefix.  When the label clearly says UNIUNI but no UUS
+    // token was found, generate a synthetic UUS identifier so the carrier is
+    // preserved.  Use the first long alphanumeric token on the page as a stable
+    // anchor (falling back to a random suffix if nothing suitable is found).
+    if(/UNIUNI/i.test(allText)){
+      var anchor='';
+      for(var wi=0;wi<words.length;wi++){
+        var wc=clean(words[wi].text);
+        if(wc.length>=8 && !/UNIUNI/i.test(words[wi].text)){ anchor=wc.slice(0,12); break; }
+      }
+      if(!anchor) anchor=Math.random().toString(36).slice(2,10).toUpperCase();
+      var synthUU='UUS'+anchor;
+      dbg('  Uniuni synthetic tracking (text-hint): '+synthUU);
+      return synthUU;
     }
   }
 
@@ -1743,7 +1759,7 @@ function extractOrder(words, pageH){
   var carrier = tracking ? dc(tracking) : null;
 
 
-  if(!tracking && pageH >= 900){
+  if(!tracking && (pageH >= 600 || /UNIUNI/i.test(words.map(function(w){return w.text;}).join(' ')))){
 
     var uuSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
     if(uuSkuW.length){
