@@ -1725,25 +1725,51 @@ function extractOrder(words, pageH){
   var tracking = matchTracking(words);
   var carrier = tracking ? dc(tracking) : null;
 
-  // ── Text-hint carrier correction ──────────────────────────────────────────
-  // dc() only pattern-matches the tracking number.  FedEx SmartPost uses USPS-
-  // style 92xxx IMpb numbers, so those labels land in the USPS bucket by default.
-  // When the label text unambiguously names exactly one carrier, trust that over
-  // the pattern result.
+  // ── Carrier hint correction (two-tier) ───────────────────────────────────
+  // dc() only pattern-matches tracking numbers. FedEx SmartPost uses USPS-style
+  // 92xxx IMpb numbers and lands in the USPS bucket. We fix this with two tiers:
+  //
+  // Tier 1 — Logo glyphs (highest confidence).
+  //   Carrier PDFs embed their logo via a symbol font; pdf.js extracts those
+  //   glyphs as isolated single-character tokens:
+  //     FedEx → lone "S"
+  //     USPS  → lone "G" AND lone "H" (both must be present)
+  //   Checked first — FedEx SmartPost labels carry the FedEx "S" glyph AND may
+  //   contain USPS text (USPS handles last-mile), so logo must win over text.
+  //
+  // Tier 2 — Carrier name text (fallback when no logo glyph fires).
+  //   Match carrier names / service phrases in the full label text.
+  //   Only acts when exactly one carrier is named (avoids ambiguous labels).
+  // ─────────────────────────────────────────────────────────────────────────
   if(carrier && tracking){
-    var allTextForHint = words.map(function(w){ return w.text; }).join(' ');
-    var tFedEx  = /FedEx|FEDERAL\s*EXPRESS/i.test(allTextForHint);
-    var tUPS    = /\bUPS\b|United\s*Parcel\s*Service/i.test(allTextForHint);
-    var tUSPS   = /\bUSPS\b|U\.S\.\s*Postal|Postal\s*Service|PRIORITY\s*MAIL|FIRST[\s-]CLASS\s*MAIL/i.test(allTextForHint);
-    var tGofo   = /GOFO|GFUS/i.test(allTextForHint);
-    var tSpeedX = /SpeedX|SPXMIA/i.test(allTextForHint);
-    var hintCount = [tFedEx, tUPS, tUSPS, tGofo, tSpeedX].filter(Boolean).length;
-    if(hintCount === 1){
-      if(tFedEx  && carrier !== 'FedEx')   { carrier = 'FedEx';   dbg('  carrier corrected → FedEx (text hint)'); }
-      if(tUPS    && carrier !== 'UPS')     { carrier = 'UPS';     dbg('  carrier corrected → UPS (text hint)'); }
-      if(tUSPS   && carrier !== 'USPS')    { carrier = 'USPS';    dbg('  carrier corrected → USPS (text hint)'); }
-      if(tGofo   && carrier !== 'GOFO')    { carrier = 'GOFO';    dbg('  carrier corrected → GOFO (text hint)'); }
-      if(tSpeedX && carrier !== 'SpeedX') { carrier = 'SpeedX';  dbg('  carrier corrected → SpeedX (text hint)'); }
+    var wordSet = {};
+    words.forEach(function(w){ wordSet[w.text] = true; });
+
+    // — Tier 1: logo glyph hints —
+    var lFedEx = wordSet['S'] === true;
+    var lUSPS  = wordSet['G'] === true && wordSet['H'] === true;
+    var logoHits = [lFedEx, lUSPS].filter(Boolean).length;
+    if(logoHits === 1){
+      if(lFedEx && carrier !== 'FedEx') { carrier = 'FedEx'; dbg('  carrier corrected → FedEx (logo glyph S)'); }
+      if(lUSPS  && carrier !== 'USPS')  { carrier = 'USPS';  dbg('  carrier corrected → USPS (logo glyphs G+H)'); }
+    } else {
+      // — Tier 2: carrier name text hints —
+      var allText = words.map(function(w){ return w.text; }).join(' ');
+      var tFedEx  = /FedEx|FEDERAL\s*EXPRESS/i.test(allText);
+      var tUPS    = /\bUPS\b|United\s*Parcel\s*Service/i.test(allText);
+      var tUSPS   = /\bUSPS\b|U\.S\.\s*Postal|Postal\s*Service|PRIORITY\s*MAIL|FIRST[\s-]CLASS\s*MAIL/i.test(allText);
+      var tGofo   = /\bGOFO\b|\bGFUS\b/i.test(allText);
+      var tSpeedX = /SpeedX|SPEEDX\s*DGD|SPXMIA/i.test(allText);
+      var tUniuni = /UNIUNI/i.test(allText);
+      var textHits = [tFedEx, tUPS, tUSPS, tGofo, tSpeedX, tUniuni].filter(Boolean).length;
+      if(textHits === 1){
+        if(tFedEx  && carrier !== 'FedEx')   { carrier = 'FedEx';   dbg('  carrier corrected → FedEx (text hint)'); }
+        if(tUPS    && carrier !== 'UPS')     { carrier = 'UPS';     dbg('  carrier corrected → UPS (text hint)'); }
+        if(tUSPS   && carrier !== 'USPS')    { carrier = 'USPS';    dbg('  carrier corrected → USPS (text hint)'); }
+        if(tGofo   && carrier !== 'GOFO')    { carrier = 'GOFO';    dbg('  carrier corrected → GOFO (text hint)'); }
+        if(tSpeedX && carrier !== 'SpeedX') { carrier = 'SpeedX';  dbg('  carrier corrected → SpeedX (text hint)'); }
+        if(tUniuni && carrier !== 'Uniuni') { carrier = 'Uniuni';  dbg('  carrier corrected → Uniuni (text hint)'); }
+      }
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
