@@ -2323,9 +2323,9 @@ async function printSkuSort(){
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
     +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
-    +'.label-page{width:4in;min-height:6in;display:flex;align-items:flex-start;justify-content:flex-start;page-break-after:always;page-break-inside:avoid;overflow:hidden;}'
+    +'.label-page{width:4in;height:6in;display:flex;align-items:flex-start;justify-content:flex-start;page-break-after:always;page-break-inside:avoid;overflow:hidden;}'
     +'.label-page:last-child{page-break-after:avoid;}'
-    +'.label-img{width:4in;height:auto;max-height:6in;display:block;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
+    +'.label-img{width:4in;height:6in;display:block;object-fit:contain;object-position:top left;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
     +'.divider-page{display:flex;flex-direction:column;width:4in;height:6in;border:6px solid #000;background:#fff;}'
     +'.divider-header{background:#000;color:#fff;font-family:Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:2px;line-height:1.1;padding:22px 18px;text-align:center;word-break:break-word;flex-shrink:0;}'
     +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
@@ -2336,7 +2336,7 @@ async function printSkuSort(){
       +'html,body{width:4in;margin:0;padding:0;}'
       +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;overflow:hidden;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:auto;max-height:6in;}'
+      +'.label-img{width:4in;height:6in;object-fit:contain;object-position:top left;}'
     +'}';
 
   // Populate the already-open window and trigger print
@@ -2502,7 +2502,7 @@ async function printByPacker(){
       +'html,body{width:4in;margin:0;padding:0;}'
       +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;overflow:hidden;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:auto;max-height:6in;}'
+      +'.label-img{width:4in;height:6in;object-fit:contain;object-position:top left;}'
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
