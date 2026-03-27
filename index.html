@@ -1271,17 +1271,34 @@ function matchTracking(words){
 
 
 
-  if(/FedEx/i.test(allText)){
+  // FedEx barcode-row extraction.
+  // Also handles FedEx SmartPost (9631-prefix) whose tracking number is printed
+  // across two visual groups on the label, e.g. "9631 0913 5" on row 1 and
+  // "(000 000 0000) 3" on a nearby row.  When a single row starts with a FedEx
+  // prefix (96/61/74/75) but has fewer than 20 digits, we sweep the nearest rows
+  // within 100 vertical units and append their digits before the TPAT match.
+  if(/FedEx|9631/i.test(allText)){
 
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
     });
     for(var fi=0;fi<fedexRows.length;fi++){
-      var fRow = rows[fedexRows[fi]].sort(function(a,b){return a.x-b.x;});
+      var fRowY = fedexRows[fi];
+      var fRow = rows[fRowY].sort(function(a,b){return a.x-b.x;});
       var fConcat = fRow.map(function(w){return clean(w.text);}).join('');
-
       var fDigits = fConcat.replace(/[^0-9]/g,'');
+
+      // Multi-row expansion: FedEx SmartPost splits digits across nearby rows
+      if(fDigits.length < 20 && /^(96|61|74|75)/.test(fDigits)){
+        rowKeys.filter(function(rk){ return rk !== fRowY && Math.abs(rk - fRowY) <= 100; })
+          .sort(function(a,b){ return a - b; })
+          .forEach(function(rk){
+            fDigits += rows[rk].map(function(w){return clean(w.text);}).join('').replace(/[^0-9]/g,'');
+          });
+        dbg('  FedEx multi-row expanded digits: ' + fDigits.slice(0,30));
+      }
+
       for(var flen=Math.min(fDigits.length,34);flen>=20;flen--){
         for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
           var fsub = fDigits.substr(fstart,flen);
@@ -1725,54 +1742,6 @@ function extractOrder(words, pageH){
   var tracking = matchTracking(words);
   var carrier = tracking ? dc(tracking) : null;
 
-  // ── Carrier hint correction (two-tier) ───────────────────────────────────
-  // dc() only pattern-matches tracking numbers. FedEx SmartPost uses USPS-style
-  // 92xxx IMpb numbers and lands in the USPS bucket. We fix this with two tiers:
-  //
-  // Tier 1 — Logo glyphs (highest confidence).
-  //   Carrier PDFs embed their logo via a symbol font; pdf.js extracts those
-  //   glyphs as isolated single-character tokens:
-  //     FedEx → lone "S"
-  //     USPS  → lone "G" AND lone "H" (both must be present)
-  //   Checked first — FedEx SmartPost labels carry the FedEx "S" glyph AND may
-  //   contain USPS text (USPS handles last-mile), so logo must win over text.
-  //
-  // Tier 2 — Carrier name text (fallback when no logo glyph fires).
-  //   Match carrier names / service phrases in the full label text.
-  //   Only acts when exactly one carrier is named (avoids ambiguous labels).
-  // ─────────────────────────────────────────────────────────────────────────
-  if(carrier && tracking){
-    var wordSet = {};
-    words.forEach(function(w){ wordSet[w.text] = true; });
-
-    // — Tier 1: logo glyph hints —
-    var lFedEx = wordSet['S'] === true;
-    var lUSPS  = wordSet['G'] === true && wordSet['H'] === true;
-    var logoHits = [lFedEx, lUSPS].filter(Boolean).length;
-    if(logoHits === 1){
-      if(lFedEx && carrier !== 'FedEx') { carrier = 'FedEx'; dbg('  carrier corrected → FedEx (logo glyph S)'); }
-      if(lUSPS  && carrier !== 'USPS')  { carrier = 'USPS';  dbg('  carrier corrected → USPS (logo glyphs G+H)'); }
-    } else {
-      // — Tier 2: carrier name text hints —
-      var allText = words.map(function(w){ return w.text; }).join(' ');
-      var tFedEx  = /FedEx|FEDERAL\s*EXPRESS/i.test(allText);
-      var tUPS    = /\bUPS\b|United\s*Parcel\s*Service/i.test(allText);
-      var tUSPS   = /\bUSPS\b|U\.S\.\s*Postal|Postal\s*Service|PRIORITY\s*MAIL|FIRST[\s-]CLASS\s*MAIL/i.test(allText);
-      var tGofo   = /\bGOFO\b|\bGFUS\b/i.test(allText);
-      var tSpeedX = /SpeedX|SPEEDX\s*DGD|SPXMIA/i.test(allText);
-      var tUniuni = /UNIUNI/i.test(allText);
-      var textHits = [tFedEx, tUPS, tUSPS, tGofo, tSpeedX, tUniuni].filter(Boolean).length;
-      if(textHits === 1){
-        if(tFedEx  && carrier !== 'FedEx')   { carrier = 'FedEx';   dbg('  carrier corrected → FedEx (text hint)'); }
-        if(tUPS    && carrier !== 'UPS')     { carrier = 'UPS';     dbg('  carrier corrected → UPS (text hint)'); }
-        if(tUSPS   && carrier !== 'USPS')    { carrier = 'USPS';    dbg('  carrier corrected → USPS (text hint)'); }
-        if(tGofo   && carrier !== 'GOFO')    { carrier = 'GOFO';    dbg('  carrier corrected → GOFO (text hint)'); }
-        if(tSpeedX && carrier !== 'SpeedX') { carrier = 'SpeedX';  dbg('  carrier corrected → SpeedX (text hint)'); }
-        if(tUniuni && carrier !== 'Uniuni') { carrier = 'Uniuni';  dbg('  carrier corrected → Uniuni (text hint)'); }
-      }
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────
 
   if(!tracking && pageH >= 900){
 
@@ -2354,9 +2323,9 @@ async function printSkuSort(){
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
     +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
-    +'.label-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;page-break-inside:avoid;}'
+    +'.label-page{width:4in;min-height:6in;display:flex;align-items:flex-start;justify-content:flex-start;page-break-after:always;page-break-inside:avoid;overflow:hidden;}'
     +'.label-page:last-child{page-break-after:avoid;}'
-    +'.label-img{width:4in;height:6in;display:block;object-fit:contain;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
+    +'.label-img{width:4in;height:auto;max-height:6in;display:block;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
     +'.divider-page{display:flex;flex-direction:column;width:4in;height:6in;border:6px solid #000;background:#fff;}'
     +'.divider-header{background:#000;color:#fff;font-family:Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:2px;line-height:1.1;padding:22px 18px;text-align:center;word-break:break-word;flex-shrink:0;}'
     +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
@@ -2365,9 +2334,9 @@ async function printSkuSort(){
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;margin:0;padding:0;}'
-      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
+      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;overflow:hidden;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:6in;object-fit:contain;}'
+      +'.label-img{width:4in;height:auto;max-height:6in;}'
     +'}';
 
   // Populate the already-open window and trigger print
@@ -2531,9 +2500,9 @@ async function printByPacker(){
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;margin:0;padding:0;}'
-      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
+      +'.label-page{width:4in;height:6in;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;overflow:hidden;}'
       +'.label-page:last-child{page-break-after:avoid;}'
-      +'.label-img{width:4in;height:6in;object-fit:contain;}'
+      +'.label-img{width:4in;height:auto;max-height:6in;}'
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
