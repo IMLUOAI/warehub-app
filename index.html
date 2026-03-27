@@ -1298,6 +1298,17 @@ function matchTracking(words){
     }
   }
 
+  // ── Uniuni early extraction — before generic row scan ────────────────────
+  // Uniuni labels start with "UUS" but may also contain postal barcodes or other
+  // long numeric strings.  The generic loop would return those numbers first and
+  // misidentify the carrier.  The partial-match search here finds UUS... regardless
+  // of what else sits on the same row.
+  if(hintUniuni){
+    var uuEarlyAll = words.map(function(w){return clean(w.text);}).join('');
+    var uuEarlyM = uuEarlyAll.match(/(UUS[A-Z0-9]{10,22})/i);
+    if(uuEarlyM){ dbg('  Uniuni early match: '+uuEarlyM[1]); return uuEarlyM[1].toUpperCase(); }
+  }
+
   // ── Generic row concatenation ─────────────────────────────────────────────
   for(var ri=0;ri<rowKeys.length;ri++){
     var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
