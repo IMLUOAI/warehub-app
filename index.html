@@ -2192,32 +2192,87 @@ async function printSkuSort(){
 
   pm('⟳ Building sorted labels ('+withImg.length+')…');
 
-  // Group by ALL distinct SKUs in each order so multi-SKU orders appear in every
-  // relevant group. Each physical label still prints only once per unique order.
-  var groups={};
+  // ── Two-level sort: CARRIER → SKU → shelf ───────────────────────────────────
+  // Step 1: bucket orders by carrier
+  var carrierBuckets={};    // { carrierName: { sku: [order,...] } }
   withImg.forEach(function(o){
+    var car = o.carrier || 'UNKNOWN';
+    if(!carrierBuckets[car]) carrierBuckets[car]={};
     var skuList=[]; var seen={};
     (o.skus&&o.skus.length?o.skus:[{sku:'UNKNOWN'}]).forEach(function(s){
       var k=s.sku||'UNKNOWN';
       if(!seen[k]){seen[k]=true;skuList.push(k);}
     });
     skuList.forEach(function(sku){
-      if(!groups[sku]) groups[sku]=[];
-      groups[sku].push(o);
+      if(!carrierBuckets[car][sku]) carrierBuckets[car][sku]=[];
+      carrierBuckets[car][sku].push(o);
     });
   });
-  var skuKeys=Object.keys(groups).sort();
 
-  // Build ordered list (dedup, shelf-sorted)
-  var orderedOrders=[]; var printed={};
-  skuKeys.forEach(function(sku){
-    var grp=groups[sku]
-      .filter(function(o){return !printed[o.tracking];})
-      .sort(function(a,b){return (a.shelf||'').localeCompare(b.shelf||'');});
-    grp.forEach(function(o){ printed[o.tracking]=true; orderedOrders.push(o); });
+  // Step 2: build final print order — carrier divider → SKU groups (shelf-sorted)
+  var carrierNames = Object.keys(carrierBuckets).sort();
+  var orderedOrders = [];   // flat list in final print sequence
+  var printed = {};         // tracking → true, to dedup multi-SKU labels
+
+  // Carrier divider pages are interspersed in bodyHtml below; we need the
+  // ordered list first for the high-res render, then rebuild bodyHtml.
+  var sections = [];   // [ { type:'carrier'|'label', carrier, sku, order } ]
+
+  carrierNames.forEach(function(car){
+    var skuMap = carrierBuckets[car];
+    var skuKeys = Object.keys(skuMap).sort();
+    var carrierOrders = [];
+    skuKeys.forEach(function(sku){
+      skuMap[sku]
+        .filter(function(o){ return !printed[o.tracking]; })
+        .sort(function(a,b){ return (a.shelf||'').localeCompare(b.shelf||''); })
+        .forEach(function(o){
+          printed[o.tracking]=true;
+          carrierOrders.push(o);
+          orderedOrders.push(o);
+          sections.push({type:'label', carrier:car, sku:sku, order:o});
+        });
+    });
+    // Insert carrier divider at the beginning of this carrier's run
+    if(carrierOrders.length){
+      sections.unshift.apply(sections,
+        [{type:'carrier', carrier:car, count:carrierOrders.length}]
+      );
+      // Rebuild: move the carrier divider to right before its labels
+      // (already in insertion order since we push then unshift — fix below)
+    }
   });
 
-  // High-quality render from stored PDF (4× PNG, ~288 DPI)
+  // Rebuild sections properly (carrier header before its labels, in order)
+  sections = [];
+  printed  = {};
+  carrierNames.forEach(function(car){
+    var skuMap  = carrierBuckets[car];
+    var skuKeys = Object.keys(skuMap).sort();
+    var carrierCount = 0;
+    // Count deduplicated labels for this carrier
+    var tempSeen={};
+    skuKeys.forEach(function(sku){
+      skuMap[sku].forEach(function(o){
+        if(!tempSeen[o.tracking]){ tempSeen[o.tracking]=true; carrierCount++; }
+      });
+    });
+    sections.push({type:'carrier', carrier:car, count:carrierCount});
+    skuKeys.forEach(function(sku){
+      skuMap[sku]
+        .filter(function(o){ return !printed[o.tracking]; })
+        .sort(function(a,b){ return (a.shelf||'').localeCompare(b.shelf||''); })
+        .forEach(function(o){
+          printed[o.tracking]=true;
+          sections.push({type:'label', carrier:car, sku:sku, order:o});
+        });
+    });
+  });
+  orderedOrders = sections
+    .filter(function(s){ return s.type==='label'; })
+    .map(function(s){ return s.order; });
+
+  // ── High-quality render from stored PDF (4× PNG, ~288 DPI) ─────────────────
   var pageIndices=orderedOrders.map(function(o){return o.pageIndex!=null?o.pageIndex:null;});
   var hiRes=null;
   if(pageIndices.some(function(x){return x!=null;})){
@@ -2227,19 +2282,39 @@ async function printSkuSort(){
     }).catch(function(){ return null; });
   }
 
+  // ── Build HTML with carrier divider pages ───────────────────────────────────
   var bodyHtml='';
-  orderedOrders.forEach(function(o){
-    var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
-    bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
+  sections.forEach(function(s){
+    if(s.type==='carrier'){
+      // Full 4"×6" monochrome carrier divider (same style as packer dividers)
+      var safeCarrier = s.carrier.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      bodyHtml +=
+        '<div class="label-page divider-page">'
+        +'<div class="divider-header">'+safeCarrier+'</div>'
+        +'<div class="divider-body">'
+          +'<div class="divider-count">'+s.count+'</div>'
+          +'<div class="divider-unit">LABEL'+(s.count!==1?'S':'')+'</div>'
+        +'</div>'
+        +'</div>';
+    } else {
+      var src=(hiRes && s.order.pageIndex!=null && hiRes[s.order.pageIndex])
+              ? hiRes[s.order.pageIndex] : s.order.pageImg;
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
+    }
   });
 
-  // ── 4" × 6" thermal label CSS ──────────────────────────────────────────────
+  // ── 4" × 6" thermal CSS + divider styles (monochrome) ───────────────────────
   var css=
      '*{margin:0;padding:0;box-sizing:border-box;}'
     +'html,body{width:4in;margin:0;padding:0;background:#fff;}'
     +'.label-page{width:4in;height:6in;display:flex;align-items:center;justify-content:center;page-break-after:always;page-break-inside:avoid;}'
     +'.label-page:last-child{page-break-after:avoid;}'
     +'.label-img{width:4in;height:6in;display:block;object-fit:contain;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
+    +'.divider-page{display:flex;flex-direction:column;width:4in;height:6in;border:6px solid #000;background:#fff;}'
+    +'.divider-header{background:#000;color:#fff;font-family:Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:2px;line-height:1.1;padding:22px 18px;text-align:center;word-break:break-word;flex-shrink:0;}'
+    +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
+    +'.divider-count{font-family:Arial,sans-serif;font-size:100px;font-weight:900;color:#000;line-height:1;}'
+    +'.divider-unit{font-family:Arial,sans-serif;font-size:24px;font-weight:700;color:#000;letter-spacing:5px;margin-top:10px;}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;margin:0;padding:0;}'
@@ -2249,7 +2324,10 @@ async function printSkuSort(){
     +'}';
 
   // Populate the already-open window and trigger print
-  pm('✓ '+orderedOrders.length+' label(s) ready — opening print dialog…');
+  var carrierSummary = carrierNames.map(function(c){
+    return c+': '+Object.values(carrierBuckets[c]).reduce(function(n,arr){ return n+arr.length; },0);
+  }).join(' · ');
+  pm('✓ '+orderedOrders.length+' label(s) across '+carrierNames.length+' carrier(s) — '+carrierSummary);
   printViaIframe(css, bodyHtml, printWin);
 }
 
