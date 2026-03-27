@@ -1725,7 +1725,28 @@ function extractOrder(words, pageH){
   var tracking = matchTracking(words);
   var carrier = tracking ? dc(tracking) : null;
 
-
+  // ── Text-hint carrier correction ──────────────────────────────────────────
+  // dc() only pattern-matches the tracking number.  FedEx SmartPost uses USPS-
+  // style 92xxx IMpb numbers, so those labels land in the USPS bucket by default.
+  // When the label text unambiguously names exactly one carrier, trust that over
+  // the pattern result.
+  if(carrier && tracking){
+    var allTextForHint = words.map(function(w){ return w.text; }).join(' ');
+    var tFedEx  = /FedEx|FEDERAL\s*EXPRESS/i.test(allTextForHint);
+    var tUPS    = /\bUPS\b|United\s*Parcel\s*Service/i.test(allTextForHint);
+    var tUSPS   = /\bUSPS\b|U\.S\.\s*Postal|Postal\s*Service|PRIORITY\s*MAIL|FIRST[\s-]CLASS\s*MAIL/i.test(allTextForHint);
+    var tGofo   = /GOFO|GFUS/i.test(allTextForHint);
+    var tSpeedX = /SpeedX|SPXMIA/i.test(allTextForHint);
+    var hintCount = [tFedEx, tUPS, tUSPS, tGofo, tSpeedX].filter(Boolean).length;
+    if(hintCount === 1){
+      if(tFedEx  && carrier !== 'FedEx')   { carrier = 'FedEx';   dbg('  carrier corrected → FedEx (text hint)'); }
+      if(tUPS    && carrier !== 'UPS')     { carrier = 'UPS';     dbg('  carrier corrected → UPS (text hint)'); }
+      if(tUSPS   && carrier !== 'USPS')    { carrier = 'USPS';    dbg('  carrier corrected → USPS (text hint)'); }
+      if(tGofo   && carrier !== 'GOFO')    { carrier = 'GOFO';    dbg('  carrier corrected → GOFO (text hint)'); }
+      if(tSpeedX && carrier !== 'SpeedX') { carrier = 'SpeedX';  dbg('  carrier corrected → SpeedX (text hint)'); }
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if(!tracking && pageH >= 900){
 
