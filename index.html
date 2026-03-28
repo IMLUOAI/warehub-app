@@ -1215,9 +1215,9 @@ var TPATS=[
   {r:/^(96\d{18,22})$/},
   {r:/^(61\d{17,20})$/},
   {r:/^(7[245]\d{14,18})$/},
-  {r:/^(9[0-9]\d{18,22})$/},
-  {r:/^(70\d{14})$/},
-  {r:/^(\d{20,22})$/}
+  {r:/^(9[0-9]\d{18,22})$/, noFedEx:true},
+  {r:/^(70\d{14})$/, noFedEx:true},
+  {r:/^(\d{20,22})$/, noFedEx:true}
 ];
 
 function matchTracking(words){
@@ -1227,7 +1227,7 @@ function matchTracking(words){
   var allText = words.map(function(w){return w.text;}).join(' ');
 
 
-  var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]/i.test(allText);
+  var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]|e-VS|E-VS/i.test(allText);
   var hintUPS    = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(allText);
   var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POST|FIRST[\s-]CLASS|PRIORITY\s*MAIL|MEDIA\s*MAIL/i.test(allText);
   var hintSpeedX = /SpeedX|SPXMIA|SDX|SPX/i.test(allText);
@@ -1244,6 +1244,7 @@ function matchTracking(words){
     var s=clean(words[i].text);
     if(!s||s.length<8) continue;
     for(var j=0;j<TPATS.length;j++){
+      if(hintFedEx && TPATS[j].noFedEx) continue;
       var m=s.match(TPATS[j].r);
       if(m) return m[1];
     }
@@ -1269,7 +1270,7 @@ function matchTracking(words){
   //   row 2: "(000 000 0000) 3"  →  10 more digits
   // When a barcode row starts with a FedEx prefix but has <20 digits, nearby rows
   // within ±100 vertical units are swept and appended.
-  if(/FedEx|9631/i.test(allText)){
+  if(hintFedEx || /9631/i.test(allText)){
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
@@ -1315,6 +1316,7 @@ function matchTracking(words){
     var concat=sorted.map(function(w){return clean(w.text);}).join('');
     if(concat.length<8) continue;
     for(var j=0;j<TPATS.length;j++){
+      if(hintFedEx && TPATS[j].noFedEx) continue;
       var m=concat.match(TPATS[j].r);
       if(m) return m[1];
     }
