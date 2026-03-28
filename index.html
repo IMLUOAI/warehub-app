@@ -1240,17 +1240,7 @@ function matchTracking(words){
   var hintDHL    = /\bDHL\b/i.test(allText);
 
 
-  for(var i=0;i<words.length;i++){
-    var s=clean(words[i].text);
-    if(!s||s.length<8) continue;
-    for(var j=0;j<TPATS.length;j++){
-      if(hintFedEx && TPATS[j].noFedEx) continue;
-      var m=s.match(TPATS[j].r);
-      if(m) return m[1];
-    }
-  }
-
-
+  // ── Build row map first so FedEx barcode extraction can run before single-word scan ──
   var rows={};
   words.forEach(function(w){
     var row=Math.round(w.top/4)*4;
@@ -1258,7 +1248,8 @@ function matchTracking(words){
     rows[row].push(w);
   });
   var rowKeys=Object.keys(rows).map(Number).sort(function(a,b){return a-b;});
-  // ── FedEx barcode-row extraction — intentionally BEFORE generic row scan ─────
+
+  // ── FedEx barcode-row extraction — runs BEFORE single-word scan ───────────────
   // FedEx SmartPost labels contain BOTH a FedEx tracking (9631-prefix) and a USPS
   // delivery tracking (9261-prefix) on the same page.  The generic row-concat loop
   // below would find the USPS number first and return the wrong carrier.  By running
@@ -1296,6 +1287,21 @@ function matchTracking(words){
           }
         }
       }
+    }
+  }
+
+  // ── Single-word TPAT scan ─────────────────────────────────────────────────
+  // Runs AFTER FedEx barcode-row extraction so FedEx SmartPost labels (which have
+  // both a USPS 9261 delivery barcode AND a FedEx 9631 tracking) return the correct
+  // FedEx number instead of the USPS one.  noFedEx-flagged patterns are still
+  // skipped when hintFedEx is true as a secondary guard.
+  for(var i=0;i<words.length;i++){
+    var s=clean(words[i].text);
+    if(!s||s.length<8) continue;
+    for(var j=0;j<TPATS.length;j++){
+      if(hintFedEx && TPATS[j].noFedEx) continue;
+      var m=s.match(TPATS[j].r);
+      if(m) return m[1];
     }
   }
 
