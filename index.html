@@ -1261,10 +1261,13 @@ function matchTracking(words){
   //   row 2: "(000 000 0000) 3"  →  10 more digits
   // When a barcode row starts with a FedEx prefix but has <20 digits, nearby rows
   // within ±100 vertical units are swept and appended.
-  if(hintFedEx || /9631/i.test(allText)){
+  if(hintFedEx){
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
-      return /\d{4}\s+\d{4}\s+\d/.test(txt) || /9[36]\d{2}\s+\d{4}/.test(txt);
+      // Only rows visually starting with a FedEx barcode prefix (96xx or 93xx) —
+      // avoids false hits on USPS "9261 0000…" barcodes whose offset "61…"
+      // substring would match the FedEx 61-series TPAT.
+      return /9[36]\d{2}\s+\d{4}/.test(txt);
     });
     for(var fi=0;fi<fedexRows.length;fi++){
       var fRowY = fedexRows[fi];
