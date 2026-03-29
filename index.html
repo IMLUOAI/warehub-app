@@ -1262,6 +1262,24 @@ function matchTracking(words){
   // When a barcode row starts with a FedEx prefix but has <20 digits, nearby rows
   // within ±100 vertical units are swept and appended.
   if(hintFedEx){
+    // ── FedEx SmartPost: unique Tracking ID wins over shared barcode prefix ──────
+    // SmartPost labels share a common "9631 0913 5 (000 000 0000) 3 00 …" barcode
+    // prefix across all packages in a batch.  The only per-label unique identifier
+    // is the "FedEx Tracking ID# XXXX XXXX XXXX" printed on the label.
+    // Check for that first so different SmartPost labels don't all collapse to
+    // the same 24-digit barcode prefix and get deduped away.
+    var tidRow=words.filter(function(w){return /Tracking/i.test(w.text)&&/ID/i.test(w.text);});
+    if(tidRow.length){
+      var tidTop=tidRow[0].top;
+      var tidNums=words.filter(function(w){return Math.abs(w.top-tidTop)<8;})
+                       .map(function(w){return clean(w.text);}).join('');
+      var tidDigits=tidNums.replace(/[^0-9]/g,'');
+      if(tidDigits.length>=8){
+        dbg('  FedEx SmartPost Tracking ID (early): FEDEX-'+tidDigits);
+        return 'FEDEX-'+tidDigits;
+      }
+    }
+
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       // Only rows visually starting with a FedEx barcode prefix (96xx or 93xx) —
