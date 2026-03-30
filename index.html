@@ -2263,6 +2263,24 @@ async function printSkuSort(){
 
   pm('⟳ Building sorted labels ('+withImg.length+')…');
 
+  // ── Duplicate tracking detection ──────────────────────────────────────────────
+  // Count how many times each tracking number appears.  Any count > 1 means
+  // those extra labels will be silently dropped by deduplication during printing.
+  (function(){
+    var freq={};
+    withImg.forEach(function(o){ var t=o.tracking||'(none)'; freq[t]=(freq[t]||0)+1; });
+    var dups=Object.keys(freq).filter(function(t){return freq[t]>1;});
+    if(dups.length){
+      var total=dups.reduce(function(s,t){return s+(freq[t]-1);},0);
+      dbg('\n⚠ DUPLICATE TRACKING — '+total+' label(s) will be dropped at print:');
+      dups.sort(function(a,b){return freq[b]-freq[a];}).forEach(function(t){
+        var ex=withImg.filter(function(o){return o.tracking===t;});
+        dbg('  '+freq[t]+'× '+t+' ('+ex[0].carrier+')  pages: '+ex.map(function(o){return o.pageIndex;}).join(', '));
+      });
+      showDebug();
+    }
+  })();
+
   // ── Two-level sort: CARRIER → SKU → shelf ───────────────────────────────────
   // Step 1: bucket orders by carrier
   var carrierBuckets={};    // { carrierName: { sku: [order,...] } }
