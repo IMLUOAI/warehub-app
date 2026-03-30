@@ -1069,7 +1069,7 @@ async function pinReset(){
           <button class="btn" onclick="renderProductivity()" style="font-size:9px;">↺ REFRESH</button>
           <button class="btn btn-r" onclick="
             if(!confirm('Reset all packer stats for this shift?')) return;
-            packers.forEach(function(p){ p.ordersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0; });
+            packers.forEach(function(p){ p.ordersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0;p.shiftSessions=[]; });
             saveStaff(); renderProductivity(); pm('✓ Shift stats reset.');
           " style="font-size:9px;">↺ RESET SHIFT</button>
           <button id="excel-connect-btn" class="btn" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;white-space:nowrap;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
@@ -5772,15 +5772,18 @@ function renderProductivity(){
   var dateEl = document.getElementById('pr-date');
   if(dateEl) dateEl.textContent = new Date().toLocaleDateString();
 
+  var todayStr = new Date().toDateString();
+  function isTodayMs(ms){ return !!ms && new Date(ms).toDateString()===todayStr; }
+
   var totalHrs = 0, totalOrders = 0, activeNow = 0;
   var sheetRows = shiftPackers.map(function(p){
     var ms = 0;
     (p.shiftSessions||[]).forEach(function(s){
       var inT  = s.clockIn  ? new Date(s.clockIn).getTime()  : (s.in||0);
       var outT = s.clockOut ? new Date(s.clockOut).getTime() : (s.out||0);
-      if(inT && outT) ms += (outT - inT);
+      if(inT && outT && isTodayMs(inT)) ms += (outT - inT);  // only today
     });
-    if(p.online && p.loginTime) ms += (now - p.loginTime);
+    if(p.online && p.loginTime && isTodayMs(p.loginTime)) ms += (now - p.loginTime);
     var hrs = ms / 3600000;
     totalHrs += hrs;
     var sessionDone = orders.filter(function(o){ return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done'; }).length;
@@ -5809,13 +5812,17 @@ function renderProductivity(){
         +sheetRows.map(function(r){
           var col = packerColor(r.p);
           var sessions = r.p.shiftSessions||[];
+          var todaySessions = sessions.filter(function(s){
+            var inT = s.clockIn ? new Date(s.clockIn).getTime() : (s.in||0);
+            return isTodayMs(inT);
+          });
           var earliestMs = null;
-          if(sessions.length && sessions[0].clockIn) earliestMs = new Date(sessions[0].clockIn).getTime();
-          if(r.p.online && r.p.loginTime && (earliestMs===null || r.p.loginTime < earliestMs)) earliestMs = r.p.loginTime;
+          if(todaySessions.length && todaySessions[0].clockIn) earliestMs = new Date(todaySessions[0].clockIn).getTime();
+          if(r.p.online && r.p.loginTime && isTodayMs(r.p.loginTime) && (earliestMs===null || r.p.loginTime < earliestMs)) earliestMs = r.p.loginTime;
           var firstIn = earliestMs ? new Date(earliestMs).toLocaleTimeString() : '—';
           var lastOut = r.p.online ? '<span style="color:var(--gn);">● ACTIVE</span>' : '—';
-          if(!r.p.online && sessions.length){
-            var last = sessions[sessions.length-1];
+          if(!r.p.online && todaySessions.length){
+            var last = todaySessions[todaySessions.length-1];
             var t2 = last.clockOut ? new Date(last.clockOut) : null;
             if(t2) lastOut = t2.toLocaleTimeString();
           }
