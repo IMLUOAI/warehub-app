@@ -1066,7 +1066,13 @@ async function pinReset(){
           <div style="font-size:10px;color:var(--td);margin-top:2px;">Packages packed per packer · current shift</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">
-          <button class="btn" onclick="renderProductivity()" style="font-size:9px;">↺ REFRESH</button>
+          <button class="btn" onclick="
+            var btn=this; btn.disabled=true; btn.textContent='⟳ SYNCING…';
+            kvLoadStaff().catch(function(){}).then(function(){
+              renderProductivity();
+              btn.disabled=false; btn.textContent='↺ REFRESH';
+            });
+          " style="font-size:9px;">↺ REFRESH</button>
           <button class="btn btn-r" onclick="
             if(!confirm('Reset all packer stats for this shift?')) return;
             packers.forEach(function(p){ p.ordersCompleted=0;p.dailyOrdersDate='';p.dailyOrdersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0;p.shiftSessions=[]; });
@@ -4059,6 +4065,12 @@ async function vehicleSaveExcel(){
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
+    // Clear any stale content from previous structure before writing
+    try{
+      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange/clear',
+        {method:'POST',headers:hdrs,body:JSON.stringify({applyTo:'All'})});
+    }catch(e){ /* ignore if sheet was just created and has no used range */ }
+
     var vModel = _vehicleConfig.model || 'Company Vehicle';
     var vPlate = _vehicleConfig.plate || '—';
     // Row 1: vehicle identity header; Row 2: column headers; Row 3+: data
