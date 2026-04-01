@@ -1069,7 +1069,7 @@ async function pinReset(){
           <button class="btn" onclick="renderProductivity()" style="font-size:9px;">↺ REFRESH</button>
           <button class="btn btn-r" onclick="
             if(!confirm('Reset all packer stats for this shift?')) return;
-            packers.forEach(function(p){ p.ordersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0;p.shiftSessions=[]; });
+            packers.forEach(function(p){ p.ordersCompleted=0;p.dailyOrdersDate='';p.dailyOrdersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0;p.shiftSessions=[]; });
             saveStaff(); renderProductivity(); pm('✓ Shift stats reset.');
           " style="font-size:9px;">↺ RESET SHIFT</button>
           <button id="excel-connect-btn" class="btn" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;white-space:nowrap;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
@@ -1185,7 +1185,7 @@ function gv(name){
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
-  if(name==='vehicle'){ vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
+  if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
   if(name==='rackmap'){ rackClearHighlight(); if(orders.length) rackHighlightSpots(); }
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
@@ -1933,8 +1933,8 @@ function loadDemo(){
 
   if(!packers.length){
     packers=[
-      {id:'PKR-001',name:'Alex',color:PCOLORS[0],online:false,loginTime:null,ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]},
-      {id:'PKR-002',name:'Sam', color:PCOLORS[1],online:false,loginTime:null,ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]}
+      {id:'PKR-001',name:'Alex',color:PCOLORS[0],online:false,loginTime:null,ordersCompleted:0,dailyOrdersDate:'',dailyOrdersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]},
+      {id:'PKR-002',name:'Sam', color:PCOLORS[1],online:false,loginTime:null,ordersCompleted:0,dailyOrdersDate:'',dailyOrdersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,shiftSessions:[]}
     ];
   }
   var o=[
@@ -2022,10 +2022,18 @@ function loadStaff(){
       p.online = p.online===true||p.online==='true' ? true : false;
       p.loginTime = p.loginTime||null;
       p.ordersCompleted = p.ordersCompleted||0;
+      p.dailyOrdersDate = p.dailyOrdersDate||'';
+      p.dailyOrdersCompleted = p.dailyOrdersCompleted||0;
       p.skusScanned = p.skusScanned||0;
       p.orderTimes = p.orderTimes||[];
       p.totalPackTime = p.totalPackTime||0;
       p.shiftSessions = p.shiftSessions||[];
+      // Trim sessions older than 8 days to prevent unbounded accumulation
+      var _cutoff = Date.now() - 8*24*3600000;
+      p.shiftSessions = p.shiftSessions.filter(function(s){
+        var inT = s.clockIn ? new Date(s.clockIn).getTime() : (s.in||0);
+        return !inT || inT >= _cutoff;
+      });
     });
     managers.forEach(function(m){
       m.active = true;
@@ -2102,7 +2110,7 @@ function addPacker(){
     color:PCOLORS[packers.length%PCOLORS.length],
     active:true,
     online:false,loginTime:null,
-    ordersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,
+    ordersCompleted:0,dailyOrdersDate:'',dailyOrdersCompleted:0,skusScanned:0,orderTimes:[],totalPackTime:0,
     shiftSessions:[]
   });
   nameEl.value=''; idEl.value='';
@@ -3093,6 +3101,9 @@ function completeOrder(order, scannedTracking){
     if(elapsed < 5000) elapsed = 5000;
     if(elapsed > 3600000) elapsed = 3600000;
     creditPacker.ordersCompleted++;
+    var _packDate = new Date().toDateString();
+    if(creditPacker.dailyOrdersDate !== _packDate){ creditPacker.dailyOrdersDate = _packDate; creditPacker.dailyOrdersCompleted = 0; }
+    creditPacker.dailyOrdersCompleted = (creditPacker.dailyOrdersCompleted||0) + 1;
     creditPacker.orderTimes.push(elapsed);
     creditPacker.totalPackTime += elapsed;
     creditPacker.skusScanned += (order.skus||[]).reduce(function(s,k){return s+k.qty;},0);
@@ -3346,24 +3357,32 @@ function renderDash(){
 
 function exportPayrollCSV(){
   var now=Date.now();
+  var _todayStr=new Date().toDateString();
+  function _isTodayMs(ms){ return !!ms && new Date(ms).toDateString()===_todayStr; }
   var activePackers=packers.filter(function(p){
-    return (p.shiftSessions&&p.shiftSessions.length>0)||p.online||
-      orders.some(function(o){return (o.packedBy||o.assignedTo)===p.id&&o.status==='done';});
+    var hasTodaySess=(p.shiftSessions||[]).some(function(s){
+      var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
+      return _isTodayMs(inT);
+    });
+    return hasTodaySess||(p.online&&_isTodayMs(p.loginTime));
   });
-  if(!activePackers.length){ alert('No clock-in data to export yet.'); return; }
+  if(!activePackers.length){ alert('No clock-in data for today yet.'); return; }
   var lines=['Packer,Packages Scanned,Clock In,Clock Out,Hours,Date'];
   activePackers.forEach(function(p){
-    var sessions=p.shiftSessions||[];
+    var sessions=(p.shiftSessions||[]).filter(function(s){
+      var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
+      return _isTodayMs(inT);
+    });
     var ms=0;
     sessions.forEach(function(s){
       var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
       var outT=s.clockOut?new Date(s.clockOut).getTime():(s.out||0);
       if(inT&&outT) ms+=(outT-inT);
     });
-    if(p.online&&p.loginTime) ms+=(now-p.loginTime);
+    if(p.online&&p.loginTime&&_isTodayMs(p.loginTime)) ms+=(now-p.loginTime);
     var hrs=(ms/3600000).toFixed(2);
     var firstIn='';
-    if(p.online&&p.loginTime) firstIn=new Date(p.loginTime).toLocaleTimeString();
+    if(p.online&&p.loginTime&&_isTodayMs(p.loginTime)) firstIn=new Date(p.loginTime).toLocaleTimeString();
     else if(sessions.length){ var t=sessions[0].clockIn?new Date(sessions[0].clockIn):null; if(t) firstIn=t.toLocaleTimeString(); }
     var lastOut=p.online?'Active':'';
     if(!p.online&&sessions.length){ var last=sessions[sessions.length-1]; var t2=last.clockOut?new Date(last.clockOut):null; if(t2) lastOut=t2.toLocaleTimeString(); }
@@ -4040,19 +4059,26 @@ async function vehicleSaveExcel(){
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
-    var hdrRow = [['Date','Driver','License Plate','Destination','Departure','Return','Miles','Notes']];
-    await fetch(rangeUrl('A1:H1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdrRow})});
+    var vModel = _vehicleConfig.model || 'Company Vehicle';
+    var vPlate = _vehicleConfig.plate || '—';
+    // Row 1: vehicle identity header; Row 2: column headers; Row 3+: data
+    var infoRow = [['Vehicle: '+vModel+'   |   License Plate: '+vPlate,'','','','','','','','']];
+    var colHdr  = [['Date','Driver','Destination','Departure','Return','ODO Start','ODO End','Miles','Notes']];
+    await fetch(rangeUrl('A1:I1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:infoRow})});
+    await fetch(rangeUrl('A2:I2'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:colHdr})});
     var dataRows = vehicleTrips.map(function(t){
       return [
-        t.date||'', t.driver||'', t.plate||'', t.dest||'',
+        t.date||'', t.driver||'', t.dest||'',
         t.depart||'', t.ret||'',
+        (t.odoStart!==undefined&&t.odoStart!==''&&t.odoStart!==null)?parseFloat(t.odoStart):'',
+        (t.odoEnd!==undefined&&t.odoEnd!==''&&t.odoEnd!==null)?parseFloat(t.odoEnd):'',
         (t.miles!==''&&t.miles!==null&&t.miles!==undefined)?parseFloat(t.miles).toFixed(1):'',
         t.notes||''
       ];
     });
     if(!dataRows.length){ pm('⚠ No trip data to write.'); return; }
-    var endRow = 1 + dataRows.length;
-    var wr = await fetch(rangeUrl('A2:H'+endRow),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:dataRows})});
+    var endRow = 2 + dataRows.length;
+    var wr = await fetch(rangeUrl('A3:I'+endRow),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:dataRows})});
     if(wr.ok) pm('✓ Vehicle log saved → "'+sheet+'" tab ('+dataRows.length+' trips)');
     else{ var er=await wr.json(); pm('✗ Excel: '+((er.error&&er.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
@@ -5776,6 +5802,7 @@ function renderProductivity(){
   function isTodayMs(ms){ return !!ms && new Date(ms).toDateString()===todayStr; }
 
   var totalHrs = 0, totalOrders = 0, activeNow = 0;
+  var _todayD = new Date().toDateString();
   var sheetRows = shiftPackers.map(function(p){
     var ms = 0;
     (p.shiftSessions||[]).forEach(function(s){
@@ -5788,7 +5815,9 @@ function renderProductivity(){
     totalHrs += hrs;
     var sessionDone = orders.filter(function(o){ return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done'; }).length;
     var done = p.ordersCompleted > 0 ? p.ordersCompleted : sessionDone;
-    totalOrders += done;
+    // daily counter: use dailyOrdersCompleted if it was recorded today, else fall back to sessionDone
+    var dailyDone = (p.dailyOrdersDate === _todayD) ? (p.dailyOrdersCompleted||0) : sessionDone;
+    totalOrders += dailyDone;
     if(p.online) activeNow++;
     return {p:p, hrs:hrs, done:done};
   });
@@ -5908,6 +5937,7 @@ function renderProductivity(){
 // VEHICLE LOG
 // ══════════════════════════════════════════
 var vehicleTrips = [];
+var _vehicleConfig = {model:'', plate:''};
 
 function vehicleLoad(){
   try{ vehicleTrips = JSON.parse(localStorage.getItem('warehub_vehicle')||'[]'); }
@@ -5917,6 +5947,26 @@ function vehicleLoad(){
 function vehicleSave(){
   try{ localStorage.setItem('warehub_vehicle', JSON.stringify(vehicleTrips)); }
   catch(e){}
+}
+
+function vehicleConfigLoad(){
+  try{
+    var v = JSON.parse(localStorage.getItem('warehub_vehicle_config')||'{}');
+    _vehicleConfig = {model: v.model||'', plate: v.plate||''};
+  }catch(e){ _vehicleConfig = {model:'', plate:''}; }
+  var mEl = document.getElementById('veh-config-model');
+  var pEl = document.getElementById('veh-config-plate');
+  if(mEl) mEl.value = _vehicleConfig.model;
+  if(pEl) pEl.value = _vehicleConfig.plate;
+}
+
+function vehicleConfigSave(){
+  var mEl = document.getElementById('veh-config-model');
+  var pEl = document.getElementById('veh-config-plate');
+  _vehicleConfig.model = mEl ? mEl.value.trim() : '';
+  _vehicleConfig.plate = pEl ? pEl.value.trim() : '';
+  try{ localStorage.setItem('warehub_vehicle_config', JSON.stringify(_vehicleConfig)); }catch(e){}
+  pm('✓ Vehicle info saved.');
 }
 
 function vehiclePopulateDrivers(){
@@ -5945,7 +5995,6 @@ function vehicleSetNow(fieldId){
 
 function vehicleAddTrip(){
   var driver   = document.getElementById('veh-driver').value;
-  var plate    = document.getElementById('veh-plate') ? document.getElementById('veh-plate').value.trim() : '';
   var dest     = document.getElementById('veh-dest').value.trim();
   var depart   = document.getElementById('veh-depart').value;
   var ret      = document.getElementById('veh-return').value;
@@ -5971,7 +6020,6 @@ function vehicleAddTrip(){
                ? (document.getElementById('veh-driver-other')
                   ? document.getElementById('veh-driver-other').value.trim() : 'Unknown')
                : driver,
-    plate:   plate,
     dest:    dest,
     depart:  depart,
     ret:     ret,
@@ -5994,8 +6042,6 @@ function vehicleClearForm(){
     var el = document.getElementById(id);
     if(el) el.value = '';
   });
-  var plateEl = document.getElementById('veh-plate');
-  if(plateEl) plateEl.value = '';
   var msg = document.getElementById('veh-form-msg');
   if(msg) msg.textContent = '';
   var linkEl = document.getElementById('veh-dest-map-link');
@@ -6028,23 +6074,23 @@ function renderVehicleLog(){
     if(!filter) return true;
     var q = filter.toLowerCase();
     return (t.driver||'').toLowerCase().includes(q)
-        || (t.dest||'').toLowerCase().includes(q)
-        || (t.plate||'').toLowerCase().includes(q);
+        || (t.dest||'').toLowerCase().includes(q);
   });
   if(!trips.length){
     el.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--td);">No trips logged yet.</div>';
     return;
   }
-  var hdr = ['DATE','DRIVER','PLATE','DESTINATION','DEPART','RETURN','MILES','NOTES',''];
+  var hdr = ['DATE','DRIVER','DESTINATION','DEPART','RETURN','ODO START','ODO END','MILES','NOTES',''];
   var rows = trips.map(function(t, i){
     var bg = i%2===0 ? '' : 'background:rgba(255,255,255,0.02);';
     var cells = [
       '<td style="padding:7px 10px;white-space:nowrap;">'+(t.date||'')+'</td>',
       '<td style="padding:7px 10px;">'+(t.driver||'')+'</td>',
-      '<td style="padding:7px 10px;font-family:monospace;">'+(t.plate||'—')+'</td>',
       '<td style="padding:7px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.dest||'')+'</td>',
       '<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.depart||'—')+'</td>',
       '<td style="padding:7px 10px;white-space:nowrap;color:var(--td);">'+(t.ret||'—')+'</td>',
+      '<td style="padding:7px 10px;color:var(--td);font-family:monospace;">'+(t.odoStart||'—')+'</td>',
+      '<td style="padding:7px 10px;color:var(--td);font-family:monospace;">'+(t.odoEnd||'—')+'</td>',
       '<td style="padding:7px 10px;color:var(--cy);">'+(t.miles ? t.miles+' mi' : '—')+'</td>',
       '<td style="padding:7px 10px;color:var(--td);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.notes||'')+'</td>',
       '<td style="padding:7px 4px;" class="_vdel" data-tid="'+i+'"></td>'
@@ -6080,9 +6126,19 @@ function renderVehicleLog(){
 
 function vehicleExportCSV(){
   if(!vehicleTrips.length){ pm('⚠ No trips to export.'); return; }
-  var rows = [['Date','Driver','Plate','Destination','Depart','Return','Miles','Notes']];
+  var vModel = _vehicleConfig.model || 'Company Vehicle';
+  var vPlate = _vehicleConfig.plate || '—';
+  var rows = [
+    ['Vehicle: '+vModel+'   |   License Plate: '+vPlate,'','','','','','','',''],
+    ['Date','Driver','Destination','Depart','Return','ODO Start','ODO End','Miles','Notes']
+  ];
   vehicleTrips.forEach(function(t){
-    rows.push([t.date,t.driver,t.plate||'',t.dest,t.depart||'',t.ret||'',t.miles||'',t.notes||'']);
+    rows.push([
+      t.date, t.driver, t.dest,
+      t.depart||'', t.ret||'',
+      t.odoStart||'', t.odoEnd||'',
+      t.miles||'', t.notes||''
+    ]);
   });
   var csv = rows.map(function(r){
     return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(',');
@@ -6472,6 +6528,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
   await kvLoadStaff(); // 2. AWAIT KV — overrides localStorage if cloud has newer data
   gmapsLoadConfig();
   vehicleLoad();
+  vehicleConfigLoad();
   renderManagerPanel();
   renderPackerPanel();
   renderAssignPanel();
@@ -6823,6 +6880,24 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
         </div>
       </div>
 
+      <!-- Vehicle Config -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 20px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
+        <div style="font-size:8px;letter-spacing:2px;color:var(--cy);align-self:center;white-space:nowrap;">VEHICLE INFO</div>
+        <div style="display:flex;gap:12px;flex:1;flex-wrap:wrap;">
+          <div style="flex:1;min-width:140px;">
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">MODEL / NAME</div>
+            <input id="veh-config-model" placeholder="e.g. Ford Transit 2022" autocomplete="off"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LICENSE PLATE</div>
+            <input id="veh-config-plate" placeholder="e.g. ABC-1234" autocomplete="off"
+              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
+          </div>
+        </div>
+        <button class="btn btn-c" onclick="vehicleConfigSave()" style="font-size:9px;white-space:nowrap;align-self:flex-end;">💾 SAVE</button>
+      </div>
+
       <!-- New Trip Form -->
       <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
         <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:14px;">NEW TRIP ENTRY</div>
@@ -6832,11 +6907,6 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
             <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
               <option value="">— select driver —</option>
             </select>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LICENSE PLATE</div>
-            <input id="veh-plate" placeholder="e.g. ABC-1234…" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
           </div>
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
