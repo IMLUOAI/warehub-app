@@ -1693,6 +1693,7 @@ async function parsePdf(file){
   // Prevent concurrent parses (double-drop race condition)
   if(window._parsing){ pm('⚠ Already parsing, please wait…'); return; }
   window._parsing = true;
+  window._skippedPages = [];   // reset for this parse run
 
   document.getElementById('debug-log').textContent='';
   orders=[]; ai=0;
@@ -1759,6 +1760,11 @@ async function parsePdf(file){
         out.push(o);
         dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf);
       } else {
+        // Store skipped page info for the Missing Labels summary
+        window._skippedPages.push({
+          pageNum: p,
+          tokens: words.slice(0, 10).map(function(w){ return w.text; })
+        });
         if(p <= 3){
           dbg('✗ SKIP p'+p+' — tokens:');
           words.forEach(function(w){ dbg('    ['+w.text+']'); });
@@ -2253,6 +2259,83 @@ function autoAssign(){
   pm('✓ SKU-grouped assignment: '+summary);
 }
 
+function showMissingLabels(droppedDups, skippedPages){
+  // droppedDups: [{tracking, carrier, count, pages:[]}]
+  // skippedPages: [{pageNum, tokens:[]}]
+  var total = droppedDups.length + skippedPages.length;
+  if(!total) return;  // nothing missing — no popup needed
+
+  var html = '<div style="position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:20px;" id="_missing-overlay">'
+    +'<div style="background:var(--sur);border:2px solid var(--rd);max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">'
+
+    // Header
+    +'<div style="padding:14px 18px;background:#1a0a0a;border-bottom:1px solid var(--rd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
+      +'<div>'
+        +'<div style="font-size:9px;letter-spacing:3px;color:var(--rd);">ATTENTION</div>'
+        +'<div style="font-size:16px;font-weight:700;color:#fff;margin-top:2px;">⚠ '+total+' Missing Label'+(total>1?'s':'')+' Detected</div>'
+      +'</div>'
+      +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
+        +'style="background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;font-size:10px;padding:5px 12px;letter-spacing:1px;">✕ CLOSE</button>'
+    +'</div>'
+
+    // Body
+    +'<div style="overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px;">';
+
+  // Section 1 — parse failures
+  if(skippedPages.length){
+    html += '<div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:10px;">FAILED TO PARSE ('+skippedPages.length+' page'+(skippedPages.length>1?'s':'')+')</div>'
+      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These PDF pages had no recognisable tracking number. Check the original file at the page numbers listed below.</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+      +'<tr><th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">PDF PAGE</th>'
+          +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TEXT FOUND ON PAGE</th></tr>'
+      +skippedPages.map(function(s){
+        var preview = s.tokens.filter(function(t){ return t.length > 1; }).slice(0, 6).join('  ·  ') || '(no readable text)';
+        return '<tr style="border-bottom:1px solid var(--bdr)22;">'
+          +'<td style="padding:6px 8px;color:var(--am);font-weight:700;">p.'+s.pageNum+'</td>'
+          +'<td style="padding:6px 8px;color:var(--tx);font-family:monospace;font-size:9px;word-break:break-all;">'+preview+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</table>'
+      +'</div>';
+  }
+
+  // Section 2 — duplicate drops
+  if(droppedDups.length){
+    html += '<div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--rd);margin-bottom:10px;">DUPLICATE TRACKING — DROPPED FROM PRINT ('+droppedDups.length+' tracking'+(droppedDups.length>1?' numbers':' number')+')</div>'
+      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These tracking numbers appeared more than once. Only the first copy was printed; the rest were dropped.</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+      +'<tr>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TRACKING</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">CARRIER</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">COPIES</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">PDF PAGES</th>'
+      +'</tr>'
+      +droppedDups.map(function(d){
+        return '<tr style="border-bottom:1px solid var(--bdr)22;">'
+          +'<td style="padding:6px 8px;font-family:monospace;font-size:9px;color:var(--tx);word-break:break-all;">'+d.tracking+'</td>'
+          +'<td style="padding:6px 8px;color:var(--cy);">'+d.carrier+'</td>'
+          +'<td style="padding:6px 8px;color:var(--rd);font-weight:700;">'+d.count+'×</td>'
+          +'<td style="padding:6px 8px;color:var(--td);">'+d.pages.join(', ')+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</table>'
+      +'</div>';
+  }
+
+  html += '</div>'  // end body
+    +'<div style="padding:12px 18px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end;flex-shrink:0;">'
+      +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
+        +'style="padding:8px 24px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;font-weight:700;">GOT IT</button>'
+    +'</div>'
+    +'</div></div>';
+
+  var el = document.createElement('div');
+  el.innerHTML = html;
+  document.body.appendChild(el.firstChild);
+}
+
 async function printSkuSort(){
   if(!orders.length){pm('Nothing to print — import a PDF batch first.');return;}
   var withImg=orders.filter(function(o){return o.pageImg||o.pageIndex!=null;});
@@ -2280,6 +2363,7 @@ async function printSkuSort(){
   // ── Duplicate tracking detection ──────────────────────────────────────────────
   // Count how many times each tracking number appears.  Any count > 1 means
   // those extra labels will be silently dropped by deduplication during printing.
+  var _droppedDups = [];   // collected for showMissingLabels()
   (function(){
     var freq={};
     withImg.forEach(function(o){ var t=o.tracking||'(none)'; freq[t]=(freq[t]||0)+1; });
@@ -2290,6 +2374,12 @@ async function printSkuSort(){
       dups.sort(function(a,b){return freq[b]-freq[a];}).forEach(function(t){
         var ex=withImg.filter(function(o){return o.tracking===t;});
         dbg('  '+freq[t]+'× '+t+' ('+ex[0].carrier+')  pages: '+ex.map(function(o){return o.pageIndex;}).join(', '));
+        _droppedDups.push({
+          tracking: t,
+          carrier:  ex[0].carrier||'Unknown',
+          count:    freq[t],
+          pages:    ex.map(function(o){return 'p.'+o.pageIndex;})
+        });
       });
       showDebug();
     }
@@ -2432,6 +2522,12 @@ async function printSkuSort(){
   }).join(' · ');
   pm('✓ '+orderedOrders.length+' label(s) across '+carrierNames.length+' carrier(s) — '+carrierSummary);
   printViaIframe(css, bodyHtml, printWin);
+
+  // Show missing labels overlay if anything was skipped or dropped
+  var _skipped = window._skippedPages || [];
+  if(_droppedDups.length || _skipped.length){
+    setTimeout(function(){ showMissingLabels(_droppedDups, _skipped); }, 600);
+  }
 }
 
 async function printByPacker(){
