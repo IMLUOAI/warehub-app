@@ -3324,18 +3324,37 @@ function renderQueue(){
   var pending=show.filter(function(o){return o.status==='pending';});
   var done=show.filter(function(o){return o.status==='done';});
 
-  var html='<div style="font-size:9px;letter-spacing:2px;color:var(--td);padding:4px 2px;display:flex;justify-content:space-between;">'
+  var hasFedexPending = pending.some(function(o){ return o.carrier && o.carrier.toLowerCase().indexOf('fedex')>=0; });
+  var html='<div style="font-size:9px;letter-spacing:2px;color:var(--td);padding:4px 2px;display:flex;justify-content:space-between;align-items:center;">'
     +'<span>'+(currentPacker?currentPacker.name+"'S QUEUE":'ALL ORDERS')+'</span>'
+    +'<div style="display:flex;align-items:center;gap:6px;">'
+    +(hasFedexPending?'<button id="fdx-check-btn" onclick="fedexCheckAll()" style="font-size:8px;padding:2px 7px;background:transparent;border:1px solid #c77dff;color:#c77dff;border-radius:2px;cursor:pointer;letter-spacing:.5px;">📦 CHECK FEDEX</button>':'')
     +'<span style="color:var(--gn);">'+done.length+'/'+show.length+' done</span>'
+    +'</div>'
     +'</div>';
 
 
   html+=pending.map(function(o){
     var col=cc(o.carrier);
     var assignedP=o.assignedTo?packers.find(function(p){return p.id===o.assignedTo;}):null;
+    var isFedEx = o.carrier && o.carrier.toLowerCase().indexOf('fedex')>=0;
+    var fdxSt = isFedEx ? (_fedexStatus[o.tracking]||null) : null;
+    var fdxBadge = '';
+    if(isFedEx){
+      if(fdxSt){
+        var stColor = _fedexStatusColor(fdxSt.status);
+        fdxBadge = '<span style="font-size:7px;padding:1px 5px;border:1px solid '+stColor+';color:'+stColor+';border-radius:2px;margin-left:4px;vertical-align:middle;">'+fdxSt.status+'</span>'
+          +'<button id="fdx-one-'+o.tracking+'" onclick="fedexCheckOne(\''+o.tracking+'\')" title="Refresh tracking" style="font-size:9px;background:transparent;border:none;color:#c77dff;cursor:pointer;padding:0 3px;vertical-align:middle;">↺</button>';
+      } else {
+        fdxBadge = '<button id="fdx-one-'+o.tracking+'" onclick="fedexCheckOne(\''+o.tracking+'\')" title="Check FedEx status" style="font-size:8px;padding:1px 5px;background:transparent;border:1px solid #c77dff;color:#c77dff;border-radius:2px;cursor:pointer;margin-left:4px;vertical-align:middle;">CHECK</button>';
+      }
+    }
     return '<div class="qrow pending" style="border-left:3px solid '+col+';">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
-        +'<span class="bdg" style="color:'+col+';border-color:'+col+';font-size:8px;">'+o.carrier+'</span>'
+        +'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">'
+          +'<span class="bdg" style="color:'+col+';border-color:'+col+';font-size:8px;">'+o.carrier+'</span>'
+          +fdxBadge
+        +'</div>'
         +(assignedP?'<span style="font-size:8px;color:'+packerColor(assignedP)+';">'+assignedP.name+'</span>':'')
       +'</div>'
       +'<div style="font-size:9px;color:var(--cy);word-break:break-all;margin-bottom:2px;">'+o.tracking+'</div>'
@@ -6077,6 +6096,165 @@ function vehicleConfigSave(){
   pm('✓ Vehicle info saved.');
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+//  FedEx Tracking — config, token cache, track API, status cache
+// ══════════════════════════════════════════════════════════════════════════
+var _fedexConfig = {clientId:'', clientSecret:''};
+var _fedexTokenData = null; // {token, expiresAt}
+var _fedexStatus = {};  // {tracking: {status, desc, ts}}
+
+function fedexLoadConfig(){
+  try{
+    var v = JSON.parse(localStorage.getItem('warehub_fedex')||'{}');
+    _fedexConfig = {clientId: v.clientId||'', clientSecret: v.clientSecret||''};
+  }catch(e){ _fedexConfig = {clientId:'', clientSecret:''}; }
+  var cEl = document.getElementById('fdx-client-id');
+  var sEl = document.getElementById('fdx-client-secret');
+  if(cEl) cEl.value = _fedexConfig.clientId;
+  if(sEl) sEl.value = _fedexConfig.clientSecret;
+}
+
+function fedexSaveConfig(){
+  var cEl = document.getElementById('fdx-client-id');
+  var sEl = document.getElementById('fdx-client-secret');
+  _fedexConfig.clientId     = cEl ? cEl.value.trim() : '';
+  _fedexConfig.clientSecret = sEl ? sEl.value.trim() : '';
+  try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+  _fedexTokenData = null; // invalidate cached token
+  pm('✓ FedEx credentials saved.');
+}
+
+async function fedexGetToken(){
+  if(_fedexTokenData && Date.now() < _fedexTokenData.expiresAt - 30000){
+    return _fedexTokenData.token;
+  }
+  if(!_fedexConfig.clientId || !_fedexConfig.clientSecret){
+    throw new Error('FedEx credentials not configured. Open Dev → FedEx to add them.');
+  }
+  var body = 'grant_type=client_credentials'
+    +'&client_id='+encodeURIComponent(_fedexConfig.clientId)
+    +'&client_secret='+encodeURIComponent(_fedexConfig.clientSecret);
+  var resp = await fetch('https://apis.fedex.com/oauth/token',{
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body: body
+  });
+  if(!resp.ok){ var t=await resp.text(); throw new Error('FedEx auth failed ('+resp.status+'): '+t); }
+  var data = await resp.json();
+  _fedexTokenData = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in||3600)*1000
+  };
+  return _fedexTokenData.token;
+}
+
+async function fedexTrack(trackingNumbers){
+  var token = await fedexGetToken();
+  var trackList = trackingNumbers.map(function(tn){
+    return {trackingNumberInfo:{trackingNumber: tn}};
+  });
+  var resp = await fetch('https://apis.fedex.com/track/v1/trackingnumbers',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+token,
+      'x-locale':'en_US',
+      'x-customer-transaction-id':'warehub-'+Date.now()
+    },
+    body: JSON.stringify({includeDetailedScans:false, trackingInfo: trackList})
+  });
+  if(!resp.ok){ var t=await resp.text(); throw new Error('FedEx track failed ('+resp.status+'): '+t); }
+  return await resp.json();
+}
+
+function _fedexStatusLabel(eventType){
+  if(!eventType) return 'UNKNOWN';
+  var e = eventType.toUpperCase();
+  if(e.indexOf('DELIVERED')>=0) return 'DELIVERED';
+  if(e.indexOf('OUT_FOR_DEL')>=0 || e.indexOf('OD')===0) return 'OUT FOR DELIVERY';
+  if(e.indexOf('IN_TRANSIT')>=0 || e.indexOf('IT')===0 || e.indexOf('AR')===0 || e.indexOf('DP')===0) return 'IN TRANSIT';
+  if(e.indexOf('PICKED_UP')>=0 || e.indexOf('PU')===0) return 'PICKED UP';
+  if(e.indexOf('EXCEPTION')>=0 || e.indexOf('DE')===0) return 'EXCEPTION';
+  if(e.indexOf('PENDING')>=0 || e.indexOf('IN_PROGRESS')>=0) return 'PENDING PICKUP';
+  return eventType.replace(/_/g,' ');
+}
+
+function _fedexStatusColor(label){
+  switch(label){
+    case 'DELIVERED':        return '#4caf80';
+    case 'OUT FOR DELIVERY': return '#ffc107';
+    case 'IN TRANSIT':       return '#c77dff';
+    case 'PICKED UP':        return '#c77dff';
+    case 'EXCEPTION':        return '#f56565';
+    case 'PENDING PICKUP':   return '#7096b8';
+    default:                 return '#7096b8';
+  }
+}
+
+async function fedexCheckAll(){
+  var fdxOrders = orders.filter(function(o){
+    return o.status==='pending' && o.carrier && o.carrier.toLowerCase().indexOf('fedex')>=0;
+  });
+  if(!fdxOrders.length){ pm('No pending FedEx orders in queue.'); return; }
+  var btn = document.getElementById('fdx-check-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⟳ CHECKING…'; }
+  try{
+    // batch in groups of 30 (FedEx API limit per request)
+    var batchSize = 30;
+    for(var i=0; i<fdxOrders.length; i+=batchSize){
+      var batch = fdxOrders.slice(i, i+batchSize);
+      var tns = batch.map(function(o){ return o.tracking; });
+      var result = await fedexTrack(tns);
+      var completeResults = (result.output && result.output.completeTrackResults) || [];
+      completeResults.forEach(function(cr){
+        var tn = cr.trackingNumber;
+        var tr = cr.trackResults && cr.trackResults[0];
+        if(!tr) return;
+        var latest = tr.latestStatusDetail || {};
+        var label = _fedexStatusLabel(latest.code || latest.statusByLocale || '');
+        _fedexStatus[tn] = {
+          status: label,
+          desc: latest.description || '',
+          ts: Date.now()
+        };
+      });
+    }
+    renderQueue();
+    pm('✓ FedEx status updated for '+fdxOrders.length+' label'+(fdxOrders.length!==1?'s':'')+'.');
+  }catch(ex){
+    pm('✗ FedEx: '+ex.message);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='📦 CHECK FEDEX'; }
+  }
+}
+
+async function fedexCheckOne(tracking){
+  var btn = document.getElementById('fdx-one-'+tracking);
+  if(btn){ btn.disabled=true; btn.textContent='⟳'; }
+  try{
+    var result = await fedexTrack([tracking]);
+    var completeResults = (result.output && result.output.completeTrackResults) || [];
+    if(completeResults.length){
+      var cr = completeResults[0];
+      var tr = cr.trackResults && cr.trackResults[0];
+      if(tr){
+        var latest = tr.latestStatusDetail || {};
+        var label = _fedexStatusLabel(latest.code || latest.statusByLocale || '');
+        _fedexStatus[tracking] = {
+          status: label,
+          desc: latest.description || '',
+          ts: Date.now()
+        };
+      }
+    }
+    renderQueue();
+  }catch(ex){
+    pm('✗ FedEx: '+ex.message);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='↺'; }
+  }
+}
+
 function vehiclePopulateDrivers(){
   var sel = document.getElementById('veh-driver');
   if(!sel) return;
@@ -6283,6 +6461,7 @@ function devLoad(){
     var redir = document.getElementById('dev-azure-redirect');
     if(redir) redir.textContent = window.location.origin + window.location.pathname;
   }catch(e){}
+  fedexLoadConfig();
 }
 
 function devSave(){
@@ -6637,6 +6816,7 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
   gmapsLoadConfig();
   vehicleLoad();
   vehicleConfigLoad();
+  fedexLoadConfig();
   renderManagerPanel();
   renderPackerPanel();
   renderAssignPanel();
@@ -7365,6 +7545,21 @@ document.addEventListener('DOMContentLoaded',function(){(async function(){try{
           <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps JavaScript API · Places API · Maps Embed API</div></div>
           <div class="dev-field"><div class="dev-label">KEY RESTRICTION</div><div class="dev-note">https://imluoai.github.io/*</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">FIX BLANK MAP</div><div class="dev-note">Verify all 3 APIs are enabled in Google Cloud Console. Check key restrictions include the GitHub Pages URL.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: FedEx Tracking ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📦 FedEx — Shipping Status Tracking</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">DEVELOPER PORTAL</div><a href="https://developer.fedex.com" target="_blank" class="dev-link">developer.fedex.com</a></div>
+          <div class="dev-field dev-wide"><div class="dev-label">SETUP STEPS</div><div class="dev-note">1. Register at developer.fedex.com &nbsp;·&nbsp; 2. Create a project → select "Track API" &nbsp;·&nbsp; 3. Copy Client ID &amp; Client Secret below &nbsp;·&nbsp; 4. Click SAVE CREDENTIALS &nbsp;·&nbsp; 5. Use "📦 CHECK FEDEX" in the order queue.</div></div>
+          <div class="dev-field"><div class="dev-label">CLIENT ID</div><input id="fdx-client-id" type="text" placeholder="l7xxxxxxxxxxxxx" style="width:100%;font-family:monospace;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--fg);border-radius:2px;" oninput="fedexLoadConfig&&null"/></div>
+          <div class="dev-field"><div class="dev-label">CLIENT SECRET</div><input id="fdx-client-secret" type="password" placeholder="••••••••••••••••" style="width:100%;font-family:monospace;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--fg);border-radius:2px;"/></div>
+          <div class="dev-field"><div class="dev-label">SAVE</div><button class="btn btn-c" onclick="fedexSaveConfig()" style="font-size:9px;">💾 SAVE CREDENTIALS</button></div>
+          <div class="dev-field dev-wide"><div class="dev-label">HOW IT WORKS</div><div class="dev-note">When FedEx orders appear in the queue, a "CHECK" button shows on each row, and a "📦 CHECK FEDEX" button appears at the top of the queue. Click either to look up status via FedEx Track API v1. Token is cached until expiry.</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">STATUS COLORS</div><div class="dev-note"><span style="color:#4caf80;">■</span> DELIVERED &nbsp; <span style="color:#ffc107;">■</span> OUT FOR DELIVERY &nbsp; <span style="color:#c77dff;">■</span> IN TRANSIT / PICKED UP &nbsp; <span style="color:#f56565;">■</span> EXCEPTION &nbsp; <span style="color:#7096b8;">■</span> PENDING / UNKNOWN</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">CORS NOTE</div><div class="dev-note">FedEx API is called directly from the browser. If you see CORS errors, the FedEx sandbox may be blocking cross-origin requests — use the production credentials (not test credentials) which have CORS allowed.</div></div>
         </div></div>
       </div>
 
