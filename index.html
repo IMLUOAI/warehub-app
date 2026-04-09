@@ -5716,14 +5716,20 @@ async function returnsSaveExcel(){
   function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
   pm('⟳ Saving returns to Excel…');
   try{
+    // Ensure sheet exists
     var sr=await fetch(base+'/worksheets?$select=name',{headers:auth});
     var sd=await sr.json();
     var names=(sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
+    // Clear existing content so old rows never bleed through
+    await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange/clear',
+      {method:'POST',headers:hdrs,body:JSON.stringify({applyTo:'All'})});
+    // Write header row
     var hdr=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
     await fetch(rangeUrl('A1:M1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
+    // Write all records from local returnsList (full source of truth)
     var data=returnsList.map(function(r){
       return [r.date,r.time,r.tracking,r.carrier||'',
         RETURN_TYPES[r.type]||r.type,
@@ -5731,7 +5737,6 @@ async function returnsSaveExcel(){
         r.sku||'',r.qty||1,r.pile||'',r.location||'',r.notes||'',
         r.scannedBy,r.mgrReview?'YES':'no'];
     });
-    if(!data.length){pm('⚠ No return data.');return;}
     var wr=await fetch(rangeUrl('A2:M'+(1+data.length)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:data})});
     if(wr.ok) pm('✓ Returns saved → "'+sheet+'" tab ('+data.length+' records)');
     else{var e=await wr.json();pm('✗ Excel: '+((e.error&&e.error.message)||wr.status));}
