@@ -364,6 +364,49 @@ body{
   </div>
   <div id="clerk-mount-point" style="width:100%; max-width:400px;"></div>
 </div>
+
+<!-- ══ SUBSCRIPTION GATE ══ -->
+<div id="billing-gate" style="
+  display:none; position:fixed; inset:0; z-index:9000;
+  background:#0d1117; flex-direction:column; align-items:center;
+  justify-content:center; gap:28px;
+  font-family:'Inter',system-ui,sans-serif; padding:24px; text-align:center;
+">
+  <div>
+    <div style="font-size:32px; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px; margin-bottom:6px;">
+      🏭 WAREHUB
+    </div>
+    <div style="font-size:11px; letter-spacing:3px; color:#4a6080;">WAREHOUSE MANAGEMENT</div>
+  </div>
+  <div style="background:#111827; border:1px solid #1e2a3a; border-radius:16px; padding:36px 40px; max-width:440px; width:100%;">
+    <div style="font-size:40px; margin-bottom:12px;">📦</div>
+    <div style="font-size:22px; font-weight:700; color:#e2e8f0; margin-bottom:10px;">
+      Activate your subscription
+    </div>
+    <div style="font-size:14px; color:#7096b8; line-height:1.6; margin-bottom:28px;">
+      Your account is set up and ready. Choose a plan to unlock the full warehouse management suite.
+    </div>
+    <div style="display:flex; gap:12px; flex-direction:column;">
+      <button id="gate-subscribe-btn" onclick="window.open('https://imluoai.github.io/warehub-worker/billing.html','_blank')" style="
+        padding:14px 24px; border-radius:10px; font-size:15px; font-weight:700;
+        background:linear-gradient(135deg,#4a9eff,#c77dff); color:#fff;
+        border:none; cursor:pointer; transition:opacity .15s;
+      " onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        View Plans &amp; Pricing →
+      </button>
+      <button onclick="window.location.reload()" style="
+        padding:10px 24px; border-radius:10px; font-size:13px; font-weight:600;
+        background:transparent; border:1px solid #2d3748; color:#7096b8; cursor:pointer;
+      ">
+        ↺ I already subscribed — refresh
+      </button>
+    </div>
+  </div>
+  <div style="font-size:12px; color:#4a6080;">
+    Starting from $79/month · Cancel any time · Secure checkout via Stripe
+  </div>
+</div>
+
 <!-- ══ PIN LOCK SCREEN ══ -->
 <div id="pin-lock" style="position:fixed;inset:0;z-index:99999;background:#1a1f2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;overflow:hidden;">
 
@@ -8164,6 +8207,8 @@ function aiDoActions(actions){
     window.__clerk = window.Clerk;
   
     // Register tenant on first sign-up (idempotent — safe to call every login)
+    let _tenantPlan = 'trial';
+    let _tenantActive = false;
     try {
       const email = user.emailAddresses[0]?.emailAddress || '';
       const name  = user.fullName || user.firstName || email;
@@ -8174,14 +8219,36 @@ function aiDoActions(actions){
       });
       const regData = await regResp.json();
       _warehubTenantId = regData.tenantId;
+      _tenantPlan   = regData.plan   || 'trial';
+      _tenantActive = regData.active || false;
     } catch(e) {
       console.warn('[Warehub] Tenant registration failed:', e.message);
+      // On network error, allow access (fail open so warehouse doesn't go down)
+      _tenantActive = true;
     }
-  
+
+    // ── Subscription gate ────────────────────────────────────────
+    const billingSuccess = new URLSearchParams(window.location.search).get('billing') === 'success';
+    const gate = document.getElementById('billing-gate');
+
+    if (billingSuccess) {
+      // Stripe redirect back after checkout — assume activating, proceed to app
+      // Clean up the URL param without a page reload
+      history.replaceState({}, '', window.location.pathname);
+      if (gate) gate.style.display = 'none';
+    } else if (!_tenantActive) {
+      // No active subscription — show gate, don't init app
+      if (authScreen) authScreen.style.display = 'none';
+      if (gate) gate.style.display = 'flex';
+      return;
+    } else {
+      if (gate) gate.style.display = 'none';
+    }
+
     // Hide auth screen, show app
     if (authScreen) authScreen.style.display = 'none';
     if (appRoot)    appRoot.style.display = '';
-  
+
     // Kick off the normal app init, then overlay cloud data
     if (!window._appInitCalled) {
       window._appInitCalled = true;
