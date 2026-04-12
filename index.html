@@ -8182,11 +8182,19 @@ function aiDoActions(actions){
     if (authScreen) authScreen.style.display = 'none';
     if (appRoot)    appRoot.style.display = '';
   
-    // Kick off the normal app init
+    // Kick off the normal app init, then overlay cloud data
     if (!window._appInitCalled) {
       window._appInitCalled = true;
       clearTimeout(window._appInitTimer);
-      if (typeof window._appInitFn === 'function') window._appInitFn();
+      if (typeof window._appInitFn === 'function') {
+        await window._appInitFn();
+        // After localStorage init, load cloud data (overrides local state)
+        if (typeof window.apiLoadAll === 'function') {
+          window.apiLoadAll().catch(function(e){
+            console.warn('[WH-API] Cloud load failed (using local data):', e.message);
+          });
+        }
+      }
     }
   }
   
@@ -8198,6 +8206,377 @@ function aiDoActions(actions){
       .addEventListener('load', initClerkAuth);
   }
   </script>
-  
+
+<!-- ══════════════════════════════════════════════════════════════
+     Warehub API Sync Layer — dual-write localStorage + Worker API
+     All writes go to localStorage first (instant), then API (async).
+     All loads try API first, fall back to localStorage silently.
+════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  var API = 'https://warehub-worker.imluoai.workers.dev';
+
+  function apiReady(){
+    return typeof window.warehubApi === 'function' && window._clerkToken;
+  }
+
+  function apiCall(method, path, body){
+    if(!apiReady()) return Promise.resolve(null);
+    return window.warehubApi(method, path, body).catch(function(e){
+      console.warn('[WH-API]', method, path, e.message);
+      return null;
+    });
+  }
+
+  // ── CLOUD STATUS DOT ────────────────────────────────────────────
+  function setCloudDot(color, title){
+    var dot = document.getElementById('cloud-status');
+    if(dot){ dot.style.color = color; if(title) dot.title = title; }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //  PACKERS — replace KV sync with D1 API sync
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSavePackers = async function(){
+    if(!apiReady()) return;
+    setCloudDot('var(--am)', 'Syncing packers…');
+    var result = await apiCall('POST', '/api/packers/sync', {
+      packers: packers.concat(managers)
+    });
+    if(result && result.ok){
+      setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
+    } else {
+      setCloudDot('var(--rd)', 'Cloud sync failed');
+    }
+  };
+
+  window.apiLoadPackers = async function(){
+    if(!apiReady()) return false;
+    setCloudDot('var(--am)', 'Loading from cloud…');
+    var result = await apiCall('GET', '/api/packers');
+    if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
+    var all = result.packers;
+    if(!all.length){ setCloudDot('var(--gn)', 'Cloud: no packers yet'); return false; }
+    packers  = all.filter(function(p){ return !p.is_manager; });
+    managers = all.filter(function(p){ return  p.is_manager; });
+    // Normalize fields
+    packers.forEach(function(p){
+      p.online = !!p.online; p.active = true;
+      p.loginTime = p.loginTime||null;
+      p.ordersCompleted = p.ordersCompleted||0;
+      p.dailyOrdersDate = p.daily_orders_date||'';
+      p.dailyOrdersCompleted = p.daily_orders_completed||0;
+      p.skusScanned = p.skusScanned||0;
+      p.orderTimes = p.orderTimes||[];
+      p.totalPackTime = p.totalPackTime||0;
+      p.shiftSessions = p.shiftSessions||[];
+    });
+    localStorage.setItem('warehub_packers',  JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+    renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+    setCloudDot('var(--gn)', 'Cloud sync: loaded ' + all.length + ' packers');
+    pm('✓ Staff loaded from cloud (' + packers.length + ' packers)');
+    return true;
+  };
+
+  // Patch saveStaff to also sync to API
+  var _origSaveStaff = window.saveStaff;
+  window.saveStaff = function(){
+    if(_origSaveStaff) _origSaveStaff.apply(this, arguments);
+    window.apiSavePackers();
+  };
+
+  // Replace kvSaveStaff and kvLoadStaff with API versions
+  window.kvSaveStaff = window.apiSavePackers;
+  window.kvLoadStaff = window.apiLoadPackers;
+
+  // ════════════════════════════════════════════════════════════════
+  //  ORDERS — sync when imported and when completed
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSyncOrders = async function(){
+    if(!apiReady() || !orders.length) return;
+    // Clear existing orders for this tenant and re-import (matches current session)
+    await apiCall('POST', '/api/orders/clear');
+    var batch = orders.map(function(o){
+      return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[] };
+    });
+    var result = await apiCall('POST', '/api/orders', { orders: batch });
+    if(result && result.inserted){
+      // Fetch back with API IDs so we can PATCH on complete
+      var fresh = await apiCall('GET', '/api/orders');
+      if(fresh && fresh.orders){
+        fresh.orders.forEach(function(apiOrder){
+          var local = orders.find(function(o){ return o.tracking === apiOrder.tracking; });
+          if(local) local.apiId = apiOrder.id;
+        });
+      }
+    }
+  };
+
+  window.apiCompleteOrder = async function(order){
+    if(!apiReady() || !order.apiId) return;
+    await apiCall('PATCH', '/api/orders/' + order.apiId, {
+      status:       'done',
+      packed_by:    order.packedBy    || null,
+      assigned_to:  order.assignedTo  || null,
+      completed_at: order.completedAt || new Date().toISOString()
+    });
+  };
+
+  window.apiLoadOrders = async function(){
+    if(!apiReady()) return;
+    var result = await apiCall('GET', '/api/orders');
+    if(!result || !result.orders || !result.orders.length) return;
+    // Only restore if current session has no orders
+    if(orders.length) return;
+    orders = result.orders.map(function(o){
+      return {
+        tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'',
+        skus: o.skus||[], status: o.status||'pending',
+        assignedTo: o.assigned_to||null, packedBy: o.packed_by||null,
+        completedAt: o.completed_at||null, apiId: o.id,
+        orderStartTime: null, orderEndTime: null
+      };
+    });
+    renderQueue(); renderDash(); renderFloor();
+    pm('✓ Orders restored from cloud (' + orders.length + ' orders)');
+  };
+
+  // Patch initOrders to sync after import
+  var _origInitOrders = window.initOrders;
+  window.initOrders = function(parsed){
+    if(_origInitOrders) _origInitOrders.apply(this, arguments);
+    window.apiSyncOrders();
+  };
+
+  // Patch completeOrder to also update API
+  var _origCompleteOrder = window.completeOrder;
+  window.completeOrder = function(order, scannedTracking){
+    if(_origCompleteOrder) _origCompleteOrder.apply(this, arguments);
+    window.apiCompleteOrder(order);
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  //  RETURNS — sync each new entry
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSaveReturn = async function(entry){
+    if(!apiReady() || !entry) return;
+    await apiCall('POST', '/api/returns', {
+      tracking:    entry.tracking||null,
+      carrier:     entry.carrier||null,
+      type:        entry.type||null,
+      condition:   entry.condition||null,
+      sku:         entry.sku||null,
+      qty:         entry.qty||1,
+      pile:        entry.pile||null,
+      location:    entry.location||null,
+      notes:       entry.notes||null,
+      scanned_by:  entry.scannedBy||null,
+      mgr_review:  entry.mgrReview||false,
+      return_date: entry.date||new Date().toISOString().slice(0,10),
+      return_time: entry.time||new Date().toTimeString().slice(0,8)
+    });
+  };
+
+  window.apiLoadReturns = async function(){
+    if(!apiReady()) return;
+    var result = await apiCall('GET', '/api/returns');
+    if(!result || !result.returns || !result.returns.length) return;
+    var apiReturns = result.returns.map(function(r){
+      return {
+        id: r.id, tracking: r.tracking, carrier: r.carrier,
+        type: r.type, condition: r.condition,
+        sku: r.sku, qty: r.qty||1,
+        pile: r.pile, location: r.location, notes: r.notes,
+        scannedBy: r.scanned_by, mgrReview: !!r.mgr_review,
+        date: r.return_date, time: r.return_time
+      };
+    });
+    // Merge: API is source of truth, keep local entries not in API
+    var apiIds = new Set(apiReturns.map(function(r){ return r.id; }));
+    var localOnly = (returnsList||[]).filter(function(r){ return !apiIds.has(r.id); });
+    returnsList = apiReturns.concat(localOnly);
+    returnsSave();
+    if(typeof renderReturnsList === 'function') renderReturnsList();
+    if(typeof renderReturnsStats === 'function') renderReturnsStats();
+  };
+
+  // Patch returnsSubmit to also call apiSaveReturn
+  var _origReturnsSubmit = window.returnsSubmit;
+  window.returnsSubmit = function(){
+    var prevLen = (returnsList||[]).length;
+    if(_origReturnsSubmit) _origReturnsSubmit.apply(this, arguments);
+    // After submit, the newest entry is at index 0 (unshifted)
+    if(returnsList && returnsList.length > prevLen){
+      window.apiSaveReturn(returnsList[0]);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  //  VEHICLE — sync each new trip
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSaveTrip = async function(trip){
+    if(!apiReady() || !trip) return;
+    await apiCall('POST', '/api/vehicle/trips', {
+      driver:      trip.driver||'',
+      destination: trip.dest||trip.destination||'',
+      depart_time: trip.depart||trip.depart_time||null,
+      return_time: trip.ret||trip.return_time||null,
+      odo_start:   trip.odoStart ? parseFloat(trip.odoStart) : null,
+      odo_end:     trip.odoEnd   ? parseFloat(trip.odoEnd)   : null,
+      miles:       trip.miles    ? parseFloat(trip.miles)    : null,
+      notes:       trip.notes||null,
+      trip_date:   new Date().toISOString().slice(0,10)
+    });
+  };
+
+  window.apiLoadVehicle = async function(){
+    if(!apiReady()) return;
+    var result = await apiCall('GET', '/api/vehicle/trips');
+    if(!result || !result.trips || !result.trips.length) return;
+    var apiTrips = result.trips.map(function(t){
+      return {
+        id: t.id||('TRIP-'+Date.now()),
+        date: t.trip_date||'',
+        driver: t.driver||'',
+        dest: t.destination||'',
+        depart: t.depart_time||'',
+        ret: t.return_time||'',
+        odoStart: t.odo_start||'',
+        odoEnd: t.odo_end||'',
+        miles: t.miles||'',
+        notes: t.notes||''
+      };
+    });
+    if(!apiTrips.length) return;
+    vehicleTrips = apiTrips;
+    vehicleSave();
+    if(typeof renderVehicleLog  === 'function') renderVehicleLog();
+    if(typeof renderVehicleStats=== 'function') renderVehicleStats();
+  };
+
+  // Patch vehicleAddTrip to also push to API
+  var _origVehicleAddTrip = window.vehicleAddTrip;
+  window.vehicleAddTrip = function(){
+    var prevLen = (vehicleTrips||[]).length;
+    if(_origVehicleAddTrip) _origVehicleAddTrip.apply(this, arguments);
+    if(vehicleTrips && vehicleTrips.length > prevLen){
+      window.apiSaveTrip(vehicleTrips[0]);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  //  FBA — sync each new record
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSaveFba = async function(rec){
+    if(!apiReady() || !rec) return;
+    await apiCall('POST', '/api/fba', {
+      shipment_id:        rec.shipId||'',
+      fulfillment_center: rec.fc||null,
+      units:              rec.units ? parseInt(rec.units) : null,
+      boxes:              rec.boxes ? parseInt(rec.boxes) : null,
+      dims:               rec.dims||null,
+      weight:             rec.weight ? parseFloat(rec.weight) : null,
+      carrier:            rec.carrier||null,
+      tracking:           rec.tracking||null,
+      submitted_by:       rec.by||null,
+      notes:              rec.notes||null,
+      ship_date:          new Date().toISOString().slice(0,10),
+      skus:               rec.skus||[]
+    });
+  };
+
+  window.apiLoadFba = async function(){
+    if(!apiReady()) return;
+    var result = await apiCall('GET', '/api/fba');
+    if(!result || !result.shipments || !result.shipments.length) return;
+    var apiRecs = result.shipments.map(function(s){
+      return {
+        id: s.id, date: s.ship_date||'',
+        shipId: s.shipment_id||'', fc: s.fulfillment_center||'',
+        by: s.submitted_by||'', carrier: s.carrier||'',
+        tracking: s.tracking||'', boxes: s.boxes||'',
+        units: s.units||'', dims: s.dims||'', weight: s.weight||'',
+        notes: s.notes||'', skus: s.skus||[]
+      };
+    });
+    if(!apiRecs.length) return;
+    fbaRecords = apiRecs;
+    fbaSaveLocal();
+    if(typeof renderFbaLog  === 'function') renderFbaLog();
+    if(typeof renderFbaStats=== 'function') renderFbaStats();
+  };
+
+  // Patch fbaSubmit to also push to API
+  var _origFbaSubmit = window.fbaSubmit;
+  window.fbaSubmit = function(){
+    var prevLen = (fbaRecords||[]).length;
+    if(_origFbaSubmit) _origFbaSubmit.apply(this, arguments);
+    if(fbaRecords && fbaRecords.length > prevLen){
+      window.apiSaveFba(fbaRecords[0]);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  //  SETTINGS — sync vehicle config and FedEx config
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiSaveSettings = async function(settings){
+    if(!apiReady()) return;
+    await apiCall('POST', '/api/settings', settings);
+  };
+
+  window.apiLoadSettings = async function(){
+    if(!apiReady()) return;
+    var result = await apiCall('GET', '/api/settings');
+    if(!result || !result.settings) return;
+    var s = result.settings;
+    if(s.vehicle_config){
+      _vehicleConfig = s.vehicle_config;
+      try{ localStorage.setItem('warehub_vehicle_config', JSON.stringify(_vehicleConfig)); }catch(e){}
+    }
+    if(s.fedex_config){
+      _fedexConfig = s.fedex_config;
+      try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+    }
+  };
+
+  // Patch vehicleConfigSave to also push settings to API
+  var _origVehicleConfigSave = window.vehicleConfigSave;
+  window.vehicleConfigSave = function(){
+    if(_origVehicleConfigSave) _origVehicleConfigSave.apply(this, arguments);
+    window.apiSaveSettings({ vehicle_config: _vehicleConfig });
+  };
+
+  // Patch fedexSaveConfig to also push settings to API
+  var _origFedexSaveConfig = window.fedexSaveConfig;
+  window.fedexSaveConfig = function(){
+    if(_origFedexSaveConfig) _origFedexSaveConfig.apply(this, arguments);
+    window.apiSaveSettings({ fedex_config: _fedexConfig });
+  };
+
+  // ════════════════════════════════════════════════════════════════
+  //  MASTER LOAD — called by Clerk onSignedIn after auth
+  // ════════════════════════════════════════════════════════════════
+
+  window.apiLoadAll = async function(){
+    console.log('[WH-API] Loading all sections from cloud…');
+    await window.apiLoadPackers();
+    await window.apiLoadOrders();
+    await window.apiLoadReturns();
+    await window.apiLoadVehicle();
+    await window.apiLoadFba();
+    await window.apiLoadSettings();
+    console.log('[WH-API] Cloud load complete.');
+  };
+
+})();
+</script>
+
 </body>
 </html>
