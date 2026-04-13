@@ -8171,10 +8171,12 @@ function aiDoActions(actions){
                        document.querySelector('body > *:not(#clerk-auth-screen)');
   
     if (window.Clerk.user) {
-      // Already signed in — get fresh token and register/load tenant
+      // Already signed in — Clerk runs silently, PIN screen stays on top
       await onSignedIn(window.Clerk.user);
     } else {
-      // Show Clerk sign-in UI
+      // Session expired or first login — hide PIN so Clerk login is visible
+      const pinLock = document.getElementById('pin-lock');
+      if (pinLock) pinLock.style.display = 'none';
       if (appRoot) appRoot.style.display = 'none';
       window.Clerk.mountSignIn(
         document.getElementById('clerk-mount-point'),
@@ -8253,6 +8255,13 @@ function aiDoActions(actions){
     // Hide auth screen, show app
     if (authScreen) authScreen.style.display = 'none';
     if (appRoot)    appRoot.style.display = '';
+
+    // Restore PIN screen if it was hidden for Clerk login
+    // (only if the session hasn't been unlocked yet this tab)
+    const pinLock = document.getElementById('pin-lock');
+    if (pinLock && sessionStorage.getItem('warehub_session') !== 'unlocked') {
+      pinLock.style.display = 'flex';
+    }
 
     // Kick off the normal app init, then overlay cloud data
     if (!window._appInitCalled) {
