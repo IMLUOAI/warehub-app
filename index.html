@@ -8189,6 +8189,11 @@ function aiDoActions(actions){
       } else {
         _clerkToken = null;
         _clerkUser  = null;
+        // If the app is already running, don't disrupt the UI — Clerk may
+        // briefly fire user=null during a background token refresh, then
+        // immediately fire again with the user restored. Only redirect to
+        // the auth screen if the app was never initialized (true sign-out).
+        if (window._appInitCalled) return;
         if (authScreen) authScreen.style.display = 'flex';
         if (appRoot)    appRoot.style.display = 'none';
       }
