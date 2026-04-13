@@ -131,13 +131,21 @@ function showMsg(text, type) {
 
 async function checkout(plan) {
   if (!_token) {
+    // Try refreshing the token one more time before giving up
+    try {
+      if (window.Clerk && window.Clerk.session) {
+        _token = await window.Clerk.session.getToken();
+      }
+    } catch(e) {}
+  }
+  if (!_token) {
     showMsg('Please sign in first to subscribe.', 'error');
-    window.Clerk.openSignIn();
+    if (window.Clerk && window.Clerk.openSignIn) window.Clerk.openSignIn();
     return;
   }
   var btn = document.getElementById('btn-' + plan);
   btn.disabled = true;
-  btn.textContent = '⟳ Loading…';
+  btn.textContent = '⟳ Connecting to Stripe…';
   try {
     var APP_URL = 'https://imluoai.github.io/warehub-app/';
     var resp = await fetch(WORKER + '/api/billing/checkout', {
@@ -149,6 +157,14 @@ async function checkout(plan) {
         cancelUrl:  window.location.href,
       }),
     });
+    if (!resp.ok && resp.status !== 200) {
+      var errText = '';
+      try { errText = (await resp.json()).error; } catch(e2) { errText = 'HTTP ' + resp.status; }
+      showMsg('Error: ' + (errText || 'Something went wrong'), 'error');
+      btn.disabled = false;
+      btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
+      return;
+    }
     var data = await resp.json();
     if (data.url) {
       window.location.href = data.url;
@@ -158,9 +174,22 @@ async function checkout(plan) {
       btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
     }
   } catch(e) {
-    showMsg('Network error — please try again.', 'error');
+    console.error('[Warehub billing]', e);
+    showMsg('Network error: ' + e.message + ' — check console for details.', 'error');
     btn.disabled = false;
     btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
+  }
+}
+
+async function checkWorkerHealth() {
+  try {
+    var r = await fetch(WORKER + '/api/health', {
+      headers: { 'Authorization': 'Bearer ' + (_token || '') }
+    });
+    var d = await r.json();
+    console.log('[Warehub] Worker health:', d);
+  } catch(e) {
+    console.error('[Warehub] Worker unreachable:', e.message);
   }
 }
 
@@ -183,6 +212,9 @@ async function initBillingPage() {
 
     // Mount user button in nav
     window.Clerk.mountUserButton(document.getElementById('clerk-user-area'));
+
+    // Verify Worker is reachable (logs to console for debugging)
+    checkWorkerHealth();
   } else {
     window.Clerk.mountSignIn(document.getElementById('clerk-user-area'), {
       afterSignInUrl: window.location.href,
