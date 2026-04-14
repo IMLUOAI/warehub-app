@@ -8671,22 +8671,46 @@ function aiDoActions(actions){
   window.apiLoadFba = async function(){
     if(!apiReady()) return;
     var result = await apiCall('GET', '/api/fba');
-    if(!result || !result.shipments || !result.shipments.length) return;
+    if(!result || !result.shipments) return;
+
     var apiRecs = result.shipments.map(function(s){
       return {
-        id: s.id, date: s.ship_date||'',
-        shipId: s.shipment_id||'', fc: s.fulfillment_center||'',
-        by: s.submitted_by||'', carrier: s.carrier||'',
-        tracking: s.tracking||'', boxes: s.boxes||'',
-        units: s.units||'', dims: s.dims||'', weight: s.weight||'',
-        notes: s.notes||'', skus: s.skus||[]
+        id:       s.id,
+        date:     s.ship_date||'',
+        shipId:   s.shipment_id||'',
+        fc:       s.fulfillment_center||'',
+        by:       s.submitted_by||'',
+        carrier:  s.carrier||'',
+        tracking: s.tracking||'',
+        boxes:    s.boxes||'',
+        units:    s.units||'',
+        dims:     s.dims||'',
+        weight:   s.weight||'',
+        notes:    s.notes||'',
+        skus:     s.skus||[]
       };
     });
-    if(!apiRecs.length) return;
-    fbaRecords = apiRecs;
+
+    // ── MERGE: keep any local records not yet confirmed in the API ──
+    // Match by shipment_id (the human-readable FBA ID the user typed).
+    // This preserves records that were saved locally but whose API POST
+    // failed silently (network drop, auth hiccup, etc.).
+    var apiShipIds = new Set(apiRecs.map(function(r){ return r.shipId; }).filter(Boolean));
+    var localOnly  = (fbaRecords||[]).filter(function(r){
+      return r.shipId && !apiShipIds.has(r.shipId);
+    });
+
+    // Re-queue any unsynced local records to the API now
+    localOnly.forEach(function(r){
+      console.warn('[WH-FBA] Re-syncing local-only record to API:', r.shipId);
+      window.apiSaveFba(r);
+    });
+
+    // API records are authoritative; local-only records appended as buffer
+    fbaRecords = apiRecs.concat(localOnly);
     fbaSaveLocal();
-    if(typeof renderFbaLog  === 'function') renderFbaLog();
-    if(typeof renderFbaStats=== 'function') renderFbaStats();
+    if(typeof renderFbaLog   === 'function') renderFbaLog();
+    if(typeof renderFbaStats === 'function') renderFbaStats();
   };
 
   // Patch fbaSubmit to also push to API + log event
