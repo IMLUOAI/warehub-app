@@ -6851,96 +6851,184 @@ async function fbaImportPdf(file){
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  LABEL TYPE 1 — Amazon FBA Box Label (top of each page)
+//    Contains: Shipment ID, FC code, "Box X of Y", FNSKU contents
+//  LABEL TYPE 2 — UPS/FedEx Carrier Label (bottom of each page)
+//    Contains: 1Z tracking, weight, dims, REFERENCE: FBA_ID/box#
+//  Both appear on the SAME PDF page for each box in the shipment.
+// ══════════════════════════════════════════════════════════════════
+
+// Known Amazon FC codes — 3-letter airport-style + 1-2 digits
+var FBA_FC_CODES = /\b(ONT|PHX|LAX|LGB|SNA|MDW|MKE|ORD|SDF|RNO|TEB|HOU|BWI|EWR|ABE|BDL|BFI|BOI|CLT|CMH|CVG|DAL|DEN|DFW|DTW|FLL|GSP|HPN|IND|JAX|LAS|MAN|MEM|MIA|MSP|MTN|OKC|OMA|PDX|PHL|PIT|RIC|SAT|SEA|SLC|SMF|STL|TPA|TUL|VGT|AVP|CHA|CLE|ELP|GEG|GYR|HNL|HSV|ICT|ILM|LGB|MCO|MOB|MSO|OAK|PNS|RFD|ROC|SYR|TYS|WAM|XSD|YEG|YVR|YYC)\d{1,2}\b/g;
+
 // ── Core parser — groups pages by unique FBA shipment ID ─────────
 function fbaParseLabels(allText, pageTexts){
-  // 1. Collect all FBA IDs across all pages
   var shipMap = {};  // shipId → aggregated data
 
-  pageTexts.forEach(function(txt){
-    var ids = txt.match(/FBA[0-9A-Z]{8,16}/gi) || [];
-    ids = ids.map(function(s){ return s.toUpperCase(); });
+  pageTexts.forEach(function(txt, pageIdx){
+    // ── Label Type 1: find FBA Shipment ID ──────────────────────
+    // Direct match: FBA17XXXXXXX on the FBA box label
+    var directIds = (txt.match(/\bFBA[A-Z0-9]{8,16}\b/gi) || [])
+                      .map(function(s){ return s.toUpperCase(); });
+
+    // Reference field on UPS label: "REFERENCE 1: FBA17XXXXXX/3"
+    var refIds = [];
+    var refMatches = txt.matchAll(/reference\s*\d?\s*[:\-]\s*(FBA[A-Z0-9]{8,16})/gi);
+    for(var m of refMatches) refIds.push(m[1].toUpperCase());
+
+    var ids = [...new Set(directIds.concat(refIds))];
     if(!ids.length) return;
 
-    // Use the first FBA ID found on the page as the key
     var shipId = ids[0];
     if(!shipMap[shipId]){
       shipMap[shipId] = {
-        shipId:   shipId,
-        pages:    [],
-        rawTexts: [],
-        boxNums:  new Set(),
+        shipId:      shipId,
+        pageTexts:   [],
+        totalBoxes:  null,
+        trackingNums: [],    // one per box page (UPS/FedEx tracking)
+        skuQtyMap:   {},     // FNSKU → total qty across all pages
       };
     }
-    shipMap[shipId].pages.push(txt);
-    shipMap[shipId].rawTexts.push(txt);
+    shipMap[shipId].pageTexts.push(txt);
 
-    // Collect box numbers "Box 3 of 12" or "3 of 12"
+    // ── Label Type 1: box count "Box 3 of 12" ───────────────────
     var boxMatch = txt.match(/(?:box\s+)?(\d+)\s+of\s+(\d+)/i);
-    if(boxMatch){
-      shipMap[shipId].totalBoxes = parseInt(boxMatch[2]);
-      shipMap[shipId].boxNums.add(parseInt(boxMatch[1]));
+    if(boxMatch) shipMap[shipId].totalBoxes = parseInt(boxMatch[2]);
+
+    // ── Label Type 1: FNSKU/ASIN + quantities ───────────────────
+    // Common formats:
+    //   "X00ABCDEFG × 5"  or  "X00ABCDEFG  5"  or  "Qty: 5  X00ABCDEFG"
+    var fnRe = /\b(X0[A-Z0-9]{8,10}|B0[A-Z0-9]{8,10})\b/g;
+    var fnMatch;
+    while((fnMatch = fnRe.exec(txt)) !== null){
+      var fn  = fnMatch[1];
+      var ctx = txt.slice(fnMatch.index, fnMatch.index + 60); // chars after FNSKU
+      var qm  = ctx.match(/[×x\s]+(\d+)/) || ctx.match(/qty\s*[:\-]?\s*(\d+)/i);
+      var qty = qm ? parseInt(qm[1]) : 0;
+      shipMap[shipId].skuQtyMap[fn] = (shipMap[shipId].skuQtyMap[fn] || 0) + (qty || 0);
     }
+
+    // ── Label Type 2: UPS 1Z tracking (18 chars: 1Z + 16 alnum) ─
+    // May appear formatted: "1Z 999 AA1 01 2345 6784" — strip spaces
+    var upsRaw = txt.replace(/\s/g,' ');
+    var upsM   = upsRaw.match(/\b(1Z\s?[A-Z0-9]{3}\s?[A-Z0-9]{3}\s?[A-Z0-9]{2}\s?\d{4}\s?\d{4}\s?\d{2})\b/i)
+              || upsRaw.match(/\b(1Z[A-Z0-9\s]{14,20})\b/i);
+    if(upsM){
+      var trk = upsM[1].replace(/\s/g,'').toUpperCase();
+      if(trk.length >= 18 && !shipMap[shipId].trackingNums.includes(trk))
+        shipMap[shipId].trackingNums.push(trk);
+    }
+
+    // ── Label Type 2: FedEx tracking (12–20 digits, not FBA-like)
+    if(!upsM){
+      var fedM = txt.match(/\b(\d{12,20})\b/g) || [];
+      fedM.forEach(function(t){
+        // avoid matching ZIP codes, phone numbers, partial FBA IDs
+        if(t.length >= 12 && !/^[0-9]{5}$/.test(t) && !shipMap[shipId].trackingNums.includes(t))
+          shipMap[shipId].trackingNums.push(t);
+      });
+    }
+
+    // ── Label Type 2: Amazon Logistics TBA tracking ──────────────
+    var tbaM = txt.match(/\b(TBA\d{12,16})\b/i);
+    if(tbaM && !shipMap[shipId].trackingNums.includes(tbaM[1].toUpperCase()))
+      shipMap[shipId].trackingNums.push(tbaM[1].toUpperCase());
   });
 
-  // 2. For each shipment, extract all fields from combined text
+  // Build one record per unique shipment ID
   return Object.values(shipMap).map(function(s){
-    var combined = s.rawTexts.join('\n');
-    return fbaExtractFields(s.shipId, combined, s.totalBoxes || s.pages.length);
+    var combined = s.pageTexts.join('\n');
+    var rec = fbaExtractFields(s.shipId, combined, s.totalBoxes || s.pageTexts.length);
+
+    // Merge per-page tracking
+    if(s.trackingNums.length === 1){
+      rec.tracking    = s.trackingNums[0];
+      rec.allTracking = s.trackingNums;
+    } else if(s.trackingNums.length > 1){
+      rec.tracking    = s.trackingNums[0];
+      rec.allTracking = s.trackingNums;
+      // Store all in notes if multiple boxes
+      rec.notes = 'All tracking: ' + s.trackingNums.join(', ');
+    }
+
+    // Merge aggregated FNSKU quantities
+    var skuEntries = Object.keys(s.skuQtyMap);
+    if(skuEntries.length){
+      rec.skus = skuEntries.map(function(fn){
+        return { sku: fn, qty: s.skuQtyMap[fn] || '' };
+      });
+      // Sum quantities → total units
+      var total = skuEntries.reduce(function(sum, fn){ return sum + (s.skuQtyMap[fn]||0); }, 0);
+      if(total > 0) rec.units = total;
+    }
+
+    return rec;
   });
 }
 
-// ── Extract individual fields from text block ─────────────────────
+// ── Extract shipment-level fields (both label types combined) ─────
 function fbaExtractFields(shipId, text, boxCount){
   var rec = {
-    shipId:    shipId,
-    fc:        '',
-    boxes:     boxCount || '',
-    units:     '',
-    carrier:   '',
-    tracking:  '',
-    weight:    '',
+    shipId:     shipId,
+    fc:         '',
+    boxes:      boxCount || '',
+    units:      '',
+    carrier:    '',
+    tracking:   '',
+    allTracking:[],
+    weight:     '',
     dimL:'', dimW:'', dimH:'',
-    notes:     '',
-    skus:      [],
+    notes:      '',
+    skus:       [],
   };
 
-  // FC code: 3 uppercase letters + 1-2 digits, e.g. PHX7, ONT8, MDW2
-  // Exclude common false positives like "FBA", "UPS", "PDF"
-  var fcEx = new Set(['FBA','UPS','PDF','USA','LLC','SKU','BOX','QTY']);
-  var fcMatches = text.match(/\b([A-Z]{3}\d{1,2})\b/g) || [];
-  var fcs = fcMatches.filter(function(m){ return !fcEx.has(m.toUpperCase()); });
-  if(fcs.length) rec.fc = fcs[0];
+  // ── FC code — try known Amazon list first, then generic pattern ─
+  var fcFound = text.match(FBA_FC_CODES);
+  if(fcFound && fcFound.length){
+    // Pick the most-repeated FC code (it appears on every page)
+    var fcFreq = {};
+    fcFound.forEach(function(fc){ fcFreq[fc] = (fcFreq[fc]||0) + 1; });
+    rec.fc = Object.keys(fcFreq).sort(function(a,b){ return fcFreq[b]-fcFreq[a]; })[0];
+  } else {
+    // Fallback: generic 3-uppercase-letter + 1-2 digit, minus noise words
+    var noise = new Set(['FBA','UPS','PDF','USA','LLC','SKU','BOX','QTY','LBS','THE','AND','FOR','REF','PO ','ZIP']);
+    var generic = text.match(/\b([A-Z]{3}\d{1,2})\b/g) || [];
+    var fc = generic.find(function(m){ return !noise.has(m); });
+    if(fc) rec.fc = fc;
+  }
 
-  // Total units — "240 units" or "Units: 240" or "240 unit"
-  var unitsMatch = text.match(/(?:units?\s*[:\-]?\s*|total\s+units?\s*[:\-]?\s*)(\d+)/i)
-                || text.match(/(\d+)\s+units?/i);
-  if(unitsMatch) rec.units = parseInt(unitsMatch[1]) || '';
+  // ── Carrier — most specific match wins ──────────────────────────
+  if     (/amazon\s+partner(ed)?\s+(ups|united\s+parcel)|apu\b/i.test(text))   rec.carrier = 'Amazon Partnered UPS';
+  else if(/amazon\s+partner(ed)?\s+(fedex|federal)|apf\b/i.test(text))         rec.carrier = 'Amazon Partnered FedEx';
+  else if(/ups\s+ground|united\s+parcel\s+service/i.test(text))                rec.carrier = 'UPS';
+  else if(/fedex\s+ground|federal\s+express/i.test(text))                      rec.carrier = 'FedEx';
+  else if(/usps|united\s+states\s+postal/i.test(text))                         rec.carrier = 'USPS';
+  else if(/amazon\s+log(istics)?|amzl/i.test(text))                            rec.carrier = 'Amazon Partnered UPS';
+  else if(/\bups\b/i.test(text))                                                rec.carrier = 'UPS';
+  else if(/\bfedex\b/i.test(text))                                              rec.carrier = 'FedEx';
 
-  // Carrier
-  if(/amazon\s+partnered.*fedex|partnered\s+fedex/i.test(text))      rec.carrier = 'Amazon Partnered FedEx';
-  else if(/amazon\s+partnered.*ups|partnered\s+ups/i.test(text))     rec.carrier = 'Amazon Partnered UPS';
-  else if(/\bfedex\b/i.test(text))  rec.carrier = 'FedEx';
-  else if(/\bups\b/i.test(text))    rec.carrier = 'UPS';
-  else if(/\busps\b|postal/i.test(text)) rec.carrier = 'USPS';
-
-  // Tracking number — UPS: 1Z..., FedEx: 12-22 digits, USPS: 22 digits
-  var trackMatch = text.match(/\b(1Z[0-9A-Z]{16})\b/)             // UPS
-                || text.match(/\b(\d{12,22})\b(?!.*FBA)/);         // FedEx/USPS numeric
-  if(trackMatch) rec.tracking = trackMatch[1];
-
-  // Weight: "18.5 lbs" or "lbs 18.5"
-  var wMatch = text.match(/(\d+\.?\d*)\s*lbs?/i)
+  // ── Weight — Label Type 2 (UPS/FedEx) format: "18.5 LBS" ───────
+  var wMatch = text.match(/(?:actual\s+)?(?:billed\s+)?weight\s*[:\-]?\s*(\d+\.?\d*)\s*lbs?/i)
+            || text.match(/(\d+\.?\d*)\s*lbs?\b/i)
             || text.match(/lbs?\s*[:\-]?\s*(\d+\.?\d*)/i);
   if(wMatch) rec.weight = parseFloat(wMatch[1]) || '';
 
-  // Dimensions: "12 x 10 x 8 in" or "12×10×8"
-  var dMatch = text.match(/(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*in/i)
+  // ── Dimensions — Label Type 2 format: "14.00 X 12.00 X 10.00 IN"
+  var dMatch = text.match(/(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*in(?:ch(?:es)?)?/i)
+            || text.match(/dim(?:ensions?)?\s*[:\-]?\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)/i)
             || text.match(/(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)\s*[xX×]\s*(\d+\.?\d*)/);
-  if(dMatch){ rec.dimL=parseFloat(dMatch[1]); rec.dimW=parseFloat(dMatch[2]); rec.dimH=parseFloat(dMatch[3]); }
+  if(dMatch){
+    rec.dimL = parseFloat(dMatch[1]);
+    rec.dimW = parseFloat(dMatch[2]);
+    rec.dimH = parseFloat(dMatch[3]);
+  }
 
-  // FNSKUs (X00XXXXXXX) or ASINs (B0XXXXXXXX) — these become SKU rows
-  var fnskus = [...new Set(text.match(/\b(X0[0-9A-Z]{8,10}|B0[0-9A-Z]{8,10})\b/g) || [])];
-  rec.skus = fnskus.map(function(fn){ return { sku: fn, qty: '' }; });
+  // ── Units — look for explicit unit counts ────────────────────────
+  var uMatch = text.match(/total\s+(?:qty|units?)\s*[:\-]?\s*(\d+)/i)
+            || text.match(/(?:qty|units?)\s*[:\-]\s*(\d+)/i)
+            || text.match(/(\d+)\s+units?(?:\s|$)/i);
+  if(uMatch) rec.units = parseInt(uMatch[1]) || '';
 
   return rec;
 }
@@ -6958,7 +7046,12 @@ function fbaFillForm(rec){
   set('fba-dim-l',       rec.dimL);
   set('fba-dim-w',       rec.dimW);
   set('fba-dim-h',       rec.dimH);
-  set('fba-notes',       rec.notes);
+  // If multiple tracking numbers, put them all in notes
+  var notesVal = rec.notes || '';
+  if(rec.allTracking && rec.allTracking.length > 1 && !notesVal.includes('All tracking')){
+    notesVal = ('All tracking: ' + rec.allTracking.join(', ') + (notesVal ? ' · '+notesVal : '')).slice(0, 500);
+  }
+  set('fba-notes', notesVal);
 
   // Inject SKU rows
   if(rec.skus && rec.skus.length){
@@ -6991,26 +7084,56 @@ function fbaShowParsedPreview(shipments){
   cards.innerHTML = '';
   shipments.forEach(function(s, i){
     var card = document.createElement('div');
-    card.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);padding:10px 14px;display:flex;align-items:flex-start;gap:12px;';
-    var details = [
-      s.fc       ? '→ '+s.fc              : '',
-      s.carrier  ? s.carrier              : '',
-      s.boxes    ? s.boxes+' boxes'       : '',
-      s.units    ? s.units+' units'       : '',
-      s.weight   ? s.weight+'lbs/box'     : '',
-      s.tracking ? 'TRK:'+s.tracking.slice(-6) : '',
+    card.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);padding:12px 14px;';
+
+    // Row 1 — shipment ID + FC + carrier
+    var row1 = [
+      s.fc      ? '<span style="color:var(--gn);font-weight:700;">→ '+s.fc+'</span>'  : '',
+      s.carrier ? '<span style="color:var(--td);">'+s.carrier+'</span>' : '',
+    ].filter(Boolean).join('  ');
+
+    // Row 2 — physical stats
+    var row2 = [
+      s.boxes  ? s.boxes+' boxes'  : '',
+      s.units  ? s.units+' units'  : '',
+      s.weight ? s.weight+' lbs/box' : '',
+      (s.dimL&&s.dimW&&s.dimH) ? s.dimL+'×'+s.dimW+'×'+s.dimH+' in' : '',
     ].filter(Boolean).join(' · ');
 
+    // Row 3 — tracking (highlight UPS format)
+    var trkHtml = '';
+    if(s.allTracking && s.allTracking.length > 1){
+      trkHtml = '<div style="font-size:9px;color:var(--am);margin-top:4px;">'
+        + '📦 '+s.allTracking.length+' tracking #s (one per box) — first: '
+        + '<span style="font-family:monospace;">'+s.allTracking[0]+'</span>'
+        + '</div>';
+    } else if(s.tracking){
+      trkHtml = '<div style="font-size:9px;color:var(--am);margin-top:4px;">'
+        + 'TRK <span style="font-family:monospace;">'+s.tracking+'</span>'
+        + '</div>';
+    }
+
+    // Row 4 — FNSKUs
+    var skuHtml = '';
+    if(s.skus && s.skus.length){
+      skuHtml = '<div style="font-size:9px;color:var(--pu);margin-top:4px;font-family:monospace;">'
+        + s.skus.map(function(x){ return x.sku+(x.qty?'×'+x.qty:''); }).join('  ')
+        + '</div>';
+    }
+
     card.innerHTML =
-      '<div style="flex:1;min-width:0;">'
-      + '<div style="font-size:11px;font-family:monospace;color:var(--cy);font-weight:700;margin-bottom:3px;">'
-      +   s.shipId
-      + '</div>'
-      + '<div style="font-size:9px;color:var(--td);">'+(details||'— scan data only —')+'</div>'
-      + (s.skus.length ? '<div style="font-size:9px;color:var(--pu);margin-top:2px;">FNSKUs: '+s.skus.map(function(x){return x.sku;}).join(', ')+'</div>' : '')
+      '<div style="display:flex;align-items:flex-start;gap:10px;">'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="font-size:12px;font-family:monospace;color:var(--cy);font-weight:700;margin-bottom:4px;">'+s.shipId+'</div>'
+      +   (row1 ? '<div style="font-size:10px;margin-bottom:3px;">'+row1+'</div>' : '')
+      +   (row2 ? '<div style="font-size:9px;color:var(--td);">'+row2+'</div>' : '')
+      +   trkHtml + skuHtml
       + '</div>'
       + '<button onclick="fbaFillForm(_fbaParsedBatch['+i+']);document.getElementById(\'fba-parse-preview\').style.display=\'none\';" '
-      + 'style="font-size:8px;padding:3px 10px;background:transparent;border:1px solid var(--cy);color:var(--cy);cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">EDIT FORM</button>';
+      +   'style="font-size:8px;padding:4px 10px;background:transparent;border:1px solid var(--cy);'
+      +   'color:var(--cy);cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;margin-top:2px;">EDIT</button>'
+      + '</div>';
+
     cards.appendChild(card);
   });
 
