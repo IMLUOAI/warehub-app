@@ -354,12 +354,15 @@ body{
   justify-content:center; height:100vh; background:#0d1117;
   font-family: 'Inter', system-ui, sans-serif; gap:24px;
 ">
-  <div style="text-align:center; margin-bottom:8px;">
-    <div style="font-size:28px; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px;">
-      🏭 WAREHUB
-    </div>
-    <div style="font-size:11px; letter-spacing:3px; color:#4a6080; margin-top:4px;">
-      WAREHOUSE MANAGEMENT SYSTEM
+  <div style="text-align:center; margin-bottom:8px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+    <svg width="44" height="72" viewBox="10 10 95 145" xmlns="http://www.w3.org/2000/svg">
+      <line x1="22" y1="18" x2="22" y2="142" stroke="#4a9eff" stroke-width="9" stroke-linecap="round"/>
+      <path d="M 22,18 A 62,62 0 0,1 22,142" fill="none" stroke="#c77dff" stroke-width="9" stroke-linecap="round"/>
+      <rect x="44" y="104" width="14" height="28" rx="2" fill="#c77dff"/>
+    </svg>
+    <div>
+      <div style="font-size:28px; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px;">WAREHUB</div>
+      <div style="font-size:11px; letter-spacing:3px; color:#4a6080; margin-top:4px;">WAREHOUSE MANAGEMENT SYSTEM</div>
     </div>
   </div>
   <div id="clerk-mount-point" style="width:100%; max-width:400px;"></div>
@@ -372,11 +375,16 @@ body{
   justify-content:center; gap:28px;
   font-family:'Inter',system-ui,sans-serif; padding:24px; text-align:center;
 ">
-  <div>
-    <div style="font-size:32px; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px; margin-bottom:6px;">
-      🏭 WAREHUB
+  <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+    <svg width="40" height="66" viewBox="10 10 95 145" xmlns="http://www.w3.org/2000/svg">
+      <line x1="22" y1="18" x2="22" y2="142" stroke="#4a9eff" stroke-width="9" stroke-linecap="round"/>
+      <path d="M 22,18 A 62,62 0 0,1 22,142" fill="none" stroke="#c77dff" stroke-width="9" stroke-linecap="round"/>
+      <rect x="44" y="104" width="14" height="28" rx="2" fill="#c77dff"/>
+    </svg>
+    <div>
+      <div style="font-size:32px; font-weight:800; color:#e2e8f0; letter-spacing:-0.5px; margin-bottom:6px;">WAREHUB</div>
+      <div style="font-size:11px; letter-spacing:3px; color:#4a6080;">WAREHOUSE MANAGEMENT</div>
     </div>
-    <div style="font-size:11px; letter-spacing:3px; color:#4a6080;">WAREHOUSE MANAGEMENT</div>
   </div>
   <div style="background:#111827; border:1px solid #1e2a3a; border-radius:16px; padding:36px 40px; max-width:440px; width:100%;">
     <div style="font-size:40px; margin-bottom:12px;">📦</div>
@@ -848,6 +856,12 @@ async function pinReset(){
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;min-height:42px;flex-shrink:0;">
     <div style="display:flex;align-items:center;gap:8px;">
       <div id="dot"></div>
+      <!-- D mark — monoline SVG logo -->
+      <svg width="20" height="36" viewBox="10 10 95 145" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">
+        <line x1="22" y1="18" x2="22" y2="142" stroke="#818cf8" stroke-width="9" stroke-linecap="round"/>
+        <path d="M 22,18 A 62,62 0 0,1 22,142" fill="none" stroke="#818cf8" stroke-width="9" stroke-linecap="round"/>
+        <rect x="44" y="104" width="14" height="28" rx="2" fill="#818cf8"/>
+      </svg>
       <div style="display:flex;flex-direction:column;line-height:1.1;">
         <span id="logo">WAREHUB</span>
         <span style="font-size:8px;letter-spacing:3px;color:var(--td);font-family:'Share Tech Mono',monospace;">DOUBLE SIDED ISCM LLC</span>
@@ -856,7 +870,20 @@ async function pinReset(){
     <div style="display:flex;align-items:center;gap:8px;">
       <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
       <span id="cloud-status" title="Cloud sync: not connected" style="font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0;cursor:pointer;" onclick="kvTestConnection()">☁</span>
-      <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <!-- AI Insights bell -->
+      <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="
+        position:relative;background:transparent;border:none;cursor:pointer;padding:4px;
+        color:var(--td);font-size:16px;line-height:1;flex-shrink:0;transition:color .15s;
+      " onmouseover="this.style.color='var(--cy)'" onmouseout="this.style.color='var(--td)'">
+        🔔
+        <span id="insights-badge" style="
+          display:none;position:absolute;top:0;right:0;
+          min-width:14px;height:14px;border-radius:7px;
+          background:#f87171;color:#fff;font-size:8px;font-weight:700;
+          font-family:'Share Tech Mono',monospace;line-height:14px;text-align:center;padding:0 2px;
+        ">0</span>
+      </button>
     </div>
   </div>
   <div class="tabs">
@@ -2002,6 +2029,16 @@ function initOrders(parsed){
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
   renderQueue();renderActive();renderDash();renderFloor();
+
+  // AI telemetry — log batch import
+  if(typeof window.trackEvent === 'function'){
+    var carrierBreakdown = {};
+    parsed.forEach(function(o){ carrierBreakdown[o.carrier] = (carrierBreakdown[o.carrier]||0)+1; });
+    window.trackEvent('batch_imported', 'orders', null, {
+      orderCount: parsed.length,
+      carriers:   carrierBreakdown,
+    });
+  }
 }
 
 function loadDemo(){
@@ -3292,6 +3329,16 @@ function completeOrder(order, scannedTracking){
   document.getElementById('pp').textContent=
     orders.filter(function(o){return o.status==='done';}).length+' / '+orders.length+' done';
   focusScan();
+
+  // ── AI telemetry ────────────────────────────────────────────────
+  if(typeof window.trackEvent === 'function'){
+    window.trackEvent('order_packed', 'order', order.id, {
+      carrier:   order.carrier || null,
+      skuCount:  (order.skus||[]).reduce(function(s,k){return s+k.qty;},0),
+      packerId:  creditPacker ? creditPacker.id : null,
+      packerName:creditPacker ? creditPacker.name : null,
+    });
+  }
 }
 
 function flash(t){ var el=document.getElementById('active-card'); el.classList.add(t); setTimeout(function(){el.classList.remove(t);},320); }
@@ -7742,6 +7789,37 @@ document.addEventListener('DOMContentLoaded', function(){
     <iframe id="fm-frame" width="280" height="158" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="display:none;border:1px solid var(--bdr);"></iframe>
     <button onclick="document.getElementById('fm-panel').style.display='none';" style="margin-top:6px;width:100%;font-size:9px;padding:4px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">✕ CLOSE</button>
   </div>
+<!-- ── AI Insights Panel ── -->
+<div id="insights-panel" style="
+  display:none;position:fixed;top:0;right:0;bottom:0;z-index:9997;
+  width:min(380px,100vw);background:var(--sur);border-left:1px solid var(--bdr);
+  flex-direction:column;box-shadow:-8px 0 32px #0008;
+">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--bdr);background:linear-gradient(135deg,#1a2a3a,#242937);flex-shrink:0;">
+    <div>
+      <div style="font-size:10px;letter-spacing:3px;color:#4a9eff;font-weight:700;">AI INSIGHTS</div>
+      <div style="font-size:8px;color:var(--td);margin-top:2px;letter-spacing:1px;">SELF-LEARNING · UPDATES NIGHTLY</div>
+    </div>
+    <button onclick="insightsToggle()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;padding:4px;">✕</button>
+  </div>
+  <!-- Insights list -->
+  <div id="insights-list" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;">
+    <div id="insights-empty" style="text-align:center;padding:40px 20px;color:var(--td);">
+      <div style="font-size:28px;margin-bottom:12px;">🧠</div>
+      <div style="font-size:11px;letter-spacing:2px;color:var(--cy);margin-bottom:8px;">LEARNING YOUR OPERATIONS</div>
+      <div style="font-size:10px;line-height:1.6;max-width:260px;margin:0 auto;">
+        The AI analyzes your daily activity every night and surfaces insights here. Check back tomorrow after your first full day of usage.
+      </div>
+    </div>
+  </div>
+  <!-- Footer -->
+  <div style="padding:10px 14px;border-top:1px solid var(--bdr);flex-shrink:0;">
+    <div style="font-size:8px;letter-spacing:1px;color:var(--td);text-align:center;">
+      Powered by Claude · learns from your daily warehouse activity
+    </div>
+  </div>
+</div>
+
 <!-- ── AI Assistant ── -->
 <button id="ai-btn" title="AI Assistant" onclick="aiToggle()">🤖</button>
 <div id="ai-panel">
@@ -8485,14 +8563,23 @@ function aiDoActions(actions){
     if(typeof renderReturnsStats === 'function') renderReturnsStats();
   };
 
-  // Patch returnsSubmit to also call apiSaveReturn
+  // Patch returnsSubmit to also call apiSaveReturn + log event
   var _origReturnsSubmit = window.returnsSubmit;
   window.returnsSubmit = function(){
     var prevLen = (returnsList||[]).length;
     if(_origReturnsSubmit) _origReturnsSubmit.apply(this, arguments);
     // After submit, the newest entry is at index 0 (unshifted)
     if(returnsList && returnsList.length > prevLen){
-      window.apiSaveReturn(returnsList[0]);
+      var entry = returnsList[0];
+      window.apiSaveReturn(entry);
+      // AI telemetry
+      if(typeof window.trackEvent === 'function'){
+        window.trackEvent('return_logged', 'return', entry.id, {
+          condition: entry.condition || null,
+          reason:    entry.reason    || null,
+          carrier:   entry.carrier   || null,
+        });
+      }
     }
   };
 
@@ -8540,13 +8627,22 @@ function aiDoActions(actions){
     if(typeof renderVehicleStats=== 'function') renderVehicleStats();
   };
 
-  // Patch vehicleAddTrip to also push to API
+  // Patch vehicleAddTrip to also push to API + log event
   var _origVehicleAddTrip = window.vehicleAddTrip;
   window.vehicleAddTrip = function(){
     var prevLen = (vehicleTrips||[]).length;
     if(_origVehicleAddTrip) _origVehicleAddTrip.apply(this, arguments);
     if(vehicleTrips && vehicleTrips.length > prevLen){
-      window.apiSaveTrip(vehicleTrips[0]);
+      var trip = vehicleTrips[0];
+      window.apiSaveTrip(trip);
+      // AI telemetry
+      if(typeof window.trackEvent === 'function'){
+        window.trackEvent('vehicle_trip', 'trip', trip.id, {
+          driver:  trip.driver  || null,
+          purpose: trip.purpose || null,
+          miles:   trip.miles   || null,
+        });
+      }
     }
   };
 
@@ -8593,13 +8689,22 @@ function aiDoActions(actions){
     if(typeof renderFbaStats=== 'function') renderFbaStats();
   };
 
-  // Patch fbaSubmit to also push to API
+  // Patch fbaSubmit to also push to API + log event
   var _origFbaSubmit = window.fbaSubmit;
   window.fbaSubmit = function(){
     var prevLen = (fbaRecords||[]).length;
     if(_origFbaSubmit) _origFbaSubmit.apply(this, arguments);
     if(fbaRecords && fbaRecords.length > prevLen){
-      window.apiSaveFba(fbaRecords[0]);
+      var rec = fbaRecords[0];
+      window.apiSaveFba(rec);
+      // AI telemetry
+      if(typeof window.trackEvent === 'function'){
+        window.trackEvent('fba_created', 'fba', rec.id, {
+          sku:   rec.sku   || null,
+          units: rec.units || null,
+          asin:  rec.asin  || null,
+        });
+      }
     }
   };
 
@@ -8653,8 +8758,131 @@ function aiDoActions(actions){
     await window.apiLoadVehicle();
     await window.apiLoadFba();
     await window.apiLoadSettings();
+    // Load AI insights last (non-blocking)
+    insightsLoad().catch(function(e){ console.warn('[WH-AI] Insights load failed:', e.message); });
     console.log('[WH-API] Cloud load complete.');
   };
+
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     WAREHUB AI SELF-LEARNING — event tracking + insights panel
+     Every action is silently logged → nightly Claude analysis →
+     personalised insights returned next morning.
+════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+
+// ── Fire-and-forget event logger ──────────────────────────────────
+// Call from anywhere in the app: trackEvent('order_packed', 'order', id, {carrier:'FedEx'})
+window.trackEvent = async function(eventType, entityType, entityId, payload){
+  try {
+    await warehubApiCall('POST', '/api/events', {
+      eventType: eventType,
+      entityType: entityType || null,
+      entityId:   entityId   || null,
+      payload:    payload    || {},
+    });
+  } catch(e){
+    // Silently fail — telemetry should never block UI
+    console.debug('[WH-AI] trackEvent suppressed:', e.message);
+  }
+};
+
+// ── Insights panel ────────────────────────────────────────────────
+var _insightsOpen = false;
+var _insightsData = [];
+
+window.insightsToggle = function(){
+  var panel = document.getElementById('insights-panel');
+  _insightsOpen = !_insightsOpen;
+  panel.style.display = _insightsOpen ? 'flex' : 'none';
+  if (_insightsOpen && !_insightsData.length) insightsLoad();
+};
+
+window.insightsLoad = async function(){
+  try {
+    var res = await warehubApiCall('GET', '/api/insights');
+    _insightsData = (res && res.insights) || [];
+    insightsRender();
+  } catch(e){
+    console.warn('[WH-AI] Could not load insights:', e.message);
+  }
+};
+
+function insightsRender(){
+  var list  = document.getElementById('insights-list');
+  var empty = document.getElementById('insights-empty');
+  var badge = document.getElementById('insights-badge');
+  if (!list) return;
+
+  var unread = _insightsData.filter(function(i){ return !i.is_read; }).length;
+  if (badge) {
+    badge.style.display = unread > 0 ? 'block' : 'none';
+    badge.textContent   = unread > 9 ? '9+' : String(unread);
+  }
+
+  if (!_insightsData.length){
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // Remove all non-empty children
+  while(list.children.length > 1) list.removeChild(list.lastChild);
+
+  var severityColor = { critical:'#f87171', warning:'#fbbf24', info:'#4a9eff' };
+  var typeIcon = {
+    velocity_trend:'📈', reorder_alert:'🔄', anomaly:'⚠️', performance:'⭐', digest:'🧠'
+  };
+
+  _insightsData.forEach(function(ins, idx){
+    var card = document.createElement('div');
+    card.style.cssText = [
+      'background:var(--bg)',
+      'border:1px solid ' + (ins.is_read ? 'var(--bdr)' : (severityColor[ins.severity] || '#4a9eff')),
+      'border-radius:4px',
+      'padding:12px 14px',
+      'cursor:pointer',
+      'transition:opacity .2s',
+      ins.is_read ? 'opacity:0.6' : '',
+    ].join(';');
+
+    var icon    = typeIcon[ins.insight_type] || '💡';
+    var color   = severityColor[ins.severity] || '#4a9eff';
+    var dateStr = ins.created_at
+      ? new Date(ins.created_at * 1000).toLocaleDateString()
+      : '';
+
+    card.innerHTML =
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">' +
+        '<div style="display:flex;align-items:center;gap:6px;">' +
+          '<span style="font-size:14px;">' + icon + '</span>' +
+          '<span style="font-size:9px;color:' + color + ';letter-spacing:2px;font-weight:700;text-transform:uppercase;">' +
+            (ins.insight_type || 'insight').replace(/_/g,' ') +
+          '</span>' +
+        '</div>' +
+        '<span style="font-size:8px;color:var(--td);">' + dateStr + '</span>' +
+      '</div>' +
+      '<div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:5px;letter-spacing:0.5px;">' +
+        (ins.title || '').replace(/</g,'&lt;') +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--td);line-height:1.6;">' +
+        (ins.body || '').replace(/</g,'&lt;') +
+      '</div>';
+
+    card.onclick = function(){
+      if (!ins.is_read){
+        ins.is_read = 1;
+        warehubApiCall('POST', '/api/insights/' + ins.id + '/read', {}).catch(function(){});
+        insightsRender();
+      }
+    };
+
+    list.appendChild(card);
+  });
+}
 
 })();
 </script>
