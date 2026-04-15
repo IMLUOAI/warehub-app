@@ -6841,14 +6841,16 @@ async function fbaImportPdf(file){
     var n   = pdf.numPages;
 
     // ── Extract all text from all pages ───────────────────────────
+    // Each page gets two forms: spaced (human-readable) and compact (no gaps,
+    // critical for barcode matching — PDF splits barcodes into many tiny items)
     var pageTexts = [];
     for(var p = 1; p <= n; p++){
       var page    = await pdf.getPage(p);
       var content = await page.getTextContent();
-      var text    = content.items.map(function(i){ return i.str; }).join(' ');
-      pageTexts.push(text);
+      var items   = content.items.map(function(i){ return i.str; });
+      pageTexts.push({ spaced: items.join(' '), compact: items.join('') });
     }
-    var allText = pageTexts.join('\n');
+    var allText = pageTexts.map(function(pt){ return pt.spaced; }).join('\n');
 
     // ── Parse into per-shipment groups ────────────────────────────
     var shipments = fbaParseLabels(allText, pageTexts);
@@ -6859,17 +6861,8 @@ async function fbaImportPdf(file){
     }
 
     _fbaParsedBatch = shipments;
-
-    // Single shipment → fill the form directly
-    if(shipments.length === 1){
-      fbaFillForm(shipments[0]);
-      pm('✓ FBA label parsed — review the form and click LOG SHIPMENT.');
-      document.getElementById('fba-parse-preview').style.display = 'none';
-    } else {
-      // Multiple shipments → show batch preview
-      fbaShowParsedPreview(shipments);
-      pm('✓ Found '+shipments.length+' shipment plans in PDF. Review and log all below.');
-    }
+    fbaShowBatchEdit(shipments);
+    pm('✓ Parsed '+shipments.length+' FBA shipment'+(shipments.length===1?'':'s')+' — review & edit below, then log.');
 
   } catch(e){
     pm('⚠ Could not parse PDF: '+e.message);
@@ -6895,10 +6888,14 @@ var FBA_FC_CODES = /\b(ONT|PHX|LAX|LGB|SNA|MDW|MKE|ORD|SDF|RNO|TEB|HOU|BWI|EWR|A
 function fbaParseLabels(allText, pageTexts){
   var shipMap = {};  // shipId → aggregated data
 
-  pageTexts.forEach(function(txt, pageIdx){
+  pageTexts.forEach(function(pageText, pageIdx){
+    // pageText may be {spaced, compact} object or a plain string (legacy)
+    var txt     = (typeof pageText === 'object') ? pageText.spaced  : pageText;
+    var compact = (typeof pageText === 'object') ? pageText.compact : txt.replace(/\s+/g,'');
+
     // ── Label Type 1: find FBA Shipment ID ──────────────────────
-    // Direct match: FBA17XXXXXXX on the FBA box label
-    var directIds = (txt.match(/\bFBA[A-Z0-9]{8,16}\b/gi) || [])
+    // Search compact (no-gap) text to catch tokens split across PDF items
+    var directIds = (compact.match(/FBA[A-Z0-9]{8,16}/gi) || [])
                       .map(function(s){ return s.toUpperCase(); });
 
     // Reference field on UPS label: "REFERENCE 1: FBA17XXXXXX/3"
@@ -6938,19 +6935,35 @@ function fbaParseLabels(allText, pageTexts){
       shipMap[shipId].skuQtyMap[fn] = (shipMap[shipId].skuQtyMap[fn] || 0) + (qty || 0);
     }
 
-    // ── Label Type 2: UPS 1Z tracking (18 chars: 1Z + 16 alnum) ─
-    // May appear formatted: "1Z 999 AA1 01 2345 6784" — strip spaces
-    var upsRaw = txt.replace(/\s/g,' ');
-    var upsM   = upsRaw.match(/\b(1Z\s?[A-Z0-9]{3}\s?[A-Z0-9]{3}\s?[A-Z0-9]{2}\s?\d{4}\s?\d{4}\s?\d{2})\b/i)
-              || upsRaw.match(/\b(1Z[A-Z0-9\s]{14,20})\b/i);
-    if(upsM){
-      var trk = upsM[1].replace(/\s/g,'').toUpperCase();
-      if(trk.length >= 18 && !shipMap[shipId].trackingNums.includes(trk))
+    // ── Label Type 2: UPS 1Z tracking (1Z + 16 alphanumeric = 18 chars) ────
+    // PDF barcodes are split into many tiny text items; compact text is the
+    // only reliable way to reconstruct them without gap-related regex failures.
+    var upsFound = false;
+    // Strategy 1: compact (space-stripped) — handles all split-barcode cases
+    var upsC = compact.match(/1Z[A-Z0-9]{16}/i);
+    if(upsC){
+      var trk = upsC[0].toUpperCase();
+      if(!shipMap[shipId].trackingNums.includes(trk)){
         shipMap[shipId].trackingNums.push(trk);
+        upsFound = true;
+      }
+    }
+    // Strategy 2: display format "1Z 999 AA1 01 2345 678X" with optional spaces
+    if(!upsFound){
+      var spFlex = txt.replace(/\s+/g,' ');
+      var sM = spFlex.match(/(1Z(?:\s?[A-Z0-9]){16})/i);
+      if(sM){
+        var trk = sM[1].replace(/\s/g,'').toUpperCase();
+        if(trk.length === 18 && !shipMap[shipId].trackingNums.includes(trk)){
+          shipMap[shipId].trackingNums.push(trk);
+          upsFound = true;
+        }
+      }
     }
 
     // ── Label Type 2: FedEx tracking (12–20 digits, not FBA-like)
-    if(!upsM){
+    // ── Label Type 2: FedEx numeric tracking (fallback if no UPS) ──
+    if(!upsFound){
       var fedM = txt.match(/\b(\d{12,20})\b/g) || [];
       fedM.forEach(function(t){
         // avoid matching ZIP codes, phone numbers, partial FBA IDs
@@ -7104,64 +7117,88 @@ function fbaFillForm(rec){
   if(form) form.scrollTop = 400;
 }
 
-// ── Show batch preview for multiple shipments ─────────────────────
-function fbaShowParsedPreview(shipments){
-  var cards  = document.getElementById('fba-parse-cards');
-  var panel  = document.getElementById('fba-parse-preview');
-  if(!cards || !panel) return;
+// ── Escape HTML entities for safe injection into innerHTML ────────
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// ── Batch edit panel — editable cards for every parsed shipment ───
+function fbaShowBatchEdit(shipments){
+  var panel = document.getElementById('fba-parse-preview');
+  var cards = document.getElementById('fba-parse-cards');
+  if(!panel || !cards) return;
+
+  var inSt  = 'background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:5px 7px;font-size:10px;font-family:inherit;outline:none;box-sizing:border-box;width:100%;';
+  var lblSt = 'font-size:8px;letter-spacing:1.5px;color:var(--td);margin-bottom:3px;';
+
+  // ── Global "apply to all" strip ──────────────────────────────────
+  var glob = document.getElementById('fba-batch-global');
+  if(!glob){
+    glob = document.createElement('div');
+    glob.id = 'fba-batch-global';
+    panel.insertBefore(glob, cards);
+  }
+  var today = (function(){
+    var d=new Date(); var p=function(n){return n<10?'0'+n:n;};
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  })();
+  glob.style.cssText='background:var(--sur,var(--bg));border:1px solid var(--bdr);padding:10px 14px;margin-bottom:10px;';
+  glob.innerHTML=
+    '<div style="'+lblSt+'margin-bottom:8px;">APPLY TO ALL SHIPMENTS</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">'
+    +  '<div style="flex:2;min-width:160px;"><div style="'+lblSt+'">CARRIER</div>'
+    +    '<input id="fba-batch-carrier" placeholder="e.g. Amazon Partnered UPS" style="'+inSt+'"></div>'
+    +  '<div style="flex:1;min-width:120px;"><div style="'+lblSt+'">DATE</div>'
+    +    '<input id="fba-batch-date" type="date" value="'+today+'" style="'+inSt+'"></div>'
+    +  '<div style="flex:1;min-width:100px;"><div style="'+lblSt+'">SHIPPED BY</div>'
+    +    '<input id="fba-batch-by" placeholder="Name / initials" style="'+inSt+'"></div>'
+    +  '<button onclick="fbaBatchApplyAll()" style="padding:6px 14px;font-size:9px;letter-spacing:1px;background:transparent;border:1px solid var(--cy);color:var(--cy);cursor:pointer;font-family:inherit;white-space:nowrap;height:29px;align-self:flex-end;">APPLY ALL</button>'
+    +'</div>';
+
+  // ── One editable card per shipment ───────────────────────────────
   cards.innerHTML = '';
   shipments.forEach(function(s, i){
-    var card = document.createElement('div');
-    card.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);padding:12px 14px;';
+    var hasTracking = !!(s.tracking && s.tracking.length);
+    var trkBorder   = hasTracking ? 'var(--bdr)' : '#e05252';
 
-    // Row 1 — shipment ID + FC + carrier
-    var row1 = [
-      s.fc      ? '<span style="color:var(--gn);font-weight:700;">→ '+s.fc+'</span>'  : '',
-      s.carrier ? '<span style="color:var(--td);">'+s.carrier+'</span>' : '',
-    ].filter(Boolean).join('  ');
-
-    // Row 2 — physical stats
-    var row2 = [
-      s.boxes  ? s.boxes+' boxes'  : '',
-      s.units  ? s.units+' units'  : '',
-      s.weight ? s.weight+' lbs/box' : '',
-      (s.dimL&&s.dimW&&s.dimH) ? s.dimL+'×'+s.dimW+'×'+s.dimH+' in' : '',
-    ].filter(Boolean).join(' · ');
-
-    // Row 3 — tracking (highlight UPS format)
-    var trkHtml = '';
-    if(s.allTracking && s.allTracking.length > 1){
-      trkHtml = '<div style="font-size:9px;color:var(--am);margin-top:4px;">'
-        + '📦 '+s.allTracking.length+' tracking #s (one per box) — first: '
-        + '<span style="font-family:monospace;">'+s.allTracking[0]+'</span>'
-        + '</div>';
-    } else if(s.tracking){
-      trkHtml = '<div style="font-size:9px;color:var(--am);margin-top:4px;">'
-        + 'TRK <span style="font-family:monospace;">'+s.tracking+'</span>'
-        + '</div>';
-    }
-
-    // Row 4 — FNSKUs
-    var skuHtml = '';
+    var skuLine = '';
     if(s.skus && s.skus.length){
-      skuHtml = '<div style="font-size:9px;color:var(--pu);margin-top:4px;font-family:monospace;">'
-        + s.skus.map(function(x){ return x.sku+(x.qty?'×'+x.qty:''); }).join('  ')
-        + '</div>';
+      skuLine='<div style="font-size:9px;color:var(--pu);margin-top:6px;font-family:monospace;word-break:break-all;">'
+        +s.skus.map(function(x){return escHtml(x.sku)+(x.qty?'×'+x.qty:'');}).join('  ')+'</div>';
     }
 
-    card.innerHTML =
-      '<div style="display:flex;align-items:flex-start;gap:10px;">'
-      + '<div style="flex:1;min-width:0;">'
-      +   '<div style="font-size:12px;font-family:monospace;color:var(--cy);font-weight:700;margin-bottom:4px;">'+s.shipId+'</div>'
-      +   (row1 ? '<div style="font-size:10px;margin-bottom:3px;">'+row1+'</div>' : '')
-      +   (row2 ? '<div style="font-size:9px;color:var(--td);">'+row2+'</div>' : '')
-      +   trkHtml + skuHtml
-      + '</div>'
-      + '<button onclick="fbaFillForm(_fbaParsedBatch['+i+']);document.getElementById(\'fba-parse-preview\').style.display=\'none\';" '
-      +   'style="font-size:8px;padding:4px 10px;background:transparent;border:1px solid var(--cy);'
-      +   'color:var(--cy);cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;margin-top:2px;">EDIT</button>'
-      + '</div>';
+    var card = document.createElement('div');
+    card.style.cssText='background:var(--bg);border:1px solid var(--bdr);padding:12px 14px;margin-bottom:8px;';
+    card.innerHTML=
+      // Header: ship ID + remove button
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">'
+      +  '<span style="font-family:monospace;color:var(--cy);font-size:12px;font-weight:700;">'+escHtml(s.shipId)+'</span>'
+      +  '<button onclick="fbaBatchRemove('+i+')" style="background:transparent;border:none;color:var(--td);font-size:14px;cursor:pointer;padding:0 4px;line-height:1;" title="Remove from batch">✕</button>'
+      +'</div>'
+      // Row 1: FC · Carrier · Boxes · Units
+      +'<div style="display:grid;grid-template-columns:80px 1fr 68px 68px;gap:6px;margin-bottom:6px;">'
+      +  '<div><div style="'+lblSt+'">FC CODE</div><input value="'+escHtml(s.fc||'')+'" placeholder="ONT8" oninput="_fbaParsedBatch['+i+'].fc=this.value" style="'+inSt+'"></div>'
+      +  '<div><div style="'+lblSt+'">CARRIER</div><input value="'+escHtml(s.carrier||'')+'" placeholder="UPS · FedEx…" oninput="_fbaParsedBatch['+i+'].carrier=this.value" style="'+inSt+'"></div>'
+      +  '<div><div style="'+lblSt+'">BOXES</div><input type="number" value="'+escHtml(s.boxes||'')+'" placeholder="0" oninput="_fbaParsedBatch['+i+'].boxes=this.value" style="'+inSt+'"></div>'
+      +  '<div><div style="'+lblSt+'">UNITS</div><input type="number" value="'+escHtml(s.units||'')+'" placeholder="0" oninput="_fbaParsedBatch['+i+'].units=this.value" style="'+inSt+'"></div>'
+      +'</div>'
+      // Row 2: Tracking (red border if missing) · Weight
+      +'<div style="display:grid;grid-template-columns:1fr 110px;gap:6px;margin-bottom:6px;">'
+      +  '<div><div style="'+lblSt+'">'+(hasTracking?'':'⚠ ')+'TRACKING #'+(hasTracking?'':' — not parsed, enter manually')+'</div>'
+      +    '<input value="'+escHtml(s.tracking||'')+'" placeholder="1Z…" oninput="_fbaParsedBatch['+i+'].tracking=this.value" '
+      +    'style="'+inSt.replace('var(--bdr)',trkBorder)+';font-family:monospace;"></div>'
+      +  '<div><div style="'+lblSt+'">WEIGHT (LBS)</div><input value="'+escHtml(s.weight||'')+'" placeholder="0.0" oninput="_fbaParsedBatch['+i+'].weight=this.value" style="'+inSt+'"></div>'
+      +'</div>'
+      // Row 3: Notes
+      +'<div style="margin-bottom:6px;"><div style="'+lblSt+'">NOTES</div>'
+      +  '<input value="'+escHtml(s.notes||'')+'" placeholder="Optional notes" oninput="_fbaParsedBatch['+i+'].notes=this.value" style="'+inSt+'"></div>'
+      // SKUs display
+      +skuLine
+      // Action buttons
+      +'<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">'
+      +  '<button onclick="fbaFillForm(_fbaParsedBatch['+i+']);document.getElementById(\'fba-parse-preview\').style.display=\'none\';" '
+      +    'style="font-size:9px;padding:4px 10px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">FILL FORM ↓</button>'
+      +  '<button onclick="fbaBatchLogOne('+i+')" '
+      +    'style="font-size:9px;padding:4px 10px;background:transparent;border:1px solid var(--gn);color:var(--gn);cursor:pointer;font-family:inherit;">LOG ✓</button>'
+      +'</div>';
 
     cards.appendChild(card);
   });
@@ -7169,41 +7206,109 @@ function fbaShowParsedPreview(shipments){
   panel.style.display = 'block';
 }
 
-// ── Log all parsed shipments directly (batch mode) ────────────────
-function fbaLogParsedAll(){
-  if(!_fbaParsedBatch.length) return;
-  var msg = document.getElementById('fba-parse-msg');
+// ── Apply global carrier / date / by to every card ────────────────
+function fbaBatchApplyAll(){
+  var carrier = (document.getElementById('fba-batch-carrier')||{value:''}).value.trim();
+  var date    = (document.getElementById('fba-batch-date')   ||{value:''}).value.trim();
+  var by      = (document.getElementById('fba-batch-by')     ||{value:''}).value.trim();
+  _fbaParsedBatch.forEach(function(s){
+    if(carrier) s.carrier = carrier;
+    if(date)    s.date    = date;
+    if(by)      s.by      = by;
+  });
+  fbaShowBatchEdit(_fbaParsedBatch);
+  pm('Applied to all '+_fbaParsedBatch.length+' shipments. Scroll down to review.');
+}
+
+// ── Remove one shipment from the batch ────────────────────────────
+function fbaBatchRemove(i){
+  _fbaParsedBatch.splice(i, 1);
+  if(!_fbaParsedBatch.length){
+    document.getElementById('fba-parse-preview').style.display = 'none';
+    pm('Batch cleared.'); return;
+  }
+  fbaShowBatchEdit(_fbaParsedBatch);
+}
+
+// ── Log a single shipment from the batch and remove it ───────────
+function fbaBatchLogOne(i){
+  var parsed = _fbaParsedBatch[i];
+  if(!parsed) return;
   var now = new Date();
   var pad = function(n){ return n<10?'0'+n:n; };
-  var dateStr = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  var dateStr = parsed.date || (now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate()));
+
+  if(fbaRecords.some(function(r){ return r.shipId === parsed.shipId; })){
+    pm('⚠ '+parsed.shipId+' is already in the log.'); return;
+  }
+
+  var rec = {
+    id:       'FBA-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
+    date:     dateStr,
+    shipId:   parsed.shipId,
+    fc:       parsed.fc       || '',
+    by:       parsed.by       || '',
+    carrier:  parsed.carrier  || '',
+    tracking: parsed.tracking || '',
+    boxes:    parsed.boxes    || '',
+    units:    parsed.units    || '',
+    dims:     (parsed.dimL&&parsed.dimW&&parsed.dimH)
+              ? parsed.dimL+'×'+parsed.dimW+'×'+parsed.dimH+' in' : '',
+    weight:   parsed.weight   || '',
+    notes:    parsed.notes    || 'Auto-imported from PDF label',
+    skus:     parsed.skus     || [],
+  };
+
+  fbaRecords.unshift(rec);
+  fbaSaveLocal();
+  window.apiSaveFba && window.apiSaveFba(rec);
+  if(typeof window.trackEvent === 'function'){
+    window.trackEvent('fba_created','fba',rec.id,{units:rec.units,source:'pdf_import'});
+  }
+
+  _fbaParsedBatch.splice(i, 1);
+  renderFbaLog();
+  renderFbaStats();
+
+  if(!_fbaParsedBatch.length){
+    document.getElementById('fba-parse-preview').style.display = 'none';
+    pm('✓ All shipments logged!'); return;
+  }
+  fbaShowBatchEdit(_fbaParsedBatch);
+  pm('✓ Logged '+parsed.shipId+'. '+_fbaParsedBatch.length+' remaining.');
+}
+
+// ── Log ALL shipments in the batch at once ────────────────────────
+function fbaLogParsedAll(){
+  if(!_fbaParsedBatch.length) return;
+  var now = new Date();
+  var pad = function(n){ return n<10?'0'+n:n; };
+  var today = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
 
   var logged = 0;
   _fbaParsedBatch.forEach(function(parsed){
-    // Skip if this shipment ID already exists
     if(fbaRecords.some(function(r){ return r.shipId === parsed.shipId; })) return;
-
     var rec = {
       id:       'FBA-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
-      date:     dateStr,
+      date:     parsed.date     || today,
       shipId:   parsed.shipId,
-      fc:       parsed.fc        || '',
-      by:       '',
-      carrier:  parsed.carrier   || '',
-      tracking: parsed.tracking  || '',
-      boxes:    parsed.boxes     || '',
-      units:    parsed.units     || '',
+      fc:       parsed.fc       || '',
+      by:       parsed.by       || '',
+      carrier:  parsed.carrier  || '',
+      tracking: parsed.tracking || '',
+      boxes:    parsed.boxes    || '',
+      units:    parsed.units    || '',
       dims:     (parsed.dimL&&parsed.dimW&&parsed.dimH)
                 ? parsed.dimL+'×'+parsed.dimW+'×'+parsed.dimH+' in' : '',
-      weight:   parsed.weight    || '',
-      notes:    'Auto-imported from PDF label',
-      skus:     parsed.skus      || [],
+      weight:   parsed.weight   || '',
+      notes:    parsed.notes    || 'Auto-imported from PDF label',
+      skus:     parsed.skus     || [],
     };
-
     fbaRecords.unshift(rec);
     fbaSaveLocal();
     window.apiSaveFba && window.apiSaveFba(rec);
     if(typeof window.trackEvent === 'function'){
-      window.trackEvent('fba_created', 'fba', rec.id, { sku: null, units: rec.units, source: 'pdf_import' });
+      window.trackEvent('fba_created','fba',rec.id,{units:rec.units,source:'pdf_import'});
     }
     logged++;
   });
@@ -7212,7 +7317,7 @@ function fbaLogParsedAll(){
   renderFbaStats();
   _fbaParsedBatch = [];
   document.getElementById('fba-parse-preview').style.display = 'none';
-  pm('✓ Logged '+logged+' FBA shipment'+(logged!==1?'s':'')+' from PDF. Review the log below and fill in any missing details.');
+  pm('✓ Logged '+logged+' FBA shipment'+(logged!==1?'s':'')+' from PDF.');
 }
 
 function renderFbaStats(){
@@ -7854,14 +7959,15 @@ document.addEventListener('DOMContentLoaded', function(){
         <div id="fba-import-spinner" style="display:none;font-size:11px;color:var(--cy);flex-shrink:0;">⟳ parsing…</div>
       </div>
 
-      <!-- Parse preview — shown after PDF parsed, before logging -->
+      <!-- Batch edit panel — shown after PDF parsed, before logging -->
       <div id="fba-parse-preview" style="display:none;background:var(--sur);border:1px solid var(--cy);padding:14px;margin-bottom:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div style="font-size:9px;letter-spacing:2px;color:var(--cy);">PARSED FROM PDF — REVIEW &amp; CONFIRM</div>
-          <button onclick="document.getElementById('fba-parse-preview').style.display='none';"
+          <div style="font-size:9px;letter-spacing:2px;color:var(--cy);">BATCH EDIT — REVIEW &amp; LOG PARSED SHIPMENTS</div>
+          <button onclick="_fbaParsedBatch=[];document.getElementById('fba-parse-preview').style.display='none';"
             style="background:transparent;border:none;color:var(--td);font-size:13px;cursor:pointer;">✕</button>
         </div>
-        <div id="fba-parse-cards" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <!-- fba-batch-global injected here by JS -->
+        <div id="fba-parse-cards" style="display:flex;flex-direction:column;gap:0;max-height:60vh;overflow-y:auto;"></div>
         <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
           <button id="fba-parse-log-all" onclick="fbaLogParsedAll()"
             class="btn btn-g" style="font-size:9px;">✓ LOG ALL SHIPMENTS</button>
