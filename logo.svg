@@ -1,38 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 160" width="460" height="160">
-  <rect width="460" height="160" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 88">
+  <!-- Row 1: 3 package boxes -->
+  <rect x="0"  y="0" width="28" height="40" rx="3" fill="#6366f1"/>
+  <rect x="32" y="0" width="28" height="40" rx="3" fill="#6366f1"/>
+  <rect x="64" y="0" width="28" height="40" rx="3" fill="#6366f1"/>
+  <!-- Tape seams row 1 -->
+  <rect x="0"  y="15" width="28" height="2" fill="rgba(255,255,255,0.3)"/>
+  <rect x="32" y="15" width="28" height="2" fill="rgba(255,255,255,0.3)"/>
+  <rect x="64" y="15" width="28" height="2" fill="rgba(255,255,255,0.3)"/>
 
-  <!-- D mark: two strokes — stem + arc — eye completes the letter -->
-  <line x1="22" y1="18" x2="22" y2="142"
-        stroke="#111" stroke-width="7" stroke-linecap="round"/>
-  <path d="M 22,18 A 62,62 0 0,1 22,142"
-        fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>
-  <!-- Warehouse: single door rect in the bowl -->
-  <rect x="44" y="104" width="14" height="28" rx="2" fill="#111"/>
+  <!-- Row 2: side boxes -->
+  <rect x="0"  y="44" width="28" height="44" rx="3" fill="#6366f1"/>
+  <rect x="64" y="44" width="28" height="44" rx="3" fill="#6366f1"/>
+  <!-- Tape seams row 2 -->
+  <rect x="0"  y="61" width="28" height="2" fill="rgba(255,255,255,0.3)"/>
+  <rect x="64" y="61" width="28" height="2" fill="rgba(255,255,255,0.3)"/>
 
-  <!-- Wordmark -->
-  <text
-    x="130" y="87"
-    font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
-    font-size="56"
-    font-weight="900"
-    fill="#111"
-    letter-spacing="-2">WAREHUB</text>
-
-  <rect x="130" y="99" width="318" height="1.2" fill="#ddd"/>
-
-  <text
-    x="132" y="118"
-    font-family="Arial,Helvetica,sans-serif"
-    font-size="11"
-    fill="#aaa"
-    letter-spacing="5.5">WAREHOUSE MANAGEMENT</text>
-
-  <text
-    x="132" y="138"
-    font-family="Arial,Helvetica,sans-serif"
-    font-size="10"
-    fill="#ccc"
-    letter-spacing="2">
-    <tspan font-weight="700" fill="#888">D</tspan>OUBLE SIDED ISCM LLC
-  </text>
+  <!-- Loading dock (center bottom) -->
+  <rect x="32" y="44" width="28" height="44" rx="3" fill="#4f46e5"/>
+  <!-- Arched bay door opening -->
+  <path d="M 38,88 L 38,65 A 8,8 0 0 0 54,65 L 54,88 Z" fill="white"/>
 </svg>
