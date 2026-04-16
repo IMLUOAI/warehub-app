@@ -1880,6 +1880,49 @@ async function parsePdf(file){
 
       var o = extractOrder(words, H);
       if(o){
+        // ── FedEx shared-barcode dedup fix ────────────────────────────────────
+        // FedEx SmartPost / Ground batch PDFs print the same GS1 barcode prefix
+        // on every label in the batch.  When the parser extracts a FedEx tracking
+        // that already exists in out[], try alternative unique identifiers first:
+        //   1. "Tracking ID#" text row (printed uniquely per label on SmartPost)
+        //   2. CUST REF / PK- reference printed on the label
+        //   3. Page-suffix fallback so at least the label image gets a unique slot
+        var alreadyUsed = out.some(function(x){ return x.tracking === o.tracking; });
+        if(alreadyUsed && /^(96|61|74|75|FX-|FEDEX-)/.test(o.tracking)){
+          var altId = null;
+          function cleanW(s){ return s.replace(/[^A-Z0-9]/gi,''); }
+          // Tier 1: "Tracking ID" text row
+          var tidW = words.filter(function(w){ return /Tracking/i.test(w.text) && /ID/i.test(w.text); });
+          if(tidW.length){
+            var tidTop = tidW[0].top;
+            var tidDigits = words.filter(function(w){ return Math.abs(w.top-tidTop)<10; })
+                                 .map(function(w){ return cleanW(w.text); }).join('')
+                                 .replace(/[^0-9]/g,'');
+            if(tidDigits.length >= 8) altId = 'FEDEX-'+tidDigits;
+          }
+          // Tier 2: CUST REF / PK- row
+          if(!altId){
+            var refW = words.filter(function(w){ return /CUST\s*REF/i.test(w.text) || /^PK-/.test(w.text); });
+            if(refW.length){
+              var refTop = refW[0].top;
+              var refRow = words.filter(function(w){ return Math.abs(w.top-refTop)<8; })
+                               .sort(function(a,b){ return a.x-b.x; });
+              var refToken = refRow.filter(function(w){
+                return /^PK-/.test(w.text) || cleanW(w.text).length >= 6;
+              });
+              if(refToken.length) altId = 'FX-'+cleanW(refToken[refToken.length-1].text).slice(0,20);
+            }
+          }
+          // Tier 3: fall back to page-suffixed ID so we keep the label image
+          if(!altId || out.some(function(x){ return x.tracking === altId; })){
+            altId = o.tracking+'_p'+p;
+          }
+          dbg('  FedEx dup on p'+p+': '+o.tracking+' → '+altId);
+          o.tracking = altId;
+          o.carrier  = dc(altId) !== 'Unknown' ? dc(altId) : o.carrier;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // Store the PDF page index so we can re-render from raw PDF later
         o.pageIndex = p;
         // Lazy canvas: render image at capped scale, use JPEG not PNG
@@ -2498,10 +2541,68 @@ function printMissingLabels(){
   pm('🖨 Printing '+withImg.length+' missing label'+(withImg.length>1?'s':'')+'…');
 }
 
+// Reprint one dropped-dup label by index into the flat allDroppedImgs list
+// Built at modal render time; idx refers to allDroppedImgs[idx]
+window._reprintOneDup = function(idx){
+  var modal = document.getElementById('_missing-overlay');
+  // Rebuild allDroppedImgs the same way showMissingLabels does
+  var dups = window._lastDroppedDups || [];
+  var flat = [];
+  dups.forEach(function(d){ (d.droppedImgs||[]).forEach(function(x){ flat.push(x); }); });
+  var x = flat[idx];
+  if(!x || !x.img){ pm('No image for this label.'); return; }
+  var w = window.open('','_blank','width=500,height=700');
+  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{background:#fff;display:flex;align-items:flex-start;justify-content:center;}'
+    +'img{width:4in;height:6in;object-fit:contain;object-position:top;}'
+    +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;height:6in;}}'
+    +'</style></head><body>'
+    +'<img src="'+x.img+'">'
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+};
+
+// Reprint ALL missing: both skipped-page images and dropped-dup images
+window._reprintAllMissing = function(){
+  var skipped = window._skippedPages || [];
+  var dups = window._lastDroppedDups || [];
+  var allImgs = [];
+  skipped.forEach(function(s){ if(s.img) allImgs.push({img:s.img, pageNum:s.pageNum}); });
+  dups.forEach(function(d){
+    (d.droppedImgs||[]).forEach(function(x){ if(x.img) allImgs.push(x); });
+  });
+  if(!allImgs.length){ pm('No images available to reprint.'); return; }
+  var body = allImgs.map(function(x){
+    return '<div class="lp"><img src="'+x.img+'"><div class="pg">p.'+x.pageNum+'</div></div>';
+  }).join('');
+  var w = window.open('','_blank','width=800,height=600');
+  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{background:#fff;}'
+    +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
+    +'.lp:last-child{page-break-after:avoid;}'
+    +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
+    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;}'
+    +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
+    +'</style></head><body>'
+    +body
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+  document.getElementById('_missing-overlay') && document.getElementById('_missing-overlay').remove();
+  pm('🖨 Printing '+allImgs.length+' missing label'+(allImgs.length>1?'s':'')+'…');
+};
+
 function showMissingLabels(droppedDups, skippedPages){
-  // droppedDups: [{tracking, carrier, count, pages:[]}]
+  // droppedDups: [{tracking, carrier, count, pages:[], droppedImgs:[{pageNum,img}]}]
   // skippedPages: [{pageNum, tokens:[], img?}]
-  var total = droppedDups.length + skippedPages.length;
+  // Count actual missing labels: each dup group has (count-1) dropped copies
+  var totalDropped = droppedDups.reduce(function(n,d){ return n+(d.count-1); }, 0);
+  var total = totalDropped + skippedPages.length;
   if(!total) return;
 
   var hasImgs = skippedPages.some(function(s){ return !!s.img; });
@@ -2516,8 +2617,8 @@ function showMissingLabels(droppedDups, skippedPages){
         +'<div style="font-size:15px;font-weight:700;color:#fff;margin-top:2px;">⚠ '+total+' Missing Label'+(total>1?'s':'')+' Detected</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">'
-        +(skippedPages.length && hasImgs
-          ? '<button onclick="printMissingLabels();document.getElementById(\'_missing-overlay\').remove();" '
+        +((skippedPages.some(function(s){return s.img;}) || droppedDups.some(function(d){return d.droppedImgs&&d.droppedImgs.some(function(x){return x.img;});}))
+          ? '<button onclick="_reprintAllMissing()" '
             +'style="padding:7px 16px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap;">🖨 REPRINT ALL MISSING</button>'
           : '')
         +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
@@ -2579,22 +2680,51 @@ function showMissingLabels(droppedDups, skippedPages){
 
   // Section 2 — duplicate drops
   if(droppedDups.length){
+    // Build a flat list of all dropped copies with their images for the thumb strip
+    var allDroppedImgs = [];
+    droppedDups.forEach(function(d){
+      (d.droppedImgs||[]).forEach(function(x){ allDroppedImgs.push(x); });
+    });
+    var hasDroppedImgs = allDroppedImgs.some(function(x){ return !!x.img; });
+
+    var dupThumbStrip = '';
+    if(hasDroppedImgs){
+      dupThumbStrip = '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">'
+        +allDroppedImgs.map(function(x, idx){
+          if(!x.img) return '';
+          return '<div style="flex-shrink:0;text-align:center;">'
+            +'<img src="'+x.img+'" style="width:120px;height:180px;object-fit:contain;object-position:top;border:1px solid var(--rd);display:block;cursor:pointer;" '
+              +'onclick="_reprintOneDup('+idx+')" title="Click to reprint" />'
+            +'<div style="font-size:8px;color:var(--rd);font-weight:700;margin-top:3px;">p.'+x.pageNum+'</div>'
+            +'<button onclick="_reprintOneDup('+idx+')" '
+              +'style="margin-top:3px;font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">🖨 PRINT</button>'
+            +'</div>';
+        }).join('')
+        +'</div>';
+    }
+
     html += '<div>'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--rd);margin-bottom:8px;">DUPLICATE TRACKING — DROPPED FROM PRINT ('+droppedDups.length+')</div>'
-      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These tracking numbers appeared more than once. Only the first copy was printed; duplicates were dropped.</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--rd);margin-bottom:6px;">'
+        +'DUPLICATE TRACKING — '+totalDropped+' LABEL'+(totalDropped>1?'S':'')+' DROPPED FROM PRINT</div>'
+      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">'
+        +(hasDroppedImgs
+          ? 'These labels were dropped because their tracking number matched another label already in the batch. Their images are below — this usually means the <b style="color:var(--am);">parser extracted a shared batch barcode</b> instead of each label\'s unique Tracking ID. Click to reprint individually.'
+          : 'These tracking numbers appeared more than once. Only the first copy was printed. Re-import the PDF to capture images for reprinting.')
+      +'</div>'
+      +dupThumbStrip
       +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
       +'<tr>'
-        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TRACKING</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TRACKING (SHARED)</th>'
         +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">CARRIER</th>'
-        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">COPIES</th>'
-        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">PDF PAGES</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TOTAL / DROPPED</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">ALL PAGES</th>'
       +'</tr>'
       +droppedDups.map(function(d){
         return '<tr style="border-bottom:1px solid var(--bdr)22;">'
           +'<td style="padding:6px 8px;font-family:monospace;font-size:9px;color:var(--tx);word-break:break-all;">'+d.tracking+'</td>'
           +'<td style="padding:6px 8px;color:var(--cy);">'+d.carrier+'</td>'
-          +'<td style="padding:6px 8px;color:var(--rd);font-weight:700;">'+d.count+'×</td>'
-          +'<td style="padding:6px 8px;color:var(--td);">'+d.pages.join(', ')+'</td>'
+          +'<td style="padding:6px 8px;color:var(--rd);font-weight:700;">'+d.count+'× total / '+(d.count-1)+' dropped</td>'
+          +'<td style="padding:6px 8px;color:var(--td);font-size:9px;">'+d.pages.join(', ')+'</td>'
           +'</tr>';
       }).join('')
       +'</table>'
@@ -2611,6 +2741,9 @@ function showMissingLabels(droppedDups, skippedPages){
         +'style="padding:7px 22px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;font-weight:700;">GOT IT</button>'
     +'</div>'
     +'</div></div>';
+
+  // Store for _reprintOneDup / _reprintAllMissing helpers
+  window._lastDroppedDups = droppedDups;
 
   var existing = document.getElementById('_missing-overlay');
   if(existing) existing.remove();
@@ -2657,11 +2790,16 @@ async function printSkuSort(){
       dups.sort(function(a,b){return freq[b]-freq[a];}).forEach(function(t){
         var ex=withImg.filter(function(o){return o.tracking===t;});
         dbg('  '+freq[t]+'× '+t+' ('+ex[0].carrier+')  pages: '+ex.map(function(o){return o.pageIndex;}).join(', '));
+        // Save ALL copies with their images — the first is kept for printing,
+        // the rest (index 1…n) are the ones the user needs to reprint
         _droppedDups.push({
-          tracking: t,
-          carrier:  ex[0].carrier||'Unknown',
-          count:    freq[t],
-          pages:    ex.map(function(o){return 'p.'+o.pageIndex;})
+          tracking:    t,
+          carrier:     ex[0].carrier||'Unknown',
+          count:       freq[t],
+          pages:       ex.map(function(o){return 'p.'+o.pageIndex;}),
+          droppedImgs: ex.slice(1).map(function(o){  // slice(1) = the dropped copies
+            return { pageNum: o.pageIndex, img: o.pageImg||null };
+          })
         });
       });
       showDebug();
