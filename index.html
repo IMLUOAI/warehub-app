@@ -1321,7 +1321,7 @@ function gv(name){
   if(name==='payroll') renderProductivity();
   if(name==='floor')  renderFloor();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
-  if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); }
+  if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); }
 }
 
 var TPATS=[
@@ -6681,6 +6681,7 @@ function vehicleDeleteTrip(id){
 // FBA OUTBOUND — data, form, log, export, Excel
 // ══════════════════════════════════════════════════════
 var fbaRecords = [];
+var fbaReprints = [];   // persistent reprint queue — saved to warehub_fba_reprints
 var _fbaSkuSeq = 0;
 
 function fbaLoadLocal(){
@@ -7291,6 +7292,9 @@ function fbaShowBatchEdit(shipments, report){
     });
     window._fbaMissingList = reprintLines.join('\n');
 
+    // Auto-add missing boxes to the persistent Reprint Queue
+    if(totalMissing > 0) fbaReprintAddFromBatch(shipments);
+
     // Unrecognized page snippet lines (help user see what was on those pages)
     var unrecSnippetHtml = '';
     if(unrecPages.length){
@@ -7495,6 +7499,182 @@ function fbaCopyMissingList(){
   } else {
     window.prompt('Copy this reprint list:', list);
   }
+}
+
+// ── Persistent Reprint Queue ──────────────────────────────────────
+
+function fbaReprintLoad(){
+  try{ fbaReprints = JSON.parse(localStorage.getItem('warehub_fba_reprints')||'[]'); }
+  catch(e){ fbaReprints = []; }
+}
+
+function fbaReprintSave(){
+  try{ localStorage.setItem('warehub_fba_reprints', JSON.stringify(fbaReprints)); }
+  catch(e){}
+}
+
+// Called from fbaShowBatchEdit whenever missing boxes are detected
+function fbaReprintAddFromBatch(shipments){
+  var today = (function(){
+    var d=new Date(); var p=function(n){return n<10?'0'+n:n;};
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  })();
+  var added = 0;
+  shipments.forEach(function(s){
+    if(!s.missingBoxes || !s.missingBoxes.length) return;
+    s.missingBoxes.forEach(function(b){
+      // don't add if already in queue as pending (avoid duplicates on re-parse)
+      var exists = fbaReprints.some(function(r){ return r.shipId===s.shipId && r.boxNum===b && !r.done; });
+      if(exists) return;
+      fbaReprints.push({
+        id:         s.shipId+'_box'+b+'_'+Date.now(),
+        shipId:     s.shipId,
+        boxNum:     b,
+        totalBoxes: parseInt(s.boxes)||0,
+        dateAdded:  today,
+        done:       false
+      });
+      added++;
+    });
+  });
+  if(added){
+    fbaReprintSave();
+    fbaReprintRender();
+    pm('⚠ '+added+' missing label'+(added!==1?'s':'')+' added to Reprint Queue — scroll down to see queue.');
+  }
+}
+
+function fbaReprintRender(){
+  var panel = document.getElementById('fba-reprint-panel');
+  var list  = document.getElementById('fba-reprint-list');
+  var badge = document.getElementById('fba-reprint-badge');
+  if(!panel || !list) return;
+
+  if(!fbaReprints.length){
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+
+  var pending = fbaReprints.filter(function(r){ return !r.done; });
+  if(badge){
+    if(pending.length){
+      badge.textContent = pending.length+' PENDING';
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  // Sort: pending first (shipId asc → boxNum asc), then done
+  function sortItems(arr){
+    return arr.slice().sort(function(a,b){
+      if(a.shipId < b.shipId) return -1;
+      if(a.shipId > b.shipId) return  1;
+      return a.boxNum - b.boxNum;
+    });
+  }
+  var ordered = sortItems(pending).concat(sortItems(fbaReprints.filter(function(r){ return r.done; })));
+
+  var rows = ordered.map(function(r){
+    var dimmed = r.done ? 'opacity:.4;' : '';
+    var btnStyle = 'flex-shrink:0;width:20px;height:20px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:11px;font-weight:700;';
+    var doneBtn  = r.done
+      ? '<button onclick="fbaReprintDone(\''+r.id+'\')" title="Undo done" style="'+btnStyle+'border:1.5px solid var(--gn);background:var(--gn);color:#fff;">✓</button>'
+      : '<button onclick="fbaReprintDone(\''+r.id+'\')" title="Mark reprinted" style="'+btnStyle+'border:1.5px solid #f87171;background:transparent;color:#f87171;"> </button>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--bdr);'+dimmed+'">'
+      + doneBtn
+      + '<span style="font-family:monospace;font-size:10px;color:var(--cy);flex-shrink:0;min-width:145px;">'+escHtml(r.shipId)+'</span>'
+      + '<span style="font-size:11px;font-weight:700;color:'+(r.done?'var(--gn)':'#f87171')+';flex-shrink:0;min-width:90px;">Box '+r.boxNum+(r.totalBoxes?' of '+r.totalBoxes:'')+'</span>'
+      + '<span style="font-size:9px;color:var(--td);">detected '+r.dateAdded+'</span>'
+      + (r.done ? '<span style="font-size:9px;color:var(--gn);margin-left:auto;white-space:nowrap;">Reprinted ✓</span>' : '')
+      + '</div>';
+  }).join('');
+
+  list.innerHTML = rows || '<div style="padding:10px 12px;font-size:10px;color:var(--td);">Queue empty.</div>';
+}
+
+function fbaReprintDone(id){
+  var r = fbaReprints.find(function(x){ return x.id===id; });
+  if(!r) return;
+  r.done = !r.done;
+  fbaReprintSave();
+  fbaReprintRender();
+}
+
+function fbaReprintClearDone(){
+  var n = fbaReprints.filter(function(r){ return r.done; }).length;
+  if(!n){ pm('No done items to clear.'); return; }
+  fbaReprints = fbaReprints.filter(function(r){ return !r.done; });
+  fbaReprintSave();
+  fbaReprintRender();
+  pm('Cleared '+n+' reprinted item'+(n!==1?'s':'')+' from queue.');
+}
+
+function fbaReprintClearAll(){
+  if(!fbaReprints.length){ pm('Queue is already empty.'); return; }
+  if(!confirm('Clear the entire reprint queue? This cannot be undone.')) return;
+  fbaReprints = [];
+  fbaReprintSave();
+  fbaReprintRender();
+  pm('Reprint queue cleared.');
+}
+
+function fbaReprintPrint(){
+  var pending = fbaReprints.filter(function(r){ return !r.done; });
+  if(!pending.length){ pm('No pending reprints — all labels have been marked done.'); return; }
+  pending.sort(function(a,b){
+    if(a.shipId < b.shipId) return -1;
+    if(a.shipId > b.shipId) return  1;
+    return a.boxNum - b.boxNum;
+  });
+  var today = (function(){
+    var d=new Date(); var p=function(n){return n<10?'0'+n:n;};
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+  })();
+  var tbody = pending.map(function(r, idx){
+    return '<tr style="background:'+(idx%2===0?'#fff':'#f9f9f9')+'">'
+      +'<td style="padding:9px 12px;border-bottom:1px solid #e0e0e0;font-size:13px;color:#555;">'+(idx+1)+'</td>'
+      +'<td style="padding:9px 12px;border-bottom:1px solid #e0e0e0;font-family:monospace;font-size:13px;">'+escHtml(r.shipId)+'</td>'
+      +'<td style="padding:9px 12px;border-bottom:1px solid #e0e0e0;font-weight:700;font-size:15px;">Box '+r.boxNum+(r.totalBoxes?' <span style="font-weight:400;font-size:12px;color:#888;">of '+r.totalBoxes+'</span>':'')+'</td>'
+      +'<td style="padding:9px 12px;border-bottom:1px solid #e0e0e0;font-size:12px;color:#888;">'+r.dateAdded+'</td>'
+      +'<td style="padding:9px 12px;border-bottom:1px solid #e0e0e0;width:90px;text-align:center;">'
+      +'<span style="display:inline-block;width:20px;height:20px;border:1.5px solid #aaa;border-radius:3px;"></span></td>'
+      +'</tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>WAREHUB — Reprint Queue '+today+'</title>'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:system-ui,-apple-system,sans-serif;padding:32px 40px;color:#111;}'
+    +'.hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;}'
+    +'.hd h1{font-size:22px;font-weight:800;letter-spacing:-0.5px;}'
+    +'.hd .sub{font-size:12px;color:#888;margin-top:4px;}'
+    +'.badge{display:inline-block;background:#e05252;color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;margin-top:6px;}'
+    +'table{width:100%;border-collapse:collapse;}'
+    +'thead th{padding:10px 12px;background:#f5f5f5;border-top:2px solid #333;border-bottom:2px solid #333;font-size:9px;letter-spacing:1.5px;text-align:left;color:#555;}'
+    +'.footer{margin-top:28px;font-size:11px;color:#aaa;border-top:1px solid #e0e0e0;padding-top:12px;}'
+    +'@media print{body{padding:16px 20px;} .no-print{display:none!important;}}'
+    +'</style></head><body>'
+    +'<div class="hd"><div>'
+    +'<h1>WAREHUB — Label Reprint Queue</h1>'
+    +'<div class="sub">Generated: '+today+'</div>'
+    +'<div class="badge">'+pending.length+' label'+(pending.length!==1?'s':'')+' to reprint</div>'
+    +'</div>'
+    +'<button class="no-print" onclick="window.print()" style="padding:10px 24px;font-size:13px;font-weight:700;background:#e05252;color:#fff;border:none;cursor:pointer;border-radius:4px;">🖨 PRINT</button>'
+    +'</div>'
+    +'<table>'
+    +'<thead><tr>'
+    +'<th>#</th><th>SHIPMENT ID</th><th>BOX NUMBER</th><th>DATE DETECTED</th><th style="text-align:center;">REPRINTED ✓</th>'
+    +'</tr></thead>'
+    +'<tbody>'+tbody+'</tbody>'
+    +'</table>'
+    +'<div class="footer">Print and hand to label operator. Check each box when label has been reprinted and re-applied.</div>'
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>';
+  var w = window.open('','_blank','width=820,height=640');
+  if(w){ w.document.write(html); w.document.close(); }
+  else { pm('⚠ Pop-up blocked — allow pop-ups for this page to print.'); }
 }
 
 // ── Log ALL shipments in the batch at once ────────────────────────
@@ -8191,6 +8371,25 @@ document.addEventListener('DOMContentLoaded', function(){
           <button id="fba-parse-log-all" onclick="fbaLogParsedAll()"
             class="btn btn-g" style="font-size:9px;">✓ LOG ALL SHIPMENTS</button>
           <div id="fba-parse-msg" style="font-size:10px;color:var(--am);"></div>
+        </div>
+      </div>
+
+      <!-- ── Reprint Queue (persistent, auto-populated from parse) ── -->
+      <div id="fba-reprint-panel" style="display:none;background:var(--sur);border:1px solid #e05252;padding:14px 16px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-size:9px;letter-spacing:2px;color:#f87171;font-weight:700;">🖨 REPRINT QUEUE</div>
+            <div id="fba-reprint-badge" style="display:none;background:#e05252;color:#fff;font-size:9px;font-weight:700;padding:1px 9px;border-radius:20px;"></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button onclick="fbaReprintPrint()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid #f87171;color:#f87171;cursor:pointer;font-family:inherit;white-space:nowrap;">🖨 PRINT SHEET</button>
+            <button onclick="fbaReprintClearDone()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">CLEAR DONE</button>
+            <button onclick="fbaReprintClearAll()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="fba-reprint-list" style="display:flex;flex-direction:column;gap:0;max-height:300px;overflow-y:auto;border:1px solid var(--bdr);"></div>
+        <div style="font-size:9px;color:var(--td);margin-top:8px;line-height:1.5;">
+          Auto-populated when parse detects missing boxes. Click ○ to mark reprinted — queue persists across sessions.
         </div>
       </div>
 
