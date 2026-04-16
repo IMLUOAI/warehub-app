@@ -1664,6 +1664,64 @@ function matchTracking(words){
     if(sdxM){ dbg('  SpeedX full-page match: '+sdxM[1]); return sdxM[1].toUpperCase(); }
   }
 
+  // ── GOFO / GFUS ──────────────────────────────────────────
+  // Single-word TPAT scan already ran above, but if the GFUS token was split
+  // across items (e.g. "GFUS" + "1234567890") the scan misses it.
+  // Row-concat + full-page collapse as fallbacks.
+  if(hintGofo){
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var gofoM=rowConcat.match(/(GFUS[A-Z0-9]{10,22})/i);
+      if(gofoM){ dbg('  GOFO row match: '+gofoM[1]); return gofoM[1].toUpperCase(); }
+    }
+    var pageAllGofo=words.map(function(w){return clean(w.text);}).join('');
+    var gofoM2=pageAllGofo.match(/(GFUS[A-Z0-9]{10,22})/i);
+    if(gofoM2){ dbg('  GOFO full-page match: '+gofoM2[1]); return gofoM2[1].toUpperCase(); }
+  }
+
+  // ── USPS ─────────────────────────────────────────────────
+  // USPS tracking (9XXX… 20-22 digits) is often split into spaced groups
+  // on the label (e.g. "9400 1118 9956 2716 8717 36").  The TPAT scan
+  // above cleaned each item individually but the single tokens are too
+  // short to match.  Row-concat removes the spaces; full-page is a final
+  // catch-all for any remaining split-row cases.
+  if(hintUSPS){
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      if(rowConcat.length<8) continue;
+      var uspsM=rowConcat.match(/^(9[0-9]\d{18,22})$/)
+              ||rowConcat.match(/^(\d{20,22})$/)
+              ||rowConcat.match(/^(70\d{14})$/);
+      if(uspsM){ dbg('  USPS row match: '+uspsM[1]); return uspsM[1]; }
+      // Substring scan for rows that concatenate non-USPS digits alongside
+      var uspsS=rowConcat.match(/(9[0-9]\d{18,22})/)
+              ||rowConcat.match(/(70\d{14})/);
+      if(uspsS){ dbg('  USPS row-substr match: '+uspsS[1]); return uspsS[1]; }
+    }
+    var pageAllUSPS=words.map(function(w){return clean(w.text);}).join('');
+    var uspsM2=pageAllUSPS.match(/(9[0-9]\d{18,22})/)
+             ||pageAllUSPS.match(/(70\d{14})/)
+             ||pageAllUSPS.match(/(\d{20,22})/);
+    if(uspsM2){ dbg('  USPS full-page match: '+uspsM2[1]); return uspsM2[1]; }
+  }
+
+  // ── SWIFT ────────────────────────────────────────────────
+  // Swift tracking (SW/SWF prefix) may split into "SW" + "F12345…"
+  // across adjacent items.  Row-concat + full-page collapse as fallbacks.
+  if(hintSwift){
+    for(var ri=0;ri<rowKeys.length;ri++){
+      var sorted=rows[rowKeys[ri]].sort(function(a,b){return a.x-b.x;});
+      var rowConcat=sorted.map(function(w){return clean(w.text);}).join('');
+      var swM=rowConcat.match(/(SWF?[A-Z0-9]{6,20})/i);
+      if(swM){ dbg('  SWIFT row match: '+swM[1]); return swM[1].toUpperCase(); }
+    }
+    var pageAllSW=words.map(function(w){return clean(w.text);}).join('');
+    var swM2=pageAllSW.match(/(SWF?[A-Z0-9]{6,20})/i);
+    if(swM2){ dbg('  SWIFT full-page match: '+swM2[1]); return swM2[1].toUpperCase(); }
+  }
+
   return null;
 }
 
@@ -2897,6 +2955,15 @@ async function printSkuSort(){
   }
 
   // ── Build HTML with carrier divider pages ───────────────────────────────────
+  // Print date — shown on every divider page
+  var _printDate = (function(){
+    var d=new Date();
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var pad=function(n){return n<10?'0'+n:n;};
+    return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
+           +'  '+pad(d.getHours())+':'+pad(d.getMinutes());
+  })();
+
   var bodyHtml='';
   sections.forEach(function(s){
     if(s.type==='carrier'){
@@ -2908,6 +2975,7 @@ async function printSkuSort(){
         +'<div class="divider-body">'
           +'<div class="divider-count">'+s.count+'</div>'
           +'<div class="divider-unit">LABEL'+(s.count!==1?'S':'')+'</div>'
+          +'<div class="divider-date">'+_printDate+'</div>'
         +'</div>'
         +'</div>';
     } else {
@@ -2929,6 +2997,7 @@ async function printSkuSort(){
     +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
     +'.divider-count{font-family:Arial,sans-serif;font-size:100px;font-weight:900;color:#000;line-height:1;}'
     +'.divider-unit{font-family:Arial,sans-serif;font-size:24px;font-weight:700;color:#000;letter-spacing:5px;margin-top:10px;}'
+    +'.divider-date{font-family:Arial,sans-serif;font-size:14px;font-weight:400;color:#555;margin-top:18px;letter-spacing:0.5px;}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;height:6in;margin:0;padding:0;}'
@@ -3022,6 +3091,15 @@ async function printByPacker(){
   // ── Build HTML ──────────────────────────────────────────────────────────────
   var bodyHtml='';
 
+  // Print date for packer dividers
+  var _printDate = (function(){
+    var d=new Date();
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var pad=function(n){return n<10?'0'+n:n;};
+    return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
+           +'  '+pad(d.getHours())+':'+pad(d.getMinutes());
+  })();
+
   function dividerPage(label, _color, count){
     // Monochrome divider — thermal printers can't reproduce colour.
     // Uses solid black header bar (white text) + large count in body.
@@ -3031,6 +3109,7 @@ async function printByPacker(){
       +'<div class="divider-body">'
         +'<div class="divider-count">'+count+'</div>'
         +'<div class="divider-unit">LABEL'+(count!==1?'S':'')+'</div>'
+        +'<div class="divider-date">'+_printDate+'</div>'
       +'</div>'
       +'</div>';
   }
@@ -3102,6 +3181,11 @@ async function printByPacker(){
       +'font-family:Arial,sans-serif;'
       +'font-size:24px;font-weight:700;'
       +'color:#000;letter-spacing:5px;margin-top:10px;'
+    +'}'
+    +'.divider-date{'
+      +'font-family:Arial,sans-serif;'
+      +'font-size:14px;font-weight:400;'
+      +'color:#555;margin-top:18px;letter-spacing:0.5px;'
     +'}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
