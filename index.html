@@ -1939,9 +1939,13 @@ async function parsePdf(file){
       msg += '  ⚠ '+skipped+' page(s) skipped — see Missing Labels panel below.';
     }
     pm(msg);
-    // Show/refresh the missing-labels panel immediately (before switching views)
+    // Show/refresh the missing-labels panel immediately
     renderSkippedPanel();
-    setTimeout(function(){ gv('manager'); }, 800);
+    // Only auto-navigate to Manager if every page parsed — if labels were missed,
+    // stay on Import so the user can see the Missing Labels panel and reprint.
+    if(!window._skippedPages || !window._skippedPages.length){
+      setTimeout(function(){ gv('manager'); }, 800);
+    }
 
   }catch(err){
     window._parsing = false;
