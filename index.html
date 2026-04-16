@@ -945,6 +945,22 @@ async function pinReset(){
     </div>
     <input id="fi" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]) parsePdf(this.files[0]);this.value='';">
 
+    <!-- ── Missing Labels Panel — populated by renderSkippedPanel() after parse ── -->
+    <div id="import-skipped-panel" style="display:none;background:var(--sur);border:1px solid var(--rd);margin-bottom:14px;">
+      <!-- header injected by JS -->
+      <div id="import-skipped-header" style="padding:10px 14px;background:#1a0808;border-bottom:1px solid var(--rd);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:9px;letter-spacing:2px;color:var(--rd);font-weight:700;">⚠ MISSING LABELS — FAILED TO PARSE</div>
+          <div id="import-skipped-count" style="font-size:11px;color:#e2e8f0;margin-top:2px;"></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="printMissingLabels()" style="font-size:9px;padding:5px 14px;background:var(--rd);border:none;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;white-space:nowrap;">🖨 PRINT MISSING LABELS</button>
+          <button onclick="document.getElementById('import-skipped-panel').style.display='none';" style="font-size:9px;padding:5px 12px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">✕ DISMISS</button>
+        </div>
+      </div>
+      <div id="import-skipped-list" style="display:flex;gap:12px;padding:12px 14px;overflow-x:auto;flex-wrap:wrap;"></div>
+    </div>
+
     <!-- Action buttons — always one row -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:nowrap;align-items:center;">
       <button class="btn btn-r" id="clear-btn" style="font-size:9px;white-space:nowrap;">✕ CLEAR ALL ORDERS</button>
@@ -1814,6 +1830,9 @@ async function parsePdf(file){
   if(window._parsing){ pm('⚠ Already parsing, please wait…'); return; }
   window._parsing = true;
   window._skippedPages = [];   // reset for this parse run
+  // Hide previous missing-labels panel immediately
+  var _sp = document.getElementById('import-skipped-panel');
+  if(_sp) _sp.style.display = 'none';
 
   document.getElementById('debug-log').textContent='';
   orders=[]; ai=0;
@@ -1880,10 +1899,21 @@ async function parsePdf(file){
         out.push(o);
         dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf);
       } else {
-        // Store skipped page info for the Missing Labels summary
+        // Store skipped page info WITH a rendered image so we can reprint it
+        var vpSkip = page.getViewport({scale: IMG_SCALE});
+        var cSkip  = document.createElement('canvas');
+        cSkip.width  = vpSkip.width;
+        cSkip.height = vpSkip.height;
+        var ctxSkip = cSkip.getContext('2d');
+        ctxSkip.imageSmoothingEnabled = true;
+        ctxSkip.imageSmoothingQuality = 'medium';
+        await page.render({canvasContext: ctxSkip, viewport: vpSkip}).promise;
+        var imgSkip = cSkip.toDataURL('image/jpeg', 0.88);
+        cSkip.width = 0; cSkip.height = 0;   // free canvas memory
         window._skippedPages.push({
           pageNum: p,
-          tokens: words.slice(0, 10).map(function(w){ return w.text; })
+          tokens:  words.slice(0, 12).map(function(w){ return w.text; }),
+          img:     imgSkip
         });
         if(p <= 3){
           dbg('✗ SKIP p'+p+' — tokens:');
@@ -1906,9 +1936,11 @@ async function parsePdf(file){
     var skipped = n - out.length;
     var msg = '✓ '+out.length+'/'+n+' label(s) parsed.';
     if(skipped > 0){
-      msg += '  ⚠ '+skipped+' page(s) skipped — scroll debug log to inspect.';
+      msg += '  ⚠ '+skipped+' page(s) skipped — see Missing Labels panel below.';
     }
     pm(msg);
+    // Show/refresh the missing-labels panel immediately (before switching views)
+    renderSkippedPanel();
     setTimeout(function(){ gv('manager'); }, 800);
 
   }catch(err){
@@ -2387,6 +2419,79 @@ function autoAssign(){
     return p.name+': '+loads[p.id]+' orders';
   }).join(' · ');
   pm('✓ SKU-grouped assignment: '+summary);
+}
+
+// ── Import: render skipped-page panel in the Import view ─────────────
+function renderSkippedPanel(){
+  var panel   = document.getElementById('import-skipped-panel');
+  var listEl  = document.getElementById('import-skipped-list');
+  var countEl = document.getElementById('import-skipped-count');
+  if(!panel || !listEl) return;
+
+  var skipped = window._skippedPages || [];
+  if(!skipped.length){
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  if(countEl) countEl.textContent = skipped.length+' label'+(skipped.length>1?'s':'')+' could not be identified — their images are shown below. Click PRINT MISSING LABELS to reprint them.';
+
+  listEl.innerHTML = skipped.map(function(s, idx){
+    var preview = s.tokens.filter(function(t){ return t && t.length > 1; }).slice(0, 5).join(' · ') || '(no readable text)';
+    var imgHtml = s.img
+      ? '<img src="'+s.img+'" style="width:160px;height:240px;object-fit:contain;object-position:top;display:block;border:1px solid var(--bdr);cursor:pointer;" onclick="printOneMissingLabel('+idx+')" title="Click to print this label" />'
+      : '<div style="width:160px;height:240px;border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--td);text-align:center;padding:8px;">Image not available</div>';
+    return '<div style="flex-shrink:0;text-align:center;">'
+      + imgHtml
+      + '<div style="font-size:8px;color:var(--rd);margin-top:4px;font-weight:700;">PDF p.'+s.pageNum+'</div>'
+      + '<div style="font-size:8px;color:var(--td);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+preview+'">'+preview+'</div>'
+      + '<button onclick="printOneMissingLabel('+idx+')" style="margin-top:4px;font-size:8px;padding:3px 10px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;white-space:nowrap;">🖨 PRINT</button>'
+      + '</div>';
+  }).join('');
+}
+
+function printOneMissingLabel(idx){
+  var skipped = window._skippedPages || [];
+  var s = skipped[idx];
+  if(!s || !s.img){ pm('No image available for this label.'); return; }
+  var w = window.open('', '_blank', 'width=500,height=700');
+  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{background:#fff;display:flex;align-items:flex-start;justify-content:center;}'
+    +'img{width:4in;height:6in;object-fit:contain;object-position:top;}'
+    +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;height:6in;}}'
+    +'</style></head><body>'
+    +'<img src="'+s.img+'">'
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+}
+
+function printMissingLabels(){
+  var skipped = window._skippedPages || [];
+  var withImg = skipped.filter(function(s){ return !!s.img; });
+  if(!withImg.length){ pm('No missing label images to print.'); return; }
+  var w = window.open('', '_blank', 'width=800,height=600');
+  if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
+  var body = withImg.map(function(s){
+    return '<div class="lp"><img src="'+s.img+'"><div class="pg">PDF p.'+s.pageNum+'</div></div>';
+  }).join('');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
+    +'body{background:#fff;}'
+    +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
+    +'.lp:last-child{page-break-after:avoid;}'
+    +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
+    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;}'
+    +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
+    +'</style></head><body>'
+    +body
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  w.document.close();
+  pm('🖨 Printing '+withImg.length+' missing label'+(withImg.length>1?'s':'')+'…');
 }
 
 function showMissingLabels(droppedDups, skippedPages){
