@@ -2500,39 +2500,77 @@ function printMissingLabels(){
 
 function showMissingLabels(droppedDups, skippedPages){
   // droppedDups: [{tracking, carrier, count, pages:[]}]
-  // skippedPages: [{pageNum, tokens:[]}]
+  // skippedPages: [{pageNum, tokens:[], img?}]
   var total = droppedDups.length + skippedPages.length;
-  if(!total) return;  // nothing missing — no popup needed
+  if(!total) return;
 
-  var html = '<div style="position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:20px;" id="_missing-overlay">'
-    +'<div style="background:var(--sur);border:2px solid var(--rd);max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">'
+  var hasImgs = skippedPages.some(function(s){ return !!s.img; });
 
-    // Header
-    +'<div style="padding:14px 18px;background:#1a0a0a;border-bottom:1px solid var(--rd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
+  var html = '<div style="position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:20px;" id="_missing-overlay">'
+    +'<div style="background:var(--sur);border:2px solid var(--rd);max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'
+
+    // ── Header ──
+    +'<div style="padding:14px 18px;background:#1a0808;border-bottom:1px solid var(--rd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:10px;">'
       +'<div>'
         +'<div style="font-size:9px;letter-spacing:3px;color:var(--rd);">ATTENTION</div>'
-        +'<div style="font-size:16px;font-weight:700;color:#fff;margin-top:2px;">⚠ '+total+' Missing Label'+(total>1?'s':'')+' Detected</div>'
+        +'<div style="font-size:15px;font-weight:700;color:#fff;margin-top:2px;">⚠ '+total+' Missing Label'+(total>1?'s':'')+' Detected</div>'
       +'</div>'
-      +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
-        +'style="background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;font-size:10px;padding:5px 12px;letter-spacing:1px;">✕ CLOSE</button>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">'
+        +(skippedPages.length && hasImgs
+          ? '<button onclick="printMissingLabels();document.getElementById(\'_missing-overlay\').remove();" '
+            +'style="padding:7px 16px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap;">🖨 REPRINT ALL MISSING</button>'
+          : '')
+        +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
+          +'style="background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;font-size:10px;padding:5px 12px;letter-spacing:1px;white-space:nowrap;">✕ CLOSE</button>'
+      +'</div>'
     +'</div>'
 
-    // Body
-    +'<div style="overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px;">';
+    // ── Body ──
+    +'<div style="overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:20px;">';
 
   // Section 1 — parse failures
   if(skippedPages.length){
+    // Thumbnail strip (if images were captured)
+    var thumbStrip = '';
+    if(hasImgs){
+      thumbStrip = '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">'
+        +skippedPages.map(function(s, idx){
+          if(!s.img) return '';
+          return '<div style="flex-shrink:0;text-align:center;">'
+            +'<img src="'+s.img+'" style="width:120px;height:180px;object-fit:contain;object-position:top;border:1px solid var(--rd);display:block;cursor:pointer;" '
+              +'onclick="printOneMissingLabel('+idx+')" title="Click to reprint this label" />'
+            +'<div style="font-size:8px;color:var(--rd);font-weight:700;margin-top:3px;">p.'+s.pageNum+'</div>'
+            +'<button onclick="printOneMissingLabel('+idx+')" '
+              +'style="margin-top:3px;font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;">🖨 PRINT</button>'
+            +'</div>';
+        }).join('')
+        +'</div>';
+    }
+
     html += '<div>'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:10px;">FAILED TO PARSE ('+skippedPages.length+' page'+(skippedPages.length>1?'s':'')+')</div>'
-      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These PDF pages had no recognisable tracking number. Check the original file at the page numbers listed below.</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">FAILED TO PARSE — '
+        +skippedPages.length+' PAGE'+(skippedPages.length>1?'S':'')+' SKIPPED</div>'
+      +(hasImgs
+        ? '<div style="font-size:10px;color:var(--td);margin-bottom:10px;">Label images shown below — click any to reprint individually, or use <b style="color:var(--rd);">REPRINT ALL MISSING</b> above.</div>'
+        : '<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These PDF pages had no recognisable tracking number. Re-import the PDF to capture label images for reprinting.</div>'
+       )
+      +thumbStrip
       +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
-      +'<tr><th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">PDF PAGE</th>'
-          +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TEXT FOUND ON PAGE</th></tr>'
-      +skippedPages.map(function(s){
-        var preview = s.tokens.filter(function(t){ return t.length > 1; }).slice(0, 6).join('  ·  ') || '(no readable text)';
+      +'<tr>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">PDF PAGE</th>'
+        +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TEXT FOUND ON PAGE</th>'
+        +(hasImgs ? '<th style="padding:5px 8px;border-bottom:1px solid var(--bdr);"></th>' : '')
+      +'</tr>'
+      +skippedPages.map(function(s, idx){
+        var preview = s.tokens.filter(function(t){ return t && t.length > 1; }).slice(0, 6).join('  ·  ') || '(no readable text)';
         return '<tr style="border-bottom:1px solid var(--bdr)22;">'
-          +'<td style="padding:6px 8px;color:var(--am);font-weight:700;">p.'+s.pageNum+'</td>'
+          +'<td style="padding:6px 8px;color:var(--am);font-weight:700;white-space:nowrap;">p.'+s.pageNum+'</td>'
           +'<td style="padding:6px 8px;color:var(--tx);font-family:monospace;font-size:9px;word-break:break-all;">'+preview+'</td>'
+          +(hasImgs
+            ? '<td style="padding:6px 8px;">'
+              +(s.img ? '<button onclick="printOneMissingLabel('+idx+')" style="font-size:8px;padding:3px 10px;background:transparent;border:1px solid var(--rd);color:var(--rd);cursor:pointer;font-family:inherit;white-space:nowrap;">🖨 REPRINT</button>' : '—')
+              +'</td>'
+            : '')
           +'</tr>';
       }).join('')
       +'</table>'
@@ -2542,8 +2580,8 @@ function showMissingLabels(droppedDups, skippedPages){
   // Section 2 — duplicate drops
   if(droppedDups.length){
     html += '<div>'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--rd);margin-bottom:10px;">DUPLICATE TRACKING — DROPPED FROM PRINT ('+droppedDups.length+' tracking'+(droppedDups.length>1?' numbers':' number')+')</div>'
-      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These tracking numbers appeared more than once. Only the first copy was printed; the rest were dropped.</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--rd);margin-bottom:8px;">DUPLICATE TRACKING — DROPPED FROM PRINT ('+droppedDups.length+')</div>'
+      +'<div style="font-size:10px;color:var(--td);margin-bottom:8px;">These tracking numbers appeared more than once. Only the first copy was printed; duplicates were dropped.</div>'
       +'<table style="width:100%;border-collapse:collapse;font-size:10px;">'
       +'<tr>'
         +'<th style="text-align:left;padding:5px 8px;color:var(--td);font-size:8px;letter-spacing:1px;border-bottom:1px solid var(--bdr);">TRACKING</th>'
@@ -2563,13 +2601,19 @@ function showMissingLabels(droppedDups, skippedPages){
       +'</div>';
   }
 
-  html += '</div>'  // end body
-    +'<div style="padding:12px 18px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end;flex-shrink:0;">'
+  // Footer
+  html += '</div>'
+    +'<div style="padding:12px 18px;border-top:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;">'
+      +'<div style="font-size:9px;color:var(--td);">'+
+        (hasImgs ? 'Images captured — click REPRINT to print directly from this dialog.' : 'Re-import the PDF to enable one-click reprint.')
+      +'</div>'
       +'<button onclick="document.getElementById(\'_missing-overlay\').remove();" '
-        +'style="padding:8px 24px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;font-weight:700;">GOT IT</button>'
+        +'style="padding:7px 22px;background:var(--rd);border:none;color:#fff;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;font-weight:700;">GOT IT</button>'
     +'</div>'
     +'</div></div>';
 
+  var existing = document.getElementById('_missing-overlay');
+  if(existing) existing.remove();
   var el = document.createElement('div');
   el.innerHTML = html;
   document.body.appendChild(el.firstChild);
