@@ -6853,16 +6853,24 @@ async function fbaImportPdf(file){
     var allText = pageTexts.map(function(pt){ return pt.spaced; }).join('\n');
 
     // ── Parse into per-shipment groups ────────────────────────────
-    var shipments = fbaParseLabels(allText, pageTexts);
+    var parsed    = fbaParseLabels(allText, pageTexts);
+    var shipments = parsed.shipments;
 
     if(!shipments.length){
-      pm('⚠ No FBA shipment IDs found in this PDF. Try a different file.');
+      var unrec = (parsed.report.unrecognizedPages||[]).length;
+      pm('⚠ No FBA shipment IDs found in this PDF ('
+        + pageTexts.length + ' pages, '
+        + (unrec ? unrec + ' unrecognized' : 'none recognized')
+        + '). Try a different file.');
       return;
     }
 
     _fbaParsedBatch = shipments;
-    fbaShowBatchEdit(shipments);
-    pm('✓ Parsed '+shipments.length+' FBA shipment'+(shipments.length===1?'':'s')+' — review & edit below, then log.');
+    fbaShowBatchEdit(shipments, parsed.report);
+    var totalMissing = shipments.reduce(function(n,s){ return n+(s.missingBoxes?s.missingBoxes.length:0); }, 0);
+    pm('✓ Parsed '+shipments.length+' shipment'+(shipments.length===1?'':'s')
+      +(totalMissing ? ' — ⚠ '+totalMissing+' label'+(totalMissing>1?'s':'')+' missing, see report' : ' — all boxes accounted for')
+      +'. Review & edit below, then log.');
 
   } catch(e){
     pm('⚠ Could not parse PDF: '+e.message);
@@ -6886,7 +6894,8 @@ var FBA_FC_CODES = /\b(ONT|PHX|LAX|LGB|SNA|MDW|MKE|ORD|SDF|RNO|TEB|HOU|BWI|EWR|A
 
 // ── Core parser — groups pages by unique FBA shipment ID ─────────
 function fbaParseLabels(allText, pageTexts){
-  var shipMap = {};  // shipId → aggregated data
+  var shipMap = {};          // shipId → aggregated data
+  var unrecognizedPages = []; // 1-indexed page numbers with no FBA ID
 
   pageTexts.forEach(function(pageText, pageIdx){
     // pageText may be {spaced, compact} object or a plain string (legacy)
@@ -6904,23 +6913,29 @@ function fbaParseLabels(allText, pageTexts){
     for(var m of refMatches) refIds.push(m[1].toUpperCase());
 
     var ids = [...new Set(directIds.concat(refIds))];
-    if(!ids.length) return;
+    if(!ids.length){ unrecognizedPages.push(pageIdx + 1); return; }
 
     var shipId = ids[0];
     if(!shipMap[shipId]){
       shipMap[shipId] = {
-        shipId:      shipId,
-        pageTexts:   [],
-        totalBoxes:  null,
-        trackingNums: [],    // one per box page (UPS/FedEx tracking)
-        skuQtyMap:   {},     // FNSKU → total qty across all pages
+        shipId:       shipId,
+        pageTexts:    [],
+        totalBoxes:   null,
+        boxNums:      [],    // which box numbers (X of Y) were parsed per page
+        trackingNums: [],    // one per box page
+        pagesNoTrk:   0,     // pages where no tracking was extracted
+        skuQtyMap:    {},    // FNSKU → total qty across all pages
       };
     }
     shipMap[shipId].pageTexts.push(txt);
 
     // ── Label Type 1: box count "Box 3 of 12" ───────────────────
     var boxMatch = txt.match(/(?:box\s+)?(\d+)\s+of\s+(\d+)/i);
-    if(boxMatch) shipMap[shipId].totalBoxes = parseInt(boxMatch[2]);
+    if(boxMatch){
+      var boxNum = parseInt(boxMatch[1]);
+      shipMap[shipId].totalBoxes = parseInt(boxMatch[2]);
+      if(!shipMap[shipId].boxNums.includes(boxNum)) shipMap[shipId].boxNums.push(boxNum);
+    }
 
     // ── Label Type 1: FNSKU/ASIN + quantities ───────────────────
     // Common formats:
@@ -6976,10 +6991,17 @@ function fbaParseLabels(allText, pageTexts){
     var tbaM = txt.match(/\b(TBA\d{12,16})\b/i);
     if(tbaM && !shipMap[shipId].trackingNums.includes(tbaM[1].toUpperCase()))
       shipMap[shipId].trackingNums.push(tbaM[1].toUpperCase());
+
+    // Track pages where no tracking of any kind was found
+    var trackingCountBefore = shipMap[shipId].trackingNums.length;
+    // (if nothing was pushed since start of this page's iteration, pagesNoTrk++)
+    // We detect this by checking if trackingNums grew during this page
+    var pageHadTracking = upsFound || !!tbaM;
+    if(!pageHadTracking) shipMap[shipId].pagesNoTrk++;
   });
 
   // Build one record per unique shipment ID
-  return Object.values(shipMap).map(function(s){
+  var shipments = Object.values(shipMap).map(function(s){
     var combined = s.pageTexts.join('\n');
     var rec = fbaExtractFields(s.shipId, combined, s.totalBoxes || s.pageTexts.length);
 
@@ -6990,7 +7012,6 @@ function fbaParseLabels(allText, pageTexts){
     } else if(s.trackingNums.length > 1){
       rec.tracking    = s.trackingNums[0];
       rec.allTracking = s.trackingNums;
-      // Store all in notes if multiple boxes
       rec.notes = 'All tracking: ' + s.trackingNums.join(', ');
     }
 
@@ -7000,13 +7021,37 @@ function fbaParseLabels(allText, pageTexts){
       rec.skus = skuEntries.map(function(fn){
         return { sku: fn, qty: s.skuQtyMap[fn] || '' };
       });
-      // Sum quantities → total units
       var total = skuEntries.reduce(function(sum, fn){ return sum + (s.skuQtyMap[fn]||0); }, 0);
       if(total > 0) rec.units = total;
     }
 
+    // ── Missing box analysis ──────────────────────────────────────
+    // Which box numbers (1..totalBoxes) were NOT found in the PDF?
+    s.boxNums.sort(function(a,b){return a-b;});
+    if(s.totalBoxes && s.boxNums.length > 0){
+      var present = new Set(s.boxNums);
+      var missing = [];
+      for(var b = 1; b <= s.totalBoxes; b++){
+        if(!present.has(b)) missing.push(b);
+      }
+      rec.missingBoxes   = missing;           // e.g. [3, 7]
+      rec.parsedBoxCount = s.boxNums.length;  // how many were found
+    } else {
+      rec.missingBoxes   = [];
+      rec.parsedBoxCount = s.pageTexts.length;
+    }
+    rec.pagesNoTrk = s.pagesNoTrk;           // pages with no tracking number
+
     return rec;
   });
+
+  return {
+    shipments:         shipments,
+    report: {
+      totalPages:         pageTexts.length,
+      unrecognizedPages:  unrecognizedPages,  // page numbers (1-indexed) with no FBA ID
+    }
+  };
 }
 
 // ── Extract shipment-level fields (both label types combined) ─────
@@ -7121,13 +7166,86 @@ function fbaFillForm(rec){
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ── Batch edit panel — editable cards for every parsed shipment ───
-function fbaShowBatchEdit(shipments){
+function fbaShowBatchEdit(shipments, report){
   var panel = document.getElementById('fba-parse-preview');
   var cards = document.getElementById('fba-parse-cards');
   if(!panel || !cards) return;
 
   var inSt  = 'background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:5px 7px;font-size:10px;font-family:inherit;outline:none;box-sizing:border-box;width:100%;';
   var lblSt = 'font-size:8px;letter-spacing:1.5px;color:var(--td);margin-bottom:3px;';
+
+  // ── Parse report (above everything else) ─────────────────────────
+  var rpt = document.getElementById('fba-parse-report');
+  if(!rpt){
+    rpt = document.createElement('div');
+    rpt.id = 'fba-parse-report';
+    panel.insertBefore(rpt, panel.firstChild.nextSibling); // after header row
+  }
+  if(report){
+    var unrecCnt    = (report.unrecognizedPages||[]).length;
+    var totalPgs    = report.totalPages||0;
+    var totalMissing = shipments.reduce(function(n,s){ return n+(s.missingBoxes?s.missingBoxes.length:0); }, 0);
+    var totalNoTrk   = shipments.reduce(function(n,s){ return n+(s.pagesNoTrk||0); }, 0);
+    var hasProblem   = totalMissing > 0 || unrecCnt > 0;
+
+    // Per-shipment lines
+    var shipLines = shipments.map(function(s){
+      var parts = [];
+      if(s.parsedBoxCount != null && s.boxes)
+        parts.push(s.parsedBoxCount+' / '+s.boxes+' boxes parsed');
+      if(s.missingBoxes && s.missingBoxes.length)
+        parts.push('<span style="color:#f87171;font-weight:700;">⚠ Missing: Box '+s.missingBoxes.join(', Box ')+'</span>');
+      if(s.pagesNoTrk)
+        parts.push('<span style="color:var(--am);">'+s.pagesNoTrk+' page'+(s.pagesNoTrk>1?'s':'')+' no tracking</span>');
+      if(!parts.length) parts.push('<span style="color:var(--gn);">✓ complete</span>');
+      return '<div style="display:flex;align-items:baseline;gap:6px;font-size:9px;padding:3px 0;border-top:1px solid var(--bdr);">'
+        +'<span style="font-family:monospace;color:var(--cy);flex-shrink:0;">'+escHtml(s.shipId)+'</span>'
+        +'<span>'+parts.join(' · ')+'</span>'
+        +'</div>';
+    }).join('');
+
+    // Build reprint list text
+    var reprintLines = [];
+    shipments.forEach(function(s){
+      if(s.missingBoxes && s.missingBoxes.length){
+        s.missingBoxes.forEach(function(b){
+          reprintLines.push(s.shipId+' — Box '+b+' of '+(s.boxes||'?')+'  [REPRINT NEEDED]');
+        });
+      }
+    });
+    if(unrecCnt){
+      (report.unrecognizedPages||[]).forEach(function(pg){
+        reprintLines.push('PDF page '+pg+' — not recognized  [CHECK LABEL]');
+      });
+    }
+    window._fbaMissingList = reprintLines.join('\n');
+
+    rpt.style.cssText = 'border:1px solid '+(hasProblem?'#f87171':'var(--gn)')+';background:'
+      +(hasProblem?'rgba(248,113,113,0.06)':'rgba(74,222,128,0.06)')
+      +';padding:10px 14px;margin-bottom:10px;border-radius:2px;';
+    rpt.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      +  '<div style="font-size:9px;letter-spacing:1.5px;font-weight:700;color:'+(hasProblem?'#f87171':'var(--gn)')+';"> '
+      +    (hasProblem ? '⚠ PARSE REPORT — '+totalMissing+' LABEL'+(totalMissing!==1?'S':'')+' MISSING' : '✓ PARSE COMPLETE — ALL BOXES FOUND')
+      +  '</div>'
+      +  '<div style="font-size:9px;color:var(--td);">'
+      +    totalPgs+' pages'
+      +    (unrecCnt ? ' · <span style="color:#f87171;">'+unrecCnt+' unrecognized</span>' : '')
+      +    (totalNoTrk ? ' · <span style="color:var(--am);">'+totalNoTrk+' no tracking</span>' : '')
+      +  '</div>'
+      +'</div>'
+      +shipLines
+      +(reprintLines.length
+        ? '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;">'
+          +'<button onclick="fbaCopyMissingList()" style="font-size:9px;padding:4px 12px;'
+          +'background:transparent;border:1px solid #f87171;color:#f87171;cursor:pointer;font-family:inherit;">'
+          +'📋 COPY REPRINT LIST ('+reprintLines.length+')</button>'
+          +'<span style="font-size:9px;color:var(--td);">paste into Slack or email to label operator</span>'
+          +'</div>'
+        : '');
+  } else {
+    rpt.style.display = 'none';
+  }
 
   // ── Global "apply to all" strip ──────────────────────────────────
   var glob = document.getElementById('fba-batch-global');
@@ -7276,6 +7394,22 @@ function fbaBatchLogOne(i){
   }
   fbaShowBatchEdit(_fbaParsedBatch);
   pm('✓ Logged '+parsed.shipId+'. '+_fbaParsedBatch.length+' remaining.');
+}
+
+// ── Copy reprint / missing-label list to clipboard ───────────────
+function fbaCopyMissingList(){
+  var list = window._fbaMissingList || '';
+  if(!list){ pm('No missing labels found.'); return; }
+  var lines = list.split('\n').filter(Boolean).length;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(list).then(function(){
+      pm('📋 Reprint list copied — '+lines+' item'+(lines!==1?'s':'')+'. Paste into Slack, email, or your label system.');
+    }).catch(function(){
+      window.prompt('Copy this reprint list:', list);
+    });
+  } else {
+    window.prompt('Copy this reprint list:', list);
+  }
 }
 
 // ── Log ALL shipments in the batch at once ────────────────────────
