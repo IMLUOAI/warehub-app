@@ -75,7 +75,7 @@
   </div>
   <div class="nav-right">
     <div id="clerk-user-area"></div>
-    <a href="https://imluoai.github.io/warehub-app/" class="btn btn-outline">← Back to App</a>
+    <a href="https://app.wareplatform.com/" class="btn btn-outline">← Back to App</a>
   </div>
 </nav>
 
@@ -137,7 +137,7 @@
 </div>
 
 <script>
-const WORKER = 'https://warehub-worker.imluoai.workers.dev';
+const WORKER = 'https://api.wareplatform.com';
 var _token = null;
 
 function showMsg(text, type) {
@@ -164,7 +164,7 @@ async function checkout(plan) {
   btn.disabled = true;
   btn.textContent = '⟳ Connecting to Stripe…';
   try {
-    var APP_URL = 'https://imluoai.github.io/warehub-app/';
+    var APP_URL = 'https://app.wareplatform.com/';
     var resp = await fetch(WORKER + '/api/billing/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },

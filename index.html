@@ -415,7 +415,7 @@ body{
       Your account is set up and ready. Choose a plan to unlock the full warehouse management suite.
     </div>
     <div style="display:flex; gap:12px; flex-direction:column;">
-      <button id="gate-subscribe-btn" onclick="window.open('https://imluoai.github.io/warehub-app/billing.html','_blank')" style="
+      <button id="gate-subscribe-btn" onclick="window.open('https://app.wareplatform.com/billing.html','_blank')" style="
         padding:14px 24px; border-radius:10px; font-size:15px; font-weight:700;
         background:linear-gradient(135deg,#4a9eff,#c77dff); color:#fff;
         border:none; cursor:pointer; transition:opacity .15s;
@@ -8987,7 +8987,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="dev-section-hdr" onclick="devToggle(this)"><span>🐙 GitHub — Source &amp; Deployment</span><span class="dev-chevron">▾</span></div>
         <div class="dev-section-body"><div class="dev-grid">
           <div class="dev-field"><div class="dev-label">REPO</div><a href="https://github.com/imluoai/warehub-app" target="_blank" class="dev-link">github.com/imluoai/warehub-app</a></div>
-          <div class="dev-field"><div class="dev-label">LIVE URL</div><a href="https://imluoai.github.io/warehub-app/" target="_blank" class="dev-link">imluoai.github.io/warehub-app</a></div>
+          <div class="dev-field"><div class="dev-label">LIVE URL</div><a href="https://app.wareplatform.com/" target="_blank" class="dev-link">app.wareplatform.com</a></div>
           <div class="dev-field dev-wide"><div class="dev-label">DEPLOY</div><code class="dev-code">git add index.html README.md &amp;&amp; git commit -m "msg" &amp;&amp; git push</code></div>
           <div class="dev-field dev-wide"><div class="dev-label">AFTER DEPLOY</div><div class="dev-note">GitHub Pages takes ~1 min. Hard refresh: Ctrl+Shift+R (PC) · Cmd+Shift+R (Mac)</div></div>
         </div></div>
@@ -9033,7 +9033,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.cloud.google.com" target="_blank" class="dev-link">console.cloud.google.com</a></div>
           <div class="dev-field"><div class="dev-label">API KEY</div><code class="dev-code">AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw</code></div>
           <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps JavaScript API · Places API · Maps Embed API</div></div>
-          <div class="dev-field"><div class="dev-label">KEY RESTRICTION</div><div class="dev-note">https://imluoai.github.io/*</div></div>
+          <div class="dev-field"><div class="dev-label">KEY RESTRICTION</div><div class="dev-note">https://app.wareplatform.com/*</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">FIX BLANK MAP</div><div class="dev-note">Verify all 3 APIs are enabled in Google Cloud Console. Check key restrictions include the GitHub Pages URL.</div></div>
         </div></div>
       </div>
@@ -9580,7 +9580,7 @@ function aiDoActions(actions){
 </script>
 <script>
   // ── Warehub Clerk Auth ─────────────────────────────────────────────
-  const WORKER_URL = 'https://warehub-worker.imluoai.workers.dev';
+  const WORKER_URL = 'https://api.wareplatform.com';
   
   var _clerkToken = null;
   var _clerkUser  = null;
@@ -9741,7 +9741,7 @@ function aiDoActions(actions){
 ════════════════════════════════════════════════════════════════ -->
 <script>
 (function(){
-  var API = 'https://warehub-worker.imluoai.workers.dev';
+  var API = 'https://api.wareplatform.com';
 
   function apiReady(){
     return typeof window.warehubApi === 'function' && window._clerkToken;

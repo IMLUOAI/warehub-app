@@ -1,15 +1,14 @@
 # WAREHUB
-### Warehouse Management App — Double Sided ISCM LLC
-**1701 10th St Suite 200 · Plano, TX 75074 · 9,129 sqft warehouse**
+### Warehouse Management Platform
 
 > Single-file browser app. No installation, no server, no database.
-> Runs entirely from `index.html` hosted on GitHub Pages.
+> Runs entirely from `index.html` hosted on GitHub Pages with a custom domain.
 
 ---
 
 ## 🚀 Live App
 
-**[https://imluoai.github.io/warehub-app/](https://imluoai.github.io/warehub-app/)**
+**[https://app.wareplatform.com/](https://app.wareplatform.com/)**
 
 ---
 
@@ -62,21 +61,24 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 
 ## 🔗 Connected Services
 
-### GitHub Pages
+### GitHub Pages (Frontend)
 - **Repo:** `https://github.com/imluoai/warehub-app`
-- **Live:** `https://imluoai.github.io/warehub-app/`
+- **Live (custom domain):** `https://app.wareplatform.com/`
 - **Deploy:** `git add index.html README.md && git commit -m "msg" && git push`
 - Pages deploys in ~1 min. Hard refresh: `Ctrl+Shift+R` / `Cmd+Shift+R`
+- **CNAME record:** `app.wareplatform.com → imluoai.github.io`
+- **GitHub Pages setting:** Settings → Pages → Custom domain → `app.wareplatform.com`
 
-### Cloudflare Worker
+### Cloudflare Worker (API)
 - **Dashboard:** dash.cloudflare.com
-- **Worker name:** `anthropic-proxy`
-- **URL:** `https://anthropic-proxy.imluoai.workers.dev/`
+- **Worker name:** `warehub-worker`
+- **Custom domain:** `https://api.wareplatform.com`
 - **Endpoints:**
   - `POST /` → Anthropic AI proxy
   - `GET /staff` · `PUT /staff` → staff KV sync
   - `GET /pin` · `PUT /pin` → PIN hash KV sync
-  - `GET /` → health check
+  - `POST /api/billing/checkout` → Stripe checkout
+  - `GET /api/health` → health check
 - **Secrets:** `ANTHROPIC_KEY`
 - **KV Binding:** `WAREHUB_KV` → namespace `warehub-data`
 - **⚠ Cloudflare Access must be DISABLED**
@@ -96,7 +98,7 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 - **Portal:** portal.azure.com
 - **App Registration:** Warehub (SPA type)
 - **Required permissions:** `Files.ReadWrite` · `Sites.ReadWrite.All` · `User.Read`
-- **Redirect URI:** `https://imluoai.github.io/warehub-app/`
+- **Redirect URI:** `https://app.wareplatform.com/`
 - **Excel sheets written:** `Productivity` · `Returns Log` · `Vehicle Log`
 - **Token expiry:** ~1 hour — reconnect via Stats tab → ⊞ CONNECT EXCEL
 
@@ -104,7 +106,7 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 - **Console:** console.cloud.google.com
 - **Enabled APIs:** Maps JavaScript API · Places API · Maps Embed API
 - **Key:** `AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw`
-- **Restriction:** `https://imluoai.github.io/*`
+- **Restriction:** `https://app.wareplatform.com/*`
 
 ### Anthropic Claude AI
 - **Model:** `claude-sonnet-4-20250514`
@@ -225,7 +227,7 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 | PDF not parsing | Re-export from OMP · check Debug Log in Import tab |
 | Batch count mismatch | Status bar shows `X/N labels parsed` — scroll Debug Log for skipped pages |
 | FedEx multi-piece fail | Handled — GS1-128 prefix auto-stripped; raw scan fallback added |
-| Print buttons do nothing | Allow popups for `imluoai.github.io` in browser |
+| Print buttons do nothing | Allow popups for `app.wareplatform.com` in browser |
 | App shows old version | `Ctrl+Shift+R` (PC) / `Cmd+Shift+R` (Mac) |
 | Stats showing only 1 packer | Fixed — shows all `active`/`online` packers using persisted order counts |
 
