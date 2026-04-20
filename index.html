@@ -475,39 +475,52 @@ body{
       <div style="position:relative;flex-shrink:0;" id="user-menu-wrap">
         <button onclick="userMenuToggle()" title="Account" style="
           display:flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--bdr);
-          border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--tx);font-size:10px;
-          font-family:inherit;transition:border-color .15s;
-        " onmouseover="this.style.borderColor='var(--cy)'" onmouseout="this.style.borderColor='var(--bdr)'">
+          border-radius:20px;cursor:pointer;padding:3px 10px 3px 3px;color:var(--tx);font-size:10px;
+          font-family:inherit;transition:border-color .15s,background .15s;
+        " onmouseover="this.style.borderColor='var(--cy)';this.style.background='#818cf808'" onmouseout="this.style.borderColor='var(--bdr)';this.style.background='transparent'">
           <span id="user-avatar-hdr" style="
-            width:20px;height:20px;border-radius:50%;background:var(--cy);
-            color:#0d1117;font-size:9px;font-weight:800;display:flex;align-items:center;
+            width:22px;height:22px;border-radius:50%;
+            background:linear-gradient(135deg,#4a9eff 0%,#c77dff 100%);
+            color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;
             justify-content:center;flex-shrink:0;font-family:'Barlow',sans-serif;
+            box-shadow:0 0 0 2px rgba(129,140,248,0.25);
           ">?</span>
-          <span id="user-email-hdr" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--td);">Account</span>
-          <span style="color:var(--td);font-size:8px;">▾</span>
+          <span id="user-email-hdr" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--td);font-size:10px;">Account</span>
+          <span style="color:var(--td);font-size:7px;margin-left:1px;">▾</span>
         </button>
         <div id="user-menu-dropdown" style="
-          display:none;position:absolute;right:0;top:calc(100% + 6px);
-          background:var(--sur);border:1px solid var(--bdr);border-radius:8px;
-          min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:9999;overflow:hidden;
+          display:none;position:absolute;right:0;top:calc(100% + 8px);
+          background:var(--sur);border:1px solid var(--bdr);border-radius:10px;
+          min-width:220px;box-shadow:0 12px 32px rgba(0,0,0,0.4);z-index:9999;overflow:hidden;
         ">
-          <div id="user-menu-info" style="padding:12px 14px;border-bottom:1px solid var(--bdr);">
-            <div id="user-menu-name" style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:2px;">—</div>
-            <div id="user-menu-email" style="font-size:10px;color:var(--td);overflow:hidden;text-overflow:ellipsis;"></div>
+          <!-- Profile header -->
+          <div id="user-menu-info" style="padding:14px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px;">
+            <span id="user-menu-avatar-lg" style="
+              width:36px;height:36px;border-radius:50%;flex-shrink:0;
+              background:linear-gradient(135deg,#4a9eff 0%,#c77dff 100%);
+              color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;
+              justify-content:center;font-family:'Barlow',sans-serif;
+              box-shadow:0 0 0 3px rgba(129,140,248,0.2);
+            ">?</span>
+            <div style="min-width:0;">
+              <div id="user-menu-name" style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
+              <div id="user-menu-email" style="font-size:10px;color:var(--td);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            </div>
           </div>
+          <!-- Menu items -->
           <a href="https://app.wareplatform.com/billing.html" target="_blank" style="
-            display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:11px;
+            display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
             color:var(--tx);text-decoration:none;transition:background .12s;
-          " onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-            💳 Billing &amp; Plan
+          " onmouseover="this.style.background='rgba(129,140,248,0.07)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;">💳</span> Billing &amp; Plan
           </a>
+          <div style="height:1px;background:var(--bdr);margin:0 16px;"></div>
           <button onclick="userSignOut()" style="
-            width:100%;display:flex;align-items:center;gap:8px;padding:10px 14px;
+            width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;
             font-size:11px;color:#f87171;background:transparent;border:none;
-            border-top:1px solid var(--bdr);cursor:pointer;font-family:inherit;
-            text-align:left;transition:background .12s;
-          " onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-            ⎋ Sign out
+            cursor:pointer;font-family:inherit;text-align:left;transition:background .12s;
+          " onmouseover="this.style.background='rgba(248,113,113,0.07)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;">⎋</span> Sign out
           </button>
         </div>
       </div>
@@ -3373,17 +3386,19 @@ function userMenuToggle(){
 function userMenuPopulate(){
   var u = _clerkUser;
   if(!u) return;
-  var email = (u.emailAddresses&&u.emailAddresses[0]) ? u.emailAddresses[0].emailAddress : '';
-  var name  = u.fullName || u.firstName || email.split('@')[0] || 'User';
+  var email    = (u.emailAddresses&&u.emailAddresses[0]) ? u.emailAddresses[0].emailAddress : '';
+  var name     = u.fullName || u.firstName || email.split('@')[0] || 'User';
   var initials = name.trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-  var av = document.getElementById('user-avatar-hdr');
-  var em = document.getElementById('user-email-hdr');
-  var mn = document.getElementById('user-menu-name');
-  var me = document.getElementById('user-menu-email');
-  if(av){ av.textContent = initials; }
-  if(em){ em.textContent = email || name; }
-  if(mn){ mn.textContent = name; }
-  if(me){ me.textContent = email; }
+  var av   = document.getElementById('user-avatar-hdr');
+  var avLg = document.getElementById('user-menu-avatar-lg');
+  var em   = document.getElementById('user-email-hdr');
+  var mn   = document.getElementById('user-menu-name');
+  var me   = document.getElementById('user-menu-email');
+  if(av)   av.textContent = initials;
+  if(avLg) avLg.textContent = initials;
+  if(em)   em.textContent = email || name;
+  if(mn)   mn.textContent = name;
+  if(me)   me.textContent = email;
 }
 async function userSignOut(){
   try{
