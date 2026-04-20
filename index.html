@@ -3931,14 +3931,21 @@ function xlsxDownloadLocal(arrayBuf, filename){
   setTimeout(function(){ URL.revokeObjectURL(a.href); },10000);
 }
 
+function _excelStorageKey(){
+  // Scope the Excel config to the current Clerk user so two tenants
+  // on the same browser never share an OneDrive connection.
+  var uid = (_clerkUser && _clerkUser.id) ? _clerkUser.id : 'default';
+  return 'warehub_excel_' + uid;
+}
+
 function excelLoadConfig(){
   try{
-    var s = JSON.parse(localStorage.getItem('warehub_excel')||'{}');
+    var s = JSON.parse(localStorage.getItem(_excelStorageKey())||'{}');
     _msalCfg.clientId = s.clientId||'';
     _msalCfg.tenantId = s.tenantId||'organizations';
     _excelFileId      = s.fileId||'';
     _excelSheet       = s.sheet||'Warehub Payroll';
-    _msalToken        = sessionStorage.getItem('warehub_ms_token')||null;
+    _msalToken        = sessionStorage.getItem('warehub_ms_token_'+(_clerkUser&&_clerkUser.id||'default'))||null;
     if(_msalCfg.clientId) ensureMsal(function(){ msalInit(); });
   }catch(e){}
   excelUpdateUI();
@@ -3946,7 +3953,7 @@ function excelLoadConfig(){
 
 function excelSaveConfig(){
   try{
-    localStorage.setItem('warehub_excel', JSON.stringify({
+    localStorage.setItem(_excelStorageKey(), JSON.stringify({
       clientId: _msalCfg.clientId,
       tenantId: _msalCfg.tenantId,
       fileId:   _excelFileId,
@@ -4042,7 +4049,7 @@ async function _excelConnectInner(){
   var disc = document.getElementById('ms-disconnect-btn');
   if(disc) disc.onclick = function(){
     _msalToken=null; _excelFileId=''; _msalInstance=null;
-    sessionStorage.removeItem('warehub_ms_token');
+    sessionStorage.removeItem('warehub_ms_token_'+(_clerkUser&&_clerkUser.id||'default'));
     excelSaveConfig(); modal.remove(); pm('Excel disconnected.');
   };
   document.getElementById('ms-signin-btn').onclick = msSignIn;
@@ -4082,7 +4089,7 @@ async function msSignIn(){
   _msalInstance.loginPopup({ scopes: GRAPH_SCOPES })
     .then(function(result){
       _msalToken = result.accessToken;
-      sessionStorage.setItem('warehub_ms_token', _msalToken);
+      sessionStorage.setItem('warehub_ms_token_'+(_clerkUser&&_clerkUser.id||'default'), _msalToken);
       setMsg('✓ Signed in as '+result.account.username+'. Looking up file…','var(--gn)');
       msFindFile(fname, msg);
     })
