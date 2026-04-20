@@ -471,6 +471,47 @@ body{
       <span id="badge" style="white-space:nowrap;flex-shrink:0;">NO DATA</span>
       <span id="cloud-status" title="Cloud sync: not connected" style="font-size:9px;letter-spacing:1px;color:var(--td);flex-shrink:0;cursor:pointer;" onclick="kvTestConnection()">☁</span>
       <div id="pmsg-hdr" style="font-size:10px;color:var(--am);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <!-- User menu -->
+      <div style="position:relative;flex-shrink:0;" id="user-menu-wrap">
+        <button onclick="userMenuToggle()" title="Account" style="
+          display:flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--bdr);
+          border-radius:6px;cursor:pointer;padding:4px 8px;color:var(--tx);font-size:10px;
+          font-family:inherit;transition:border-color .15s;
+        " onmouseover="this.style.borderColor='var(--cy)'" onmouseout="this.style.borderColor='var(--bdr)'">
+          <span id="user-avatar-hdr" style="
+            width:20px;height:20px;border-radius:50%;background:var(--cy);
+            color:#0d1117;font-size:9px;font-weight:800;display:flex;align-items:center;
+            justify-content:center;flex-shrink:0;font-family:'Barlow',sans-serif;
+          ">?</span>
+          <span id="user-email-hdr" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--td);">Account</span>
+          <span style="color:var(--td);font-size:8px;">▾</span>
+        </button>
+        <div id="user-menu-dropdown" style="
+          display:none;position:absolute;right:0;top:calc(100% + 6px);
+          background:var(--sur);border:1px solid var(--bdr);border-radius:8px;
+          min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:9999;overflow:hidden;
+        ">
+          <div id="user-menu-info" style="padding:12px 14px;border-bottom:1px solid var(--bdr);">
+            <div id="user-menu-name" style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:2px;">—</div>
+            <div id="user-menu-email" style="font-size:10px;color:var(--td);overflow:hidden;text-overflow:ellipsis;"></div>
+          </div>
+          <a href="https://app.wareplatform.com/billing.html" target="_blank" style="
+            display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:11px;
+            color:var(--tx);text-decoration:none;transition:background .12s;
+          " onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+            💳 Billing &amp; Plan
+          </a>
+          <button onclick="userSignOut()" style="
+            width:100%;display:flex;align-items:center;gap:8px;padding:10px 14px;
+            font-size:11px;color:#f87171;background:transparent;border:none;
+            border-top:1px solid var(--bdr);cursor:pointer;font-family:inherit;
+            text-align:left;transition:background .12s;
+          " onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+            ⎋ Sign out
+          </button>
+        </div>
+      </div>
+
       <!-- AI Insights bell -->
       <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="
         position:relative;background:transparent;border:none;cursor:pointer;padding:4px;
@@ -3322,6 +3363,42 @@ function clearErr(){ document.getElementById('err-bar').classList.remove('show')
 function setFb(t,c){ var el=document.getElementById('scan-fb'); el.textContent=t; el.style.color=c; }
 function pm(m){ document.getElementById('pmsg').textContent=m; }
 function dbg(m){ var el=document.getElementById('debug-log'); if(el) el.textContent+=m+'\n'; }
+
+// ── User menu ──────────────────────────────────────────────────
+function userMenuToggle(){
+  var dd = document.getElementById('user-menu-dropdown');
+  if(!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+function userMenuPopulate(){
+  var u = _clerkUser;
+  if(!u) return;
+  var email = (u.emailAddresses&&u.emailAddresses[0]) ? u.emailAddresses[0].emailAddress : '';
+  var name  = u.fullName || u.firstName || email.split('@')[0] || 'User';
+  var initials = name.trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+  var av = document.getElementById('user-avatar-hdr');
+  var em = document.getElementById('user-email-hdr');
+  var mn = document.getElementById('user-menu-name');
+  var me = document.getElementById('user-menu-email');
+  if(av){ av.textContent = initials; }
+  if(em){ em.textContent = email || name; }
+  if(mn){ mn.textContent = name; }
+  if(me){ me.textContent = email; }
+}
+async function userSignOut(){
+  try{
+    if(window.Clerk) await window.Clerk.signOut();
+  }catch(e){}
+  location.reload();
+}
+// Close menu when clicking outside
+document.addEventListener('click', function(e){
+  var wrap = document.getElementById('user-menu-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    var dd = document.getElementById('user-menu-dropdown');
+    if(dd) dd.style.display = 'none';
+  }
+});
 function showDebug(){ document.getElementById('debug-box').style.display='block'; }
 function fmtMs(ms){
   var s=Math.round(ms/1000);
@@ -9263,6 +9340,9 @@ function aiDoActions(actions){
     // Hide auth screen, show app
     if (authScreen) authScreen.style.display = 'none';
     if (appRoot)    appRoot.style.display = '';
+
+    // Populate user menu with name/email from Clerk
+    if (typeof userMenuPopulate === 'function') userMenuPopulate();
 
     // Kick off the normal app init, then overlay cloud data
     if (!window._appInitCalled) {
