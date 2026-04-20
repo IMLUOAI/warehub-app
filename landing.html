@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Warehub — Shipping Label Management for Warehouses & FBA Sellers</title>
+<meta name="description" content="Warehub turns your carrier PDFs into sorted, ready-to-print label packets in seconds. Built for 3PLs, FBA sellers, and fulfillment teams."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --brand:#2563eb;
+  --brand-dark:#1d4ed8;
+  --brand-light:#eff6ff;
+  --text:#111827;
+  --muted:#6b7280;
+  --border:#e5e7eb;
+  --sur:#f9fafb;
+  --white:#ffffff;
+  --rd:#ef4444;
+  --green:#16a34a;
+}
+body{font-family:'Inter',sans-serif;color:var(--text);background:var(--white);line-height:1.6;}
+a{text-decoration:none;color:inherit;}
+img{max-width:100%;}
+
+/* NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:0 5%;}
+.nav-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px;}
+.nav-logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.2rem;}
+.nav-logo svg{width:32px;height:32px;}
+.nav-links{display:flex;align-items:center;gap:32px;font-size:0.92rem;font-weight:500;color:var(--muted);}
+.nav-links a:hover{color:var(--text);}
+.nav-cta{background:var(--brand);color:#fff;padding:9px 22px;border-radius:8px;font-weight:600;font-size:0.9rem;transition:background 0.15s;}
+.nav-cta:hover{background:var(--brand-dark);}
+
+/* HERO */
+.hero{background:linear-gradient(135deg,#eff6ff 0%,#f0fdf4 100%);padding:96px 5% 80px;}
+.hero-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:0.8rem;font-weight:600;color:var(--brand);margin-bottom:20px;}
+.hero h1{font-size:clamp(2rem,4vw,3rem);font-weight:800;line-height:1.2;margin-bottom:20px;letter-spacing:-0.02em;}
+.hero h1 span{color:var(--brand);}
+.hero p{font-size:1.1rem;color:var(--muted);margin-bottom:36px;max-width:480px;}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;}
+.btn-primary{background:var(--brand);color:#fff;padding:13px 28px;border-radius:9px;font-weight:700;font-size:1rem;transition:background 0.15s,transform 0.1s;display:inline-block;}
+.btn-primary:hover{background:var(--brand-dark);transform:translateY(-1px);}
+.btn-secondary{background:#fff;color:var(--text);padding:13px 28px;border-radius:9px;font-weight:600;font-size:1rem;border:1.5px solid var(--border);transition:border-color 0.15s;}
+.btn-secondary:hover{border-color:var(--brand);color:var(--brand);}
+.hero-visual{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.1);overflow:hidden;}
+.hero-visual-header{background:var(--brand);padding:14px 18px;display:flex;align-items:center;gap:8px;}
+.hero-visual-header span{color:#fff;font-weight:600;font-size:0.9rem;}
+.hero-visual-body{padding:18px;}
+.carrier-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:0.85rem;font-weight:500;}
+.carrier-row.ups{background:#fef3c7;color:#92400e;}
+.carrier-row.fedex{background:#eff6ff;color:#1e40af;}
+.carrier-row.usps{background:#f0fdf4;color:#166534;}
+.carrier-row.amazon{background:#fff7ed;color:#9a3412;}
+.carrier-row-count{background:rgba(0,0,0,0.08);border-radius:12px;padding:2px 10px;font-size:0.78rem;font-weight:700;}
+
+/* LOGOS */
+.logos{padding:40px 5%;border-bottom:1px solid var(--border);}
+.logos-inner{max-width:1100px;margin:0 auto;text-align:center;}
+.logos p{font-size:0.82rem;color:var(--muted);font-weight:500;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:24px;}
+.logos-row{display:flex;justify-content:center;align-items:center;gap:40px;flex-wrap:wrap;opacity:0.5;filter:grayscale(1);}
+.logo-pill{background:var(--sur);border:1px solid var(--border);border-radius:8px;padding:8px 20px;font-weight:700;font-size:0.9rem;color:var(--muted);}
+
+/* FEATURES */
+.features{padding:96px 5%;background:var(--white);}
+.section-header{text-align:center;max-width:600px;margin:0 auto 64px;}
+.section-tag{display:inline-block;background:var(--brand-light);color:var(--brand);font-size:0.78rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:16px;}
+.section-header h2{font-size:clamp(1.7rem,3vw,2.3rem);font-weight:800;letter-spacing:-0.02em;margin-bottom:12px;}
+.section-header p{color:var(--muted);font-size:1rem;}
+.features-grid{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:28px;}
+.feature-card{background:var(--sur);border:1px solid var(--border);border-radius:14px;padding:28px 24px;transition:box-shadow 0.2s,transform 0.2s;}
+.feature-card:hover{box-shadow:0 8px 32px rgba(37,99,235,0.1);transform:translateY(-2px);}
+.feature-icon{width:44px;height:44px;border-radius:10px;background:var(--brand-light);display:flex;align-items:center;justify-content:center;margin-bottom:18px;font-size:1.4rem;}
+.feature-card h3{font-size:1rem;font-weight:700;margin-bottom:8px;}
+.feature-card p{font-size:0.88rem;color:var(--muted);line-height:1.6;}
+
+/* HOW IT WORKS */
+.howitworks{padding:96px 5%;background:var(--sur);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.howitworks-inner{max-width:900px;margin:0 auto;}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:64px;position:relative;}
+.steps::before{content:'';position:absolute;top:28px;left:calc(16.66% + 14px);right:calc(16.66% + 14px);height:2px;background:var(--border);}
+.step{text-align:center;padding:0 20px;}
+.step-num{width:56px;height:56px;border-radius:50%;background:var(--brand);color:#fff;font-size:1.2rem;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;position:relative;z-index:1;}
+.step h3{font-size:0.97rem;font-weight:700;margin-bottom:8px;}
+.step p{font-size:0.85rem;color:var(--muted);}
+
+/* PRICING */
+.pricing{padding:96px 5%;background:var(--white);}
+.pricing-inner{max-width:1100px;margin:0 auto;}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:64px;}
+.plan{border:1.5px solid var(--border);border-radius:16px;padding:32px 28px;position:relative;}
+.plan.popular{border-color:var(--brand);box-shadow:0 0 0 4px rgba(37,99,235,0.07);}
+.plan-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--brand);color:#fff;font-size:0.75rem;font-weight:700;padding:4px 16px;border-radius:20px;white-space:nowrap;}
+.plan-name{font-size:0.85rem;font-weight:600;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:10px;}
+.plan-price{font-size:2.6rem;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px;}
+.plan-price span{font-size:1rem;font-weight:500;color:var(--muted);}
+.plan-desc{font-size:0.85rem;color:var(--muted);margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--border);}
+.plan-features{list-style:none;margin-bottom:32px;}
+.plan-features li{font-size:0.88rem;padding:7px 0;display:flex;align-items:flex-start;gap:10px;color:var(--text);}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;margin-top:1px;}
+.plan-features li.no::before{content:'—';color:var(--border);}
+.plan-features li.no{color:var(--muted);}
+.plan-btn{display:block;text-align:center;padding:12px;border-radius:9px;font-weight:700;font-size:0.95rem;transition:all 0.15s;}
+.plan-btn.outline{border:1.5px solid var(--border);color:var(--text);}
+.plan-btn.outline:hover{border-color:var(--brand);color:var(--brand);}
+.plan-btn.solid{background:var(--brand);color:#fff;}
+.plan-btn.solid:hover{background:var(--brand-dark);}
+
+/* TESTIMONIALS */
+.testimonials{padding:96px 5%;background:var(--sur);border-top:1px solid var(--border);}
+.testi-grid{max-width:1100px;margin:64px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+.testi-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px 24px;}
+.testi-stars{color:#f59e0b;font-size:1rem;margin-bottom:14px;letter-spacing:2px;}
+.testi-card p{font-size:0.9rem;color:var(--text);line-height:1.7;margin-bottom:20px;}
+.testi-author{display:flex;align-items:center;gap:12px;}
+.testi-avatar{width:38px;height:38px;border-radius:50%;background:var(--brand-light);color:var(--brand);font-weight:700;font-size:0.9rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.testi-name{font-weight:700;font-size:0.88rem;}
+.testi-role{font-size:0.78rem;color:var(--muted);}
+
+/* CTA BANNER */
+.cta-banner{padding:80px 5%;background:linear-gradient(135deg,var(--brand) 0%,#1e40af 100%);text-align:center;}
+.cta-banner h2{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:800;color:#fff;margin-bottom:14px;}
+.cta-banner p{color:rgba(255,255,255,0.8);font-size:1rem;margin-bottom:32px;}
+.cta-banner .btn-white{background:#fff;color:var(--brand);padding:14px 32px;border-radius:9px;font-weight:700;font-size:1rem;display:inline-block;transition:transform 0.15s,box-shadow 0.15s;}
+.cta-banner .btn-white:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.15);}
+
+/* FOOTER */
+footer{background:var(--text);color:rgba(255,255,255,0.6);padding:48px 5% 32px;}
+.footer-inner{max-width:1100px;margin:0 auto;}
+.footer-top{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px;}
+.footer-brand .nav-logo{color:#fff;margin-bottom:12px;}
+.footer-brand p{font-size:0.85rem;line-height:1.7;}
+.footer-col h4{color:#fff;font-size:0.85rem;font-weight:700;margin-bottom:14px;letter-spacing:0.04em;}
+.footer-col a{display:block;font-size:0.83rem;margin-bottom:8px;transition:color 0.15s;}
+.footer-col a:hover{color:#fff;}
+.footer-bottom{border-top:1px solid rgba(255,255,255,0.1);padding-top:24px;display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .hero-inner{grid-template-columns:1fr;}
+  .hero-visual{display:none;}
+  .features-grid{grid-template-columns:repeat(2,1fr);}
+  .pricing-grid{grid-template-columns:1fr;}
+  .testi-grid{grid-template-columns:1fr;}
+  .steps{grid-template-columns:1fr;gap:32px;}
+  .steps::before{display:none;}
+  .footer-top{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:600px){
+  .nav-links{display:none;}
+  .features-grid{grid-template-columns:1fr;}
+  .footer-top{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="7" fill="#2563eb"/>
+        <path d="M7 12.5L16 8l9 4.5v7L16 24l-9-4.5v-7z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+        <path d="M16 8v16M7 12.5l9 4.5 9-4.5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+      Warehub
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="https://app.wareplatform.com" class="nav-cta">Launch App →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <div class="hero-badge">🚀 Built for high-volume fulfillment teams</div>
+      <h1>Shipping labels,<br/><span>sorted & printed</span><br/>in seconds.</h1>
+      <p>Drop in any carrier PDF — UPS, FedEx, USPS, Amazon. Warehub auto-sorts by carrier, assigns packers, and prints a clean packet ready for your team.</p>
+      <div class="hero-actions">
+        <a href="https://app.wareplatform.com" class="btn-primary">Start Free Trial →</a>
+        <a href="#how" class="btn-secondary">See how it works</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-visual-header">
+        <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="rgba(255,255,255,0.3)"/><path d="M4 8h8M4 5h8M4 11h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span>Today's batch — 284 labels</span>
+      </div>
+      <div class="hero-visual-body">
+        <div class="carrier-row ups">
+          <span>📦 UPS</span>
+          <span class="carrier-row-count">114 labels</span>
+        </div>
+        <div class="carrier-row fedex">
+          <span>✈️ FedEx</span>
+          <span class="carrier-row-count">89 labels</span>
+        </div>
+        <div class="carrier-row usps">
+          <span>📬 USPS</span>
+          <span class="carrier-row-count">53 labels</span>
+        </div>
+        <div class="carrier-row amazon">
+          <span>🟠 Amazon</span>
+          <span class="carrier-row-count">28 labels</span>
+        </div>
+        <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border-radius:8px;font-size:0.82rem;color:#166534;font-weight:600;display:flex;align-items:center;gap:8px;">
+          ✅ All labels parsed &amp; sorted. Ready to print.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div class="logos">
+  <div class="logos-inner">
+    <p>Works with all major carriers</p>
+    <div class="logos-row">
+      <div class="logo-pill">UPS</div>
+      <div class="logo-pill">FedEx</div>
+      <div class="logo-pill">USPS</div>
+      <div class="logo-pill">Amazon</div>
+      <div class="logo-pill">DHL</div>
+      <div class="logo-pill">GOFO</div>
+      <div class="logo-pill">SWIFT</div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="section-header">
+    <div class="section-tag">Features</div>
+    <h2>Everything your team needs to ship faster</h2>
+    <p>From raw carrier PDFs to sorted, assigned label packets — Warehub handles the entire workflow automatically.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Instant PDF Parsing</h3>
+      <p>Drop in a PDF from any carrier. Warehub extracts every tracking number, detects the carrier, and groups labels automatically — no manual entry.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🗂️</div>
+      <h3>Auto-Sort by Carrier</h3>
+      <p>Labels are automatically sorted by carrier and printed with divider pages, so packers know exactly what they're handling at a glance.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">👥</div>
+      <h3>Packer Assignment</h3>
+      <p>Assign shipments to specific packers. Print by packer to give each team member exactly their portion of the day's orders.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🖨️</div>
+      <h3>Missing Label Detection</h3>
+      <p>Warehub flags any labels that couldn't be parsed and surfaces them with thumbnails so you can reprint individually or all at once.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📦</div>
+      <h3>FBA Shipment Manager</h3>
+      <p>Parse Amazon FBA box labels, track shipments by FNSKU and ASIN, and maintain a reprint queue for missing box labels.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <h3>Daily Stats & History</h3>
+      <p>Track orders processed, labels printed, and packer performance over time. Built-in log keeps a full history of every import batch.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Team Access Control</h3>
+      <p>Role-based PIN system for packers and managers. Managers get full access; packers see only their assigned work queue.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">☁️</div>
+      <h3>Cloud Sync</h3>
+      <p>All data syncs to the cloud so your team can access the same records from any device, any shift, without losing history.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌐</div>
+      <h3>No Install Required</h3>
+      <p>Runs entirely in the browser — open the app, log in, and you're working. No software to install, no IT team needed.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="howitworks" id="how">
+  <div class="howitworks-inner">
+    <div class="section-header">
+      <div class="section-tag">How it works</div>
+      <h2>From PDF to printed labels in 3 steps</h2>
+      <p>Warehub fits into your existing workflow. No new hardware, no complex setup.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Upload your carrier PDF</h3>
+        <p>Drag and drop the shipping label PDF from your carrier portal — UPS, FedEx, USPS, or Amazon. Any size batch.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Warehub sorts & assigns</h3>
+        <p>Labels are parsed, grouped by carrier, and assigned to packers automatically. Missing labels are flagged instantly.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Print & pack</h3>
+        <p>Hit print. Each packer gets their sorted packet with carrier dividers. Done — your team can start packing immediately.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="pricing-inner">
+    <div class="section-header">
+      <div class="section-tag">Pricing</div>
+      <h2>Simple, predictable pricing</h2>
+      <p>No per-label fees. No surprises. Pay monthly, cancel anytime.</p>
+    </div>
+    <div class="pricing-grid">
+      <!-- Starter -->
+      <div class="plan">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$29<span>/mo</span></div>
+        <div class="plan-desc">Perfect for small teams and solo sellers processing up to 500 labels/day.</div>
+        <ul class="plan-features">
+          <li>Up to 3 packer accounts</li>
+          <li>All carrier parsing (UPS, FedEx, USPS, Amazon)</li>
+          <li>Missing label detection & reprint</li>
+          <li>30-day order history</li>
+          <li>Cloud sync</li>
+          <li class="no">FBA Shipment Manager</li>
+          <li class="no">Priority support</li>
+        </ul>
+        <a href="https://app.wareplatform.com" class="plan-btn outline">Start Free Trial</a>
+      </div>
+      <!-- Pro -->
+      <div class="plan popular">
+        <div class="plan-badge">Most Popular</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$79<span>/mo</span></div>
+        <div class="plan-desc">For growing fulfillment teams with high daily volume and FBA operations.</div>
+        <ul class="plan-features">
+          <li>Unlimited packer accounts</li>
+          <li>All carrier parsing</li>
+          <li>Missing label detection & reprint</li>
+          <li>Unlimited order history</li>
+          <li>Cloud sync</li>
+          <li>FBA Shipment Manager</li>
+          <li>Priority email support</li>
+        </ul>
+        <a href="https://app.wareplatform.com" class="plan-btn solid">Start Free Trial</a>
+      </div>
+      <!-- Enterprise -->
+      <div class="plan">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">Custom</div>
+        <div class="plan-desc">For 3PLs and multi-warehouse operations needing custom integrations and SLAs.</div>
+        <ul class="plan-features">
+          <li>Everything in Pro</li>
+          <li>Multiple warehouse locations</li>
+          <li>Custom carrier integrations</li>
+          <li>Dedicated onboarding</li>
+          <li>SLA & uptime guarantee</li>
+          <li>Custom billing</li>
+          <li>Slack / phone support</li>
+        </ul>
+        <a href="mailto:hello@wareplatform.com" class="plan-btn outline">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials">
+  <div class="section-header">
+    <div class="section-tag">Testimonials</div>
+    <h2>Trusted by fulfillment teams</h2>
+    <p>Warehouses that switched to Warehub cut their label prep time by over 60%.</p>
+  </div>
+  <div class="testi-grid">
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p>"We used to spend 45 minutes every morning sorting labels by hand. Now it takes under 5 minutes. The packer assignment feature alone is worth the subscription."</p>
+      <div class="testi-author">
+        <div class="testi-avatar">JR</div>
+        <div>
+          <div class="testi-name">Jason R.</div>
+          <div class="testi-role">Operations Manager, 3PL</div>
+        </div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p>"The FBA label parser is incredibly accurate. We ship hundreds of boxes a week to Amazon and never miss a label. The reprint queue is a lifesaver."</p>
+      <div class="testi-author">
+        <div class="testi-avatar">MT</div>
+        <div>
+          <div class="testi-name">Michelle T.</div>
+          <div class="testi-role">FBA Seller, 7-figure brand</div>
+        </div>
+      </div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p>"Works right in the browser — nothing to install, nothing to maintain. My team was up and running in 10 minutes. It just works."</p>
+      <div class="testi-author">
+        <div class="testi-avatar">DK</div>
+        <div>
+          <div class="testi-name">David K.</div>
+          <div class="testi-role">Warehouse Owner</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA BANNER -->
+<section class="cta-banner">
+  <h2>Ready to stop sorting labels by hand?</h2>
+  <p>Start your free 14-day trial. No credit card required.</p>
+  <a href="https://app.wareplatform.com" class="btn-white">Get Started Free →</a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="nav-logo">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="7" fill="#2563eb"/>
+            <path d="M7 12.5L16 8l9 4.5v7L16 24l-9-4.5v-7z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M16 8v16M7 12.5l9 4.5 9-4.5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+          Warehub
+        </div>
+        <p>Shipping label management built for warehouses, 3PLs, and FBA sellers who need to move fast.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://app.wareplatform.com">Launch App</a>
+      </div>
+      <div class="footer-col">
+        <h4>Carriers</h4>
+        <a href="#">UPS</a>
+        <a href="#">FedEx</a>
+        <a href="#">USPS</a>
+        <a href="#">Amazon / FBA</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="mailto:hello@wareplatform.com">Contact</a>
+        <a href="https://app.wareplatform.com/billing.html">Billing</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Warehub · wareplatform.com</span>
+      <span>hello@wareplatform.com</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
