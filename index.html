@@ -292,9 +292,6 @@ body{
 .rack-spot.has-orders rect{fill:rgba(255,200,0,0.32)!important;stroke:#ffd700!important;}
 .rack-spot.done rect{fill:rgba(56,161,105,0.35)!important;stroke:#68d391!important;}
 .rack-spot.active text{fill:#818cf8!important;font-weight:900!important;}
-#fm-btn{position:fixed!important;bottom:74px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:var(--cy)!important;color:#000!important;font-size:18px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 12px #0008;transition:transform .15s;padding:0!important;}
-#fm-btn:hover{transform:scale(1.08)!important;}
-#fm-panel{position:fixed;bottom:128px;right:20px;z-index:9998;width:min(300px,92vw);background:var(--sur);border:1px solid var(--bdr);padding:14px;display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
 #ai-btn{position:fixed!important;bottom:20px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:#6366f1!important;color:#fff!important;font-size:20px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 16px #6366f166;transition:transform .15s;padding:0!important;}
 #ai-btn:hover{transform:scale(1.08)!important;}
 #ai-panel{position:fixed;bottom:74px;right:20px;z-index:9998;width:min(340px,95vw);height:min(480px,70vh);background:var(--sur);border:1px solid var(--bdr);display:none;flex-direction:column;box-shadow:0 8px 32px #0008;}
@@ -323,7 +320,6 @@ body{
   .fc{min-width:60px;}
   #fbar{width:95vw!important;}
   #ai-panel{width:95vw!important;right:2.5vw!important;left:2.5vw!important;}
-  #fm-panel{width:92vw!important;right:4vw!important;}
   .dev-grid{grid-template-columns:1fr!important;}
 }
 @media(max-width:480px){
@@ -333,7 +329,6 @@ body{
   
   .btn{padding:5px 8px;font-size:8px;}
   #ai-panel{width:100vw!important;right:0!important;left:0!important;bottom:0!important;}
-  #fm-panel{width:100vw!important;right:0!important;}
 }
 @media(max-width:360px){
   
@@ -6696,24 +6691,6 @@ function devRender(){
   devLoad();
 }
 
-function fmPlay(url){
-  if(!url) return;
-  var frame = document.getElementById('fm-frame');
-  if(!frame) return;
-  var vid = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  if(vid){
-    frame.src = 'https://www.youtube.com/embed/'+vid[1]+'?autoplay=1';
-    frame.style.display = 'block';
-  } else {
-    frame.src = url;
-    frame.style.display = 'block';
-  }
-}
-function fmQ(q){
-  var input = document.getElementById('fm-url');
-  if(input){ input.value = 'https://www.youtube.com/results?search_query='+encodeURIComponent(q); }
-  fmPlay('https://www.youtube.com/results?search_query='+encodeURIComponent(q));
-}
 
 function vehicleDeleteTrip(id){
   vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
@@ -8795,24 +8772,6 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
   </div>
 
-  <!-- ── Floating Music Player ── -->
-  <button id="fm-btn" title="Music Player" onclick="var p=document.getElementById('fm-panel');p.style.display=p.style.display==='flex'?'none':'flex';">♪</button>
-  <div id="fm-panel" style="display:none;flex-direction:column;">
-    <div style="font-size:9px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">MUSIC PLAYER</div>
-    <div style="display:flex;gap:6px;margin-bottom:8px;">
-      <input id="fm-url" placeholder="Paste YouTube URL…" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;" onkeydown="if(event.key==='Enter'){fmPlay(this.value.trim());}"/>
-      <button onclick="fmPlay(document.getElementById('fm-url').value.trim())" style="padding:6px 12px;font-size:10px;letter-spacing:1px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);cursor:pointer;font-family:inherit;">▶ PLAY</button>
-    </div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
-      <button onclick="fmQ('lofi hip hop')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Lo-Fi</button>
-      <button onclick="fmQ('pop music mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Pop</button>
-      <button onclick="fmQ('edm mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">EDM</button>
-      <button onclick="fmQ('rock mix')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">Rock</button>
-      <button onclick="fmQ('chinese pop')" style="font-size:9px;padding:3px 8px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">C-Pop</button>
-    </div>
-    <iframe id="fm-frame" width="280" height="158" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="display:none;border:1px solid var(--bdr);"></iframe>
-    <button onclick="document.getElementById('fm-panel').style.display='none';" style="margin-top:6px;width:100%;font-size:9px;padding:4px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;">✕ CLOSE</button>
-  </div>
 <!-- ── AI Insights Panel ── -->
 <div id="insights-panel" style="
   display:none;position:fixed;top:0;right:0;bottom:0;z-index:9997;
