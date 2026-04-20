@@ -8621,7 +8621,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">DEVELOPER REFERENCE</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">App Config &amp; Service Registry</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub v2.4 · April 2026</div>
+          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub v2.5 · April 2026</div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-c" onclick="devSave()" style="font-size:9px;">💾 SAVE NOTES</button>
@@ -8642,18 +8642,26 @@ document.addEventListener('DOMContentLoaded', function(){
 
       <!-- ── SECTION: Cloudflare Worker ── -->
       <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>☁ Cloudflare Worker — AI Proxy + KV Sync</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>☁ Cloudflare Worker — API + KV Sync</span><span class="dev-chevron">▾</span></div>
         <div class="dev-section-body"><div class="dev-grid">
           <div class="dev-field"><div class="dev-label">DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
-          <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">anthropic-proxy</code></div>
-          <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://anthropic-proxy.imluoai.workers.dev/</div></div>
-          <div class="dev-field"><div class="dev-label">API SECRET</div><code class="dev-code">ANTHROPIC_KEY</code></div>
+          <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">warehub-worker</code></div>
+          <div class="dev-field"><div class="dev-label">CUSTOM DOMAIN</div><code class="dev-code">api.wareplatform.com</code></div>
+          <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://api.wareplatform.com</div></div>
+          <div class="dev-field"><div class="dev-label">SECRETS</div><div class="dev-note">ANTHROPIC_KEY · STRIPE_SECRET_KEY · STRIPE_WEBHOOK_SECRET · CLERK_SECRET_KEY</div></div>
           <div class="dev-field"><div class="dev-label">KV BINDING</div><code class="dev-code">WAREHUB_KV</code></div>
-          <div class="dev-field"><div class="dev-label">KV NAMESPACE</div><code class="dev-code">warehub-data</code></div>
-          <div class="dev-field dev-wide"><div class="dev-label">ENDPOINTS</div><div class="dev-note">POST / → AI proxy &nbsp;·&nbsp; GET/PUT /staff → staff sync &nbsp;·&nbsp; GET/PUT /pin → PIN hash &nbsp;·&nbsp; GET / → health check</div></div>
+          <div class="dev-field"><div class="dev-label">D1 DATABASE</div><code class="dev-code">DB (warehub-db)</code></div>
+          <div class="dev-field dev-wide"><div class="dev-label">KEY ENDPOINTS</div><div class="dev-note">
+            POST /api/ai → AI proxy &nbsp;·&nbsp;
+            GET/PUT /staff → staff sync &nbsp;·&nbsp;
+            GET /api/billing/status → subscription check &nbsp;·&nbsp;
+            POST /api/billing/checkout → Stripe checkout &nbsp;·&nbsp;
+            POST /api/billing/webhook → Stripe events &nbsp;·&nbsp;
+            POST /api/tenants/register → tenant onboarding
+          </div></div>
           <div class="dev-field dev-wide"><div class="dev-label">CORS REQUIRED</div><div class="dev-note">Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS on every response including OPTIONS preflight. Cloudflare Access must be DISABLED.</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">HOW TO REDEPLOY</div><div class="dev-note">dash.cloudflare.com → Workers &amp; Pages → anthropic-proxy → Edit Code → select all → paste new code → Deploy.</div></div>
-          <div class="dev-field"><div class="dev-label">LIVE TEST</div><div class="dev-note">Click ☁ icon in app header — runs GET /staff and reports exact error if failing.</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">HOW TO REDEPLOY</div><div class="dev-note">cd warehub-worker → git push → dash.cloudflare.com → Workers &amp; Pages → warehub-worker → Deployments → verify latest.</div></div>
+          <div class="dev-field"><div class="dev-label">LIVE TEST</div><div class="dev-note">Click ☁ icon in app header — pings Worker and reports exact HTTP error if failing.</div></div>
         </div></div>
       </div>
 
@@ -8670,6 +8678,25 @@ document.addEventListener('DOMContentLoaded', function(){
           <div class="dev-field dev-wide"><div class="dev-label">PERMISSIONS</div><div class="dev-note">Files.ReadWrite · Sites.ReadWrite.All · User.Read — all with Admin Consent granted</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">EXCEL SHEETS</div><div class="dev-note">Productivity · Returns Log · Vehicle Log — created automatically on first save</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">TOKEN EXPIRY</div><div class="dev-note">~1 hour. Fix: Stats tab → ⊞ CONNECT EXCEL → sign in again. Or Stats → ⚙ → DISCONNECT → reconnect.</div></div>
+        </div></div>
+      </div>
+
+      <!-- ── SECTION: Domain & Infrastructure ── -->
+      <div class="dev-section">
+        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🌐 Domain &amp; Infrastructure</span><span class="dev-chevron">▾</span></div>
+        <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field"><div class="dev-label">REGISTRAR</div><div class="dev-note">Cloudflare — wareplatform.com</div></div>
+          <div class="dev-field"><div class="dev-label">LANDING PAGE</div><a href="https://wareplatform.com" target="_blank" class="dev-link">wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ Cloudflare Pages (warehublandingpage)</span></div>
+          <div class="dev-field"><div class="dev-label">APP</div><a href="https://app.wareplatform.com" target="_blank" class="dev-link">app.wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ GitHub Pages (CNAME)</span></div>
+          <div class="dev-field"><div class="dev-label">API</div><a href="https://api.wareplatform.com" target="_blank" class="dev-link">api.wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ Cloudflare Worker custom domain</span></div>
+          <div class="dev-field"><div class="dev-label">AUTH</div><div class="dev-note">Clerk (dev instance: golden-magpie-54.clerk.accounts.dev) — upgrade to production instance before scaling</div></div>
+          <div class="dev-field"><div class="dev-label">BILLING</div><div class="dev-note">Stripe — STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET set as Worker secrets. Webhook: api.wareplatform.com/api/billing/webhook</div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">DNS RECORDS</div><div class="dev-note">
+            CNAME app → imluoai.github.io (GitHub Pages) &nbsp;·&nbsp;
+            Worker route api → warehub-worker (Cloudflare) &nbsp;·&nbsp;
+            Pages custom domain → wareplatform.com (Cloudflare Pages)
+          </div></div>
+          <div class="dev-field dev-wide"><div class="dev-label">ONEDRIVE SCOPING</div><div class="dev-note">Excel config stored under warehub_excel_{clerkUserId} — each tenant has isolated OneDrive connection. MS token scoped to warehub_ms_token_{clerkUserId}.</div></div>
         </div></div>
       </div>
 
@@ -8728,6 +8755,21 @@ document.addEventListener('DOMContentLoaded', function(){
       <div class="dev-section">
         <div class="dev-section-hdr" onclick="devToggle(this)"><span>📋 Changelog</span><span class="dev-chevron">▾</span></div>
         <div class="dev-section-body"><div class="dev-grid">
+          <div class="dev-field dev-wide"><div class="dev-label">v2.5 — April 2026</div><div class="dev-note">
+            <strong>feat</strong> Domain migration → wareplatform.com (app / api / landing page) <br>
+            <strong>feat</strong> Landing page (wareplatform.com) deployed on Cloudflare Pages — hero, features, pricing, testimonials<br>
+            <strong>feat</strong> User menu in header — gradient avatar, name/email, Billing link, Sign out (Clerk signOut)<br>
+            <strong>feat</strong> FBA Reprint Queue — persistent panel for missing FBA box labels<br>
+            <strong>feat</strong> Import missing-labels panel — skipped page thumbnails with per-label reprint buttons<br>
+            <strong>feat</strong> Print date/time on carrier divider pages (printSkuSort + printByPacker)<br>
+            <strong>fix</strong> FedEx shared batch barcode — 3-tier fallback (Tracking ID# → CUST REF → page-suffix) prevents duplicate tracking<br>
+            <strong>fix</strong> GOFO / USPS / SWIFT parse fallbacks — row-concat + full-page collapse tiers added<br>
+            <strong>fix</strong> Missing label count was wrong (groups vs individual labels) — now sums dropped copies correctly<br>
+            <strong>fix</strong> OneDrive config scoped to Clerk user ID — prevents cross-tenant data leak on shared browsers<br>
+            <strong>fix</strong> Billing success/cancel/portal URLs updated to wareplatform.com in Worker<br>
+            <strong>remove</strong> PIN lock screen (redundant — Clerk handles auth)<br>
+            <strong>remove</strong> FM radio / music player
+          </div></div>
           <div class="dev-field dev-wide"><div class="dev-label">v2.4 — March 2026</div><div class="dev-note">
             <strong>feat</strong> Amazon FBA Outbound tab — end-of-day shipment form (Shipment ID, FC destination, carrier/tracking to FC, boxes, units, dims, weight, dynamic SKU rows), stats bar, filterable log, CSV export, Save to Excel → "FBA Outbound" sheet
           </div></div>
@@ -8751,7 +8793,7 @@ document.addEventListener('DOMContentLoaded', function(){
             iPad PDF parse speed (scale cap, JPEG compression, 10-page yield). Fix PDF double-trigger. Google Maps duplicate script guard. Vehicle delete DOM fix.
           </div></div>
           <div class="dev-field dev-wide"><div class="dev-label">v2.0 — March 2026</div><div class="dev-note">
-            PIN lock with Rubik's cube animation. Vehicle tracking module. Returns intake with photo support. Rack map SVG (83 spots, 6 zones). AI assistant (Claude Sonnet). FM radio player. Dev panel rewrite.
+            Vehicle tracking module. Returns intake with photo support. Rack map SVG (83 spots, 6 zones). AI assistant (Claude Sonnet). Dev panel rewrite.
           </div></div>
           <div class="dev-field dev-wide"><div class="dev-label">v1.x — Feb 2026</div><div class="dev-note">
             Initial build: Import → Packers → Pack Station → Dashboard → Stats → Floor Display. Cloudflare KV staff sync. MSAL Excel integration. GS1-128 barcode support.
