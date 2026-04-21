@@ -346,8 +346,9 @@ body{
 <body>
   <div id="clerk-auth-screen" style="
   display:flex; flex-direction:column; align-items:center;
-  justify-content:center; height:100vh; background:#0d1117;
+  justify-content:center; min-height:100vh; background:#0d1117;
   font-family: 'Inter', system-ui, sans-serif; gap:24px;
+  padding: 40px 16px 24px; box-sizing:border-box; position:relative;
 ">
   <div style="text-align:center; margin-bottom:8px; display:flex; flex-direction:column; align-items:center; gap:10px;">
     <svg width="55" height="50" viewBox="0 0 96 88" xmlns="http://www.w3.org/2000/svg">
@@ -371,8 +372,14 @@ body{
     </div>
   </div>
   <div id="clerk-mount-point" style="width:100%; max-width:400px;"></div>
-  <a href="https://wareplatform.com" style="font-size:12px; color:#4a6080; text-decoration:none; margin-top:4px; transition:color 0.15s;"
-     onmouseover="this.style.color='#7a9abf'" onmouseout="this.style.color='#4a6080'">
+  <!-- Always visible at bottom, pinned outside the scroll flow -->
+  <a href="https://wareplatform.com" style="
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:#4a6080; text-decoration:none;
+    transition:color 0.15s; white-space:nowrap; z-index:10;
+    background:#0d1117; padding:4px 12px; border-radius:20px;
+    border:1px solid #1e2a3a;
+  " onmouseover="this.style.color='#7a9abf'" onmouseout="this.style.color='#4a6080'">
     ← Back to wareplatform.com
   </a>
 </div>
