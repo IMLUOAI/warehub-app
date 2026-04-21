@@ -955,7 +955,7 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
-  if(name==='rackmap'){ rackClearHighlight(); if(orders.length) rackHighlightSpots(); }
+  if(name==='rackmap'){ rackConfigLoad(); rackClearHighlight(); if(orders.length) rackHighlightSpots(); }
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
@@ -4682,6 +4682,287 @@ var RACK_INFO = {
   'B-1': {type:'GROUND PILE — NEW GOODS', color:'#3182ce'},
   'C-1': {type:'GROUND PALLET', color:'#dd6b20'}
 };
+
+/* ─────────────────────────────────────────────
+   RACK MAP — CLIENT-CONFIGURABLE LAYOUT SYSTEM
+   ───────────────────────────────────────────── */
+
+var _rackConfig = null; // loaded from localStorage
+
+function _rackStorageKey(){
+  var uid = (window._clerkUser && window._clerkUser.id) ? window._clerkUser.id : 'default';
+  return 'warehub_rack_cfg_' + uid;
+}
+
+function rackConfigLoad(){
+  try {
+    var raw = localStorage.getItem(_rackStorageKey());
+    _rackConfig = raw ? JSON.parse(raw) : null;
+  } catch(e){ _rackConfig = null; }
+
+  var prompt = document.getElementById('rack-setup-prompt');
+  var svgWrap = document.getElementById('rack-svg-wrap');
+
+  if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length){
+    if(prompt)  prompt.style.display = 'block';
+    if(svgWrap) svgWrap.style.display = 'none';
+    document.getElementById('rack-legend').innerHTML = '';
+    document.getElementById('rack-address-display').textContent = '—';
+    return;
+  }
+
+  if(prompt)  prompt.style.display = 'none';
+  if(svgWrap) svgWrap.style.display = 'block';
+
+  // Rebuild RACK_INFO from config zones
+  RACK_INFO = {};
+  (_rackConfig.zones||[]).forEach(function(z){
+    RACK_INFO[z.prefix] = { type: z.name, color: z.color };
+  });
+
+  rackBuildSVG(_rackConfig);
+  rackBuildLegend(_rackConfig);
+
+  var addrEl = document.getElementById('rack-address-display');
+  if(addrEl) addrEl.textContent = [_rackConfig.name, _rackConfig.addr].filter(Boolean).join(' · ') || '—';
+}
+
+function rackConfigSave(cfg){
+  try { localStorage.setItem(_rackStorageKey(), JSON.stringify(cfg)); } catch(e){}
+  _rackConfig = cfg;
+}
+
+/* ── Build SVG from zone config ── */
+function rackBuildSVG(cfg){
+  var svg = document.getElementById('rack-svg');
+  if(!svg) return;
+
+  var zones = cfg.zones || [];
+  if(!zones.length){ svg.innerHTML=''; return; }
+
+  // Layout: arrange zones in a flow grid
+  // Each zone is a block: header rect + grid of spots
+  var PAD   = 18;   // outer padding
+  var ZGAP  = 14;   // gap between zones
+  var COLS  = 2;    // max zone columns
+  var SZ    = 24;   // spot cell size
+  var SGAP  = 3;    // gap between spots
+  var ZHDR  = 20;   // zone header height
+  var ZPPAD = 8;    // padding inside zone block
+
+  // Compute zone dimensions
+  var zoneSizes = zones.map(function(z){
+    var cols = Math.max(1, parseInt(z.cols)||5);
+    var rows = Math.max(1, parseInt(z.rows)||4);
+    var w = ZPPAD*2 + cols*(SZ+SGAP) - SGAP;
+    var h = ZPPAD*2 + ZHDR + rows*(SZ+SGAP) - SGAP;
+    return {w:w, h:h, cols:cols, rows:rows};
+  });
+
+  // Place zones in a 2-column layout
+  var colW = [0,0]; var colH = [PAD, PAD];
+  var positions = zones.map(function(z, i){
+    var sz = zoneSizes[i];
+    // pick shorter column
+    var col = (colH[0] <= colH[1]) ? 0 : 1;
+    var x   = PAD + col*(Math.max(zoneSizes.reduce(function(m,s){return Math.max(m,s.w);},0),200) + ZGAP);
+    var y   = colH[col];
+    colH[col] += sz.h + ZGAP;
+    colW[col]  = Math.max(colW[col]||0, x + sz.w);
+    return {x:x, y:y, col:col};
+  });
+
+  var totalW = Math.max(colW[0]||0, colW[1]||0) + PAD;
+  var totalH = Math.max(colH[0], colH[1]) + PAD;
+
+  svg.setAttribute('viewBox', '0 0 '+totalW+' '+totalH);
+
+  var html = '<defs>'
+    + '<marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">'
+    + '<polygon points="0 0, 8 3, 0 6" fill="#0af"/>'
+    + '</marker>'
+    + '</defs>';
+  zones.forEach(function(z, zi){
+    var pos = positions[zi];
+    var sz  = zoneSizes[zi];
+    var col = z.color || '#4a9eff';
+    var colFaint = col + '22';
+    var prefix  = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
+
+    // Zone group
+    html += '<g id="zone-'+prefix+'" class="rack-zone" onclick="rackClick(\''+prefix+'\')" style="cursor:pointer;">';
+
+    // Zone background
+    html += '<rect x="'+pos.x+'" y="'+pos.y+'" width="'+sz.w+'" height="'+sz.h+'"'
+          + ' rx="6" fill="'+colFaint+'" stroke="'+col+'" stroke-width="1.5" fill-opacity="0.85"/>';
+
+    // Zone header
+    html += '<rect x="'+pos.x+'" y="'+pos.y+'" width="'+sz.w+'" height="'+ZHDR+'"'
+          + ' rx="4" fill="'+col+'" opacity="0.85"/>';
+    html += '<text x="'+(pos.x+sz.w/2)+'" y="'+(pos.y+13)+'"'
+          + ' text-anchor="middle" font-size="9" font-weight="700"'
+          + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
+
+    html += '</g>'; // close zone group (spots go outside so they layer on top)
+
+    // Spot grid
+    var rows = parseInt(z.rows)||4;
+    var cols = parseInt(z.cols)||5;
+    var spotNum = 1;
+    for(var r=0; r<rows; r++){
+      for(var c=0; c<cols; c++){
+        var sx = pos.x + ZPPAD + c*(SZ+SGAP);
+        var sy = pos.y + ZPPAD + ZHDR + r*(SZ+SGAP);
+        var spotId = prefix + '-' + (spotNum<10?'0':'')+spotNum;
+        html += '<g id="spot-'+spotId+'" class="rack-spot" onclick="spotClick(\''+spotId+'\')" style="cursor:pointer;">';
+        html += '<rect x="'+sx+'" y="'+sy+'" width="'+SZ+'" height="'+SZ+'"'
+              + ' rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
+        html += '<text x="'+(sx+SZ/2)+'" y="'+(sy+SZ/2+4)+'"'
+              + ' text-anchor="middle" font-size="7" fill="'+col+'"'
+              + ' font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
+        html += '</g>';
+        spotNum++;
+      }
+    }
+  });
+
+  // Add route path/arrow polylines (hidden by default)
+  html += '<polyline id="rack-route-path" points="" fill="none" stroke="#0af" stroke-width="2" stroke-dasharray="6,3" opacity="0.7" style="display:none;"/>';
+  html += '<polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" marker-end="url(#arrowhead)" opacity="0.9" style="display:none;"/>';
+
+  svg.innerHTML = html;
+
+  // Dynamically populate RACK_CENTERS from computed spot midpoints for pick route
+  RACK_CENTERS = {};
+  zones.forEach(function(z, zi){
+    var pos = positions[zi];
+    var sz  = zoneSizes[zi];
+    var prefix = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
+    // Center = middle of the zone block
+    RACK_CENTERS[prefix] = {
+      x: Math.round(pos.x + sz.w/2),
+      y: Math.round(pos.y + sz.h/2)
+    };
+  });
+}
+
+/* ── Build legend ── */
+function rackBuildLegend(cfg){
+  var el = document.getElementById('rack-legend');
+  if(!el) return;
+  var zones = cfg.zones||[];
+  el.innerHTML = zones.map(function(z){
+    var col = z.color||'#4a9eff';
+    var prefix = (z.prefix||'').toUpperCase().replace(/\s/g,'');
+    return '<div style="display:flex;align-items:center;gap:5px;">'
+      +'<div style="width:10px;height:10px;border-radius:2px;background:'+col+';flex-shrink:0;"></div>'
+      +'<span style="color:var(--td);">'+(prefix?prefix+' — ':'')+z.name+'</span>'
+      +'</div>';
+  }).join('');
+}
+
+/* ── Config modal open/close ── */
+function rackOpenConfig(){
+  var modal = document.getElementById('rack-config-modal');
+  modal.style.display = 'flex';
+
+  // Populate from saved config
+  var cfg = _rackConfig || {};
+  document.getElementById('rack-cfg-name').value = cfg.name||'';
+  document.getElementById('rack-cfg-addr').value = cfg.addr||'';
+
+  var zonesEl = document.getElementById('rack-cfg-zones');
+  zonesEl.innerHTML = '';
+
+  var zones = cfg.zones||[];
+  if(!zones.length){
+    // Add 2 default zones to get started
+    zones = [
+      {prefix:'A', name:'Zone A', color:'#4a9eff', rows:'4', cols:'5'},
+      {prefix:'B', name:'Zone B', color:'#38a169', rows:'4', cols:'5'}
+    ];
+  }
+  zones.forEach(function(z){ rackCfgAddZone(z); });
+}
+
+function rackCloseConfig(){
+  document.getElementById('rack-config-modal').style.display = 'none';
+}
+
+/* ── Add one zone row to the modal ── */
+function rackCfgAddZone(z){
+  z = z || {};
+  var zonesEl = document.getElementById('rack-cfg-zones');
+  var idx = zonesEl.children.length;
+
+  var defaultColors = ['#4a9eff','#38a169','#e53e3e','#d53f8c','#dd6b20','#9f7aea','#ed8936','#00b5d8'];
+  var defColor = z.color || defaultColors[idx % defaultColors.length];
+
+  var row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 40px 60px 60px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
+  row.innerHTML =
+    '<div>'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">PREFIX/ID</div>'
+      +'<input class="rack-cfg-prefix" value="'+(z.prefix||'')+'" placeholder="A" maxlength="6" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
+    +'</div>'
+    +'<div>'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">ZONE NAME</div>'
+      +'<input class="rack-cfg-zname" value="'+(z.name||'')+'" placeholder="Metal Racking" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
+    +'</div>'
+    +'<div style="text-align:center;">'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">COLOR</div>'
+      +'<input type="color" class="rack-cfg-color" value="'+(defColor)+'" style="width:30px;height:28px;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;padding:0;background:var(--sur);"/>'
+    +'</div>'
+    +'<div>'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">ROWS</div>'
+      +'<input type="number" class="rack-cfg-rows" value="'+(z.rows||4)+'" min="1" max="20" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
+    +'</div>'
+    +'<div>'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">SPOTS/ROW</div>'
+      +'<input type="number" class="rack-cfg-cols" value="'+(z.cols||5)+'" min="1" max="20" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
+    +'</div>'
+    +'<div style="text-align:center;">'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">DEL</div>'
+      +'<button onclick="this.closest(\'div[style]\').remove()" style="width:24px;height:24px;background:transparent;border:1px solid var(--bdr);color:var(--rd);border-radius:3px;cursor:pointer;font-size:13px;line-height:1;font-family:inherit;">✕</button>'
+    +'</div>';
+
+  zonesEl.appendChild(row);
+}
+
+/* ── Save config and rebuild map ── */
+function rackCfgSave(){
+  var zones = [];
+  document.querySelectorAll('#rack-cfg-zones > div').forEach(function(row){
+    var prefix = (row.querySelector('.rack-cfg-prefix').value||'').trim().toUpperCase().replace(/\s/g,'');
+    var name   = (row.querySelector('.rack-cfg-zname').value||'').trim();
+    var color  = row.querySelector('.rack-cfg-color').value;
+    var rows   = parseInt(row.querySelector('.rack-cfg-rows').value)||4;
+    var cols   = parseInt(row.querySelector('.rack-cfg-cols').value)||5;
+    if(!prefix || !name) return; // skip blank rows
+    zones.push({prefix:prefix, name:name, color:color, rows:String(rows), cols:String(cols)});
+  });
+
+  if(!zones.length){
+    alert('Please add at least one zone before saving.');
+    return;
+  }
+
+  var cfg = {
+    name: document.getElementById('rack-cfg-name').value.trim(),
+    addr: document.getElementById('rack-cfg-addr').value.trim(),
+    zones: zones
+  };
+
+  rackConfigSave(cfg);
+
+  // Rebuild RACK_INFO
+  RACK_INFO = {};
+  zones.forEach(function(z){ RACK_INFO[z.prefix] = {type:z.name, color:z.color}; });
+
+  rackCloseConfig();
+  rackConfigLoad(); // re-render SVG, legend, address
+  pm('✓ Rack layout saved — '+zones.length+' zone(s) configured.');
+}
 
 function rackNormalise(shelf){
   if(!shelf) return '';
@@ -8566,76 +8847,98 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 
   <!-- ══ RACK MAP ══ -->
-  <div id="view-rackmap" class="view" style="display:flex;flex-direction:column;padding:16px 18px;">
-    <div style="padding:16px 18px;max-width:600px;margin:0 auto;">
+  <div id="view-rackmap" class="view" style="display:flex;flex-direction:column;padding:16px 18px;overflow-y:auto;">
+    <div style="max-width:700px;margin:0 auto;width:100%;">
 
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">Goods Location Map</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">1701 10th St Suite 200 · Plano TX 75074 · 9,129 sqft</div>
+          <div id="rack-address-display" style="font-size:10px;color:var(--td);margin-top:2px;">—</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="rack-search" placeholder="Search shelf (e.g. R1-01, B-1-05, A-1)…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:200px;"/>
+          <input id="rack-search" placeholder="Search spot (e.g. A-01, R1-05)…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:180px;"/>
           <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
-          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT INVENTORY CSV</button>
+          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
           <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
+          <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
         </div>
       </div>
 
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;font-size:9px;">
-          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#e53e3e;border-radius:2px;"></div>Metal Racking (R1/R2/R3)</div>
-          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#d53f8c;border-radius:2px;"></div>Ground Pallet A-1</div>
-          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#3182ce;border-radius:2px;"></div>Ground Pile B-1 (New Goods)</div>
-          <div style="display:flex;align-items:center;gap:5px;"><div style="width:14px;height:14px;background:#dd6b20;border-radius:2px;"></div>Ground Pallet C-1</div>
-      <!-- ── RACK SCAN MODE ── -->
-      <div id="rack-scan-panel" style="background:var(--sur);border:1px solid var(--bdr);padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-        <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
-          <div style="font-size:8px;letter-spacing:2px;color:var(--td);">SCAN MODE</div>
-          <div style="display:flex;gap:6px;">
-            <button onclick="rackSetScanMode('locate')"  id="rack-smode-locate"  class="btn btn-c" style="font-size:9px;padding:4px 10px;">🔍 LOCATE SKU</button>
-            <button onclick="rackSetScanMode('assign')"  id="rack-smode-assign"  class="btn"       style="font-size:9px;padding:4px 10px;">📍 ASSIGN TO SPOT</button>
-            <button onclick="rackSetScanMode('off')"     id="rack-smode-off"     class="btn"       style="font-size:9px;padding:4px 10px;">✕ OFF</button>
-          </div>
-        </div>
-        <div style="flex:1;min-width:200px;">
-          <div id="rack-scan-hint" style="font-size:9px;color:var(--td);margin-bottom:4px;">Select a scan mode to begin scanning with gun or keyboard.</div>
-          <input id="rack-scan-input" placeholder="Scan or type SKU / location…" autocomplete="off"
-            onkeydown="if(event.key==='Enter'){rackDoScan(this.value.trim());this.value='';}"
-            style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 10px;font-size:11px;font-family:monospace;outline:none;display:none;"/>
-        </div>
-        <div id="rack-scan-result" style="font-size:10px;min-width:160px;"></div>
+      <!-- Dynamic legend -->
+      <div id="rack-legend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;font-size:9px;"></div>
+
+      <!-- Dynamic SVG rack map -->
+      <div id="rack-svg-wrap" style="overflow-x:auto;">
+        <svg id="rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
       </div>
 
-
-        </div>
-
-      <!-- Map container -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:12px;display:flex;justify-content:center;">
-        <svg id="rack-svg" viewBox="55 25 620 645" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:560px;height:auto;display:block;font-family:Arial,sans-serif;"><defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#0af"/></marker><pattern id="hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#555" stroke-width="1.5"/></pattern></defs><!-- OUTER WALL --><rect x="60" y="40" width="580" height="600" fill="#161616" stroke="#666" stroke-width="3" rx="2"/><!-- DOCK DOORS --><rect x="155" y="37" width="60" height="7" fill="#161616" stroke="none"/><line x1="155" y1="40" x2="155" y2="46" stroke="#888" stroke-width="2"/><line x1="215" y1="40" x2="215" y2="46" stroke="#888" stroke-width="2"/><text x="185" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-1</text><rect x="248" y="37" width="60" height="7" fill="#161616" stroke="none"/><line x1="248" y1="40" x2="248" y2="46" stroke="#888" stroke-width="2"/><line x1="308" y1="40" x2="308" y2="46" stroke="#888" stroke-width="2"/><text x="278" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-2</text><rect x="340" y="37" width="90" height="7" fill="#161616" stroke="none"/><line x1="340" y1="40" x2="340" y2="46" stroke="#888" stroke-width="2"/><line x1="430" y1="40" x2="430" y2="46" stroke="#888" stroke-width="2"/><text x="385" y="35" text-anchor="middle" fill="#e53e3e" font-size="9" font-weight="700">Dock-3</text><!-- OFFICE / RESTROOM bottom-right --><rect x="416" y="434" width="218" height="198" fill="#1e1e1e" stroke="#555" stroke-width="1.5"/><text x="525" y="518" text-anchor="middle" fill="#555" font-size="12" font-weight="700">OFFICE /</text><text x="525" y="536" text-anchor="middle" fill="#555" font-size="12" font-weight="700">RESTROOM</text><!-- AISLE between R2 and R1 --><rect x="197" y="128" width="30" height="376" fill="#0d0d0d" opacity="0.8"/><text x="212" y="318" text-anchor="middle" fill="#2d2d2d" font-size="7" transform="rotate(-90,212,318)">AISLE</text><!-- ENTRANCE --><text x="340" y="655" text-anchor="middle" fill="#444" font-size="9" letter-spacing="2">ENTRANCE / EXIT (SOUTH)</text><line x1="160" y1="640" x2="520" y2="640" stroke="#333" stroke-width="2"/><!-- COMPASS --><g transform="translate(628,628)"><circle cx="0" cy="0" r="16" fill="none" stroke="#444" stroke-width="1.5"/><text x="0" y="-4" text-anchor="middle" fill="#777" font-size="10" font-weight="700">N</text><polygon points="0,-12 -3,-2 0,-5 3,-2" fill="#777"/></g></g></g></g><!-- R3 Red --><g id="zone-R3" class="rack-zone" onclick="rackClick(&apos;R3&apos;)" style="cursor:pointer;"><rect x="68" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R3-01" class="rack-spot" onclick="spotClick('R3-01')" style="cursor:pointer;"><rect x="72.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-01</text></g><g id="spot-R3-02" class="rack-spot" onclick="spotClick('R3-02')" style="cursor:pointer;"><rect x="72.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-02</text></g><g id="spot-R3-03" class="rack-spot" onclick="spotClick('R3-03')" style="cursor:pointer;"><rect x="72.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-03</text></g><g id="spot-R3-04" class="rack-spot" onclick="spotClick('R3-04')" style="cursor:pointer;"><rect x="72.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-04</text></g><g id="spot-R3-05" class="rack-spot" onclick="spotClick('R3-05')" style="cursor:pointer;"><rect x="72.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-05</text></g><g id="spot-R3-06" class="rack-spot" onclick="spotClick('R3-06')" style="cursor:pointer;"><rect x="72.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-06</text></g><g id="spot-R3-07" class="rack-spot" onclick="spotClick('R3-07')" style="cursor:pointer;"><rect x="72.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-07</text></g><g id="spot-R3-08" class="rack-spot" onclick="spotClick('R3-08')" style="cursor:pointer;"><rect x="72.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="98.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R3-08</text></g></g><!-- R2 Red --><g id="zone-R2" class="rack-zone" onclick="rackClick(&apos;R2&apos;)" style="cursor:pointer;"><rect x="137" y="128" width="60" height="187" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R2-01" class="rack-spot" onclick="spotClick('R2-01')" style="cursor:pointer;"><rect x="141.0" y="289.6" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="302.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-01</text></g><g id="spot-R2-02" class="rack-spot" onclick="spotClick('R2-02')" style="cursor:pointer;"><rect x="141.0" y="267.2" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="279.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-02</text></g><g id="spot-R2-03" class="rack-spot" onclick="spotClick('R2-03')" style="cursor:pointer;"><rect x="141.0" y="244.9" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="257.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-03</text></g><g id="spot-R2-04" class="rack-spot" onclick="spotClick('R2-04')" style="cursor:pointer;"><rect x="141.0" y="222.5" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="235.2" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-04</text></g><g id="spot-R2-05" class="rack-spot" onclick="spotClick('R2-05')" style="cursor:pointer;"><rect x="141.0" y="200.1" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="212.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-05</text></g><g id="spot-R2-06" class="rack-spot" onclick="spotClick('R2-06')" style="cursor:pointer;"><rect x="141.0" y="177.8" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="190.4" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-06</text></g><g id="spot-R2-07" class="rack-spot" onclick="spotClick('R2-07')" style="cursor:pointer;"><rect x="141.0" y="155.4" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="168.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-07</text></g><g id="spot-R2-08" class="rack-spot" onclick="spotClick('R2-08')" style="cursor:pointer;"><rect x="141.0" y="133.0" width="52.0" height="20.4" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="167.0" y="145.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R2-08</text></g></g><!-- R1 Red TALL (no gap to B-1) --><g id="zone-R1" class="rack-zone" onclick="rackClick(&apos;R1&apos;)" style="cursor:pointer;"><rect x="227" y="128" width="60" height="313" fill="#e53e3e" fill-opacity="0.88" stroke="#fc8181" stroke-width="2" rx="3"/><g id="spot-R1-01" class="rack-spot" onclick="spotClick('R1-01')" style="cursor:pointer;"><rect x="231.0" y="417.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="429.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-01</text></g><g id="spot-R1-02" class="rack-spot" onclick="spotClick('R1-02')" style="cursor:pointer;"><rect x="231.0" y="397.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="409.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-02</text></g><g id="spot-R1-03" class="rack-spot" onclick="spotClick('R1-03')" style="cursor:pointer;"><rect x="231.0" y="377.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="388.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-03</text></g><g id="spot-R1-04" class="rack-spot" onclick="spotClick('R1-04')" style="cursor:pointer;"><rect x="231.0" y="356.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="368.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-04</text></g><g id="spot-R1-05" class="rack-spot" onclick="spotClick('R1-05')" style="cursor:pointer;"><rect x="231.0" y="336.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="348.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-05</text></g><g id="spot-R1-06" class="rack-spot" onclick="spotClick('R1-06')" style="cursor:pointer;"><rect x="231.0" y="316.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="327.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-06</text></g><g id="spot-R1-07" class="rack-spot" onclick="spotClick('R1-07')" style="cursor:pointer;"><rect x="231.0" y="295.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="307.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-07</text></g><g id="spot-R1-08" class="rack-spot" onclick="spotClick('R1-08')" style="cursor:pointer;"><rect x="231.0" y="275.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="287.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-08</text></g><g id="spot-R1-09" class="rack-spot" onclick="spotClick('R1-09')" style="cursor:pointer;"><rect x="231.0" y="255.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="266.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-09</text></g><g id="spot-R1-10" class="rack-spot" onclick="spotClick('R1-10')" style="cursor:pointer;"><rect x="231.0" y="234.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="246.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-10</text></g><g id="spot-R1-11" class="rack-spot" onclick="spotClick('R1-11')" style="cursor:pointer;"><rect x="231.0" y="214.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="226.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-11</text></g><g id="spot-R1-12" class="rack-spot" onclick="spotClick('R1-12')" style="cursor:pointer;"><rect x="231.0" y="194.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="205.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-12</text></g><g id="spot-R1-13" class="rack-spot" onclick="spotClick('R1-13')" style="cursor:pointer;"><rect x="231.0" y="173.7" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="185.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-13</text></g><g id="spot-R1-14" class="rack-spot" onclick="spotClick('R1-14')" style="cursor:pointer;"><rect x="231.0" y="153.3" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="165.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-14</text></g><g id="spot-R1-15" class="rack-spot" onclick="spotClick('R1-15')" style="cursor:pointer;"><rect x="231.0" y="133.0" width="52.0" height="18.3" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="257.0" y="144.6" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">R1-15</text></g></g><!-- B-1 Blue (touches R1) --><g id="zone-B-1" class="rack-zone" onclick="rackClick(&apos;B-1&apos;)" style="cursor:pointer;"><rect x="289" y="128" width="60" height="313" fill="#3182ce" fill-opacity="0.88" stroke="#63b3ed" stroke-width="2" rx="3"/><g id="spot-B-1-01" class="rack-spot" onclick="spotClick('B-1-01')" style="cursor:pointer;"><rect x="293.0" y="422.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="431.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-01</text></g><g id="spot-B-1-02" class="rack-spot" onclick="spotClick('B-1-02')" style="cursor:pointer;"><rect x="293.0" y="407.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="416.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-02</text></g><g id="spot-B-1-03" class="rack-spot" onclick="spotClick('B-1-03')" style="cursor:pointer;"><rect x="293.0" y="392.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="401.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-03</text></g><g id="spot-B-1-04" class="rack-spot" onclick="spotClick('B-1-04')" style="cursor:pointer;"><rect x="293.0" y="377.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="386.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-04</text></g><g id="spot-B-1-05" class="rack-spot" onclick="spotClick('B-1-05')" style="cursor:pointer;"><rect x="293.0" y="361.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="370.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-05</text></g><g id="spot-B-1-06" class="rack-spot" onclick="spotClick('B-1-06')" style="cursor:pointer;"><rect x="293.0" y="346.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="355.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-06</text></g><g id="spot-B-1-07" class="rack-spot" onclick="spotClick('B-1-07')" style="cursor:pointer;"><rect x="293.0" y="331.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="340.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-07</text></g><g id="spot-B-1-08" class="rack-spot" onclick="spotClick('B-1-08')" style="cursor:pointer;"><rect x="293.0" y="316.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="325.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-08</text></g><g id="spot-B-1-09" class="rack-spot" onclick="spotClick('B-1-09')" style="cursor:pointer;"><rect x="293.0" y="300.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="309.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-09</text></g><g id="spot-B-1-10" class="rack-spot" onclick="spotClick('B-1-10')" style="cursor:pointer;"><rect x="293.0" y="285.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="294.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-10</text></g><g id="spot-B-1-11" class="rack-spot" onclick="spotClick('B-1-11')" style="cursor:pointer;"><rect x="293.0" y="270.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="279.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-11</text></g><g id="spot-B-1-12" class="rack-spot" onclick="spotClick('B-1-12')" style="cursor:pointer;"><rect x="293.0" y="255.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="264.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-12</text></g><g id="spot-B-1-13" class="rack-spot" onclick="spotClick('B-1-13')" style="cursor:pointer;"><rect x="293.0" y="239.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="248.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-13</text></g><g id="spot-B-1-14" class="rack-spot" onclick="spotClick('B-1-14')" style="cursor:pointer;"><rect x="293.0" y="224.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="233.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-14</text></g><g id="spot-B-1-15" class="rack-spot" onclick="spotClick('B-1-15')" style="cursor:pointer;"><rect x="293.0" y="209.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="218.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-15</text></g><g id="spot-B-1-16" class="rack-spot" onclick="spotClick('B-1-16')" style="cursor:pointer;"><rect x="293.0" y="194.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="203.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-16</text></g><g id="spot-B-1-17" class="rack-spot" onclick="spotClick('B-1-17')" style="cursor:pointer;"><rect x="293.0" y="178.8" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="187.8" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-17</text></g><g id="spot-B-1-18" class="rack-spot" onclick="spotClick('B-1-18')" style="cursor:pointer;"><rect x="293.0" y="163.5" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="172.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-18</text></g><g id="spot-B-1-19" class="rack-spot" onclick="spotClick('B-1-19')" style="cursor:pointer;"><rect x="293.0" y="148.2" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="157.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-19</text></g><g id="spot-B-1-20" class="rack-spot" onclick="spotClick('B-1-20')" style="cursor:pointer;"><rect x="293.0" y="133.0" width="52.0" height="13.2" rx="1.5" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="319.0" y="142.0" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.4" font-weight="700" font-family="Arial">B-1-20</text></g></g><!-- A-1 Magenta right=R1 left, extends to south wall --><g id="zone-A-1" class="rack-zone" onclick="rackClick(&apos;A-1&apos;)" style="cursor:pointer;"><rect x="68" y="389" width="129" height="180" fill="#d53f8c" fill-opacity="0.88" stroke="#f687b3" stroke-width="2" rx="3"/><g id="spot-A-1-01" class="rack-spot" onclick="spotClick('A-1-01')" style="cursor:pointer;"><rect x="163.8" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-01</text></g><g id="spot-A-1-02" class="rack-spot" onclick="spotClick('A-1-02')" style="cursor:pointer;"><rect x="133.5" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-02</text></g><g id="spot-A-1-03" class="rack-spot" onclick="spotClick('A-1-03')" style="cursor:pointer;"><rect x="103.2" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-03</text></g><g id="spot-A-1-04" class="rack-spot" onclick="spotClick('A-1-04')" style="cursor:pointer;"><rect x="73.0" y="531.6" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="550.3" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-04</text></g><g id="spot-A-1-05" class="rack-spot" onclick="spotClick('A-1-05')" style="cursor:pointer;"><rect x="163.8" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-05</text></g><g id="spot-A-1-06" class="rack-spot" onclick="spotClick('A-1-06')" style="cursor:pointer;"><rect x="133.5" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-06</text></g><g id="spot-A-1-07" class="rack-spot" onclick="spotClick('A-1-07')" style="cursor:pointer;"><rect x="103.2" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-07</text></g><g id="spot-A-1-08" class="rack-spot" onclick="spotClick('A-1-08')" style="cursor:pointer;"><rect x="73.0" y="497.2" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="515.9" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-08</text></g><g id="spot-A-1-09" class="rack-spot" onclick="spotClick('A-1-09')" style="cursor:pointer;"><rect x="163.8" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-09</text></g><g id="spot-A-1-10" class="rack-spot" onclick="spotClick('A-1-10')" style="cursor:pointer;"><rect x="133.5" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-10</text></g><g id="spot-A-1-11" class="rack-spot" onclick="spotClick('A-1-11')" style="cursor:pointer;"><rect x="103.2" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-11</text></g><g id="spot-A-1-12" class="rack-spot" onclick="spotClick('A-1-12')" style="cursor:pointer;"><rect x="73.0" y="462.8" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="481.5" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-12</text></g><g id="spot-A-1-13" class="rack-spot" onclick="spotClick('A-1-13')" style="cursor:pointer;"><rect x="163.8" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-13</text></g><g id="spot-A-1-14" class="rack-spot" onclick="spotClick('A-1-14')" style="cursor:pointer;"><rect x="133.5" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-14</text></g><g id="spot-A-1-15" class="rack-spot" onclick="spotClick('A-1-15')" style="cursor:pointer;"><rect x="103.2" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-15</text></g><g id="spot-A-1-16" class="rack-spot" onclick="spotClick('A-1-16')" style="cursor:pointer;"><rect x="73.0" y="428.4" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="447.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-16</text></g><g id="spot-A-1-17" class="rack-spot" onclick="spotClick('A-1-17')" style="cursor:pointer;"><rect x="163.8" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="177.9" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-17</text></g><g id="spot-A-1-18" class="rack-spot" onclick="spotClick('A-1-18')" style="cursor:pointer;"><rect x="133.5" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.6" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-18</text></g><g id="spot-A-1-19" class="rack-spot" onclick="spotClick('A-1-19')" style="cursor:pointer;"><rect x="103.2" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="117.4" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-19</text></g><g id="spot-A-1-20" class="rack-spot" onclick="spotClick('A-1-20')" style="cursor:pointer;"><rect x="73.0" y="394.0" width="28.2" height="32.4" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="87.1" y="412.7" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="6.5" font-weight="700" font-family="Arial">A-1-20</text></g></g><!-- C-1 Orange · 3 rows × 4 cols · 9 spots --><g id="zone-C-1" class="rack-zone" onclick="rackClick(&apos;C-1&apos;)" style="cursor:pointer;"><rect x="117" y="44" width="80" height="90" fill="#dd6b20" fill-opacity="0.88" stroke="#ed8936" stroke-width="2" rx="3"/><g id="spot-C-1-01" class="rack-spot" onclick="spotClick('C-1-01')" style="cursor:pointer;"><rect x="121.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-01</text></g><g id="spot-C-1-02" class="rack-spot" onclick="spotClick('C-1-02')" style="cursor:pointer;"><rect x="139.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-02</text></g><g id="spot-C-1-03" class="rack-spot" onclick="spotClick('C-1-03')" style="cursor:pointer;"><rect x="158.0" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-03</text></g><g id="spot-C-1-04" class="rack-spot" onclick="spotClick('C-1-04')" style="cursor:pointer;"><rect x="176.5" y="104.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="119.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-04</text></g><g id="spot-C-1-05" class="rack-spot" onclick="spotClick('C-1-05')" style="cursor:pointer;"><rect x="121.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-05</text></g><g id="spot-C-1-06" class="rack-spot" onclick="spotClick('C-1-06')" style="cursor:pointer;"><rect x="139.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-06</text></g><g id="spot-C-1-07" class="rack-spot" onclick="spotClick('C-1-07')" style="cursor:pointer;"><rect x="158.0" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-07</text></g><g id="spot-C-1-08" class="rack-spot" onclick="spotClick('C-1-08')" style="cursor:pointer;"><rect x="176.5" y="76.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="91.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-08</text></g><g id="spot-C-1-09" class="rack-spot" onclick="spotClick('C-1-09')" style="cursor:pointer;"><rect x="121.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="129.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-09</text></g><g id="spot-C-1-10" class="rack-spot" onclick="spotClick('C-1-10')" style="cursor:pointer;"><rect x="139.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="147.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-10</text></g><g id="spot-C-1-11" class="rack-spot" onclick="spotClick('C-1-11')" style="cursor:pointer;"><rect x="158.0" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="166.2" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-11</text></g><g id="spot-C-1-12" class="rack-spot" onclick="spotClick('C-1-12')" style="cursor:pointer;"><rect x="176.5" y="48.0" width="16.5" height="26.0" rx="2" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.3)" stroke-width="0.8"/><text x="184.8" y="63.1" text-anchor="middle" fill="rgba(255,255,255,0.88)" font-size="5.5" font-weight="700" font-family="Arial">C-1-12</text></g></g><!-- PICK ROUTE --><polyline id="rack-route-path" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" opacity="0" style="pointer-events:none;"/><polyline id="rack-route-arrow" points="" fill="none" stroke="#0af" stroke-width="3" stroke-dasharray="10,5" marker-end="url(#arrowhead)" opacity="0" style="pointer-events:none;"/></svg>
+      <!-- Setup prompt shown when no zones configured -->
+      <div id="rack-setup-prompt" style="display:none;text-align:center;padding:60px 20px;color:var(--td);">
+        <div style="font-size:32px;margin-bottom:16px;">🗺</div>
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px;">No layout configured yet</div>
+        <div style="font-size:12px;margin-bottom:20px;">Define your warehouse zones to build a custom rack map.</div>
+        <button class="btn btn-c" onclick="rackOpenConfig()" style="font-size:11px;">⚙ Configure Layout</button>
       </div>
 
-      <!-- Info panel -->
-      <div id="rack-info-panel" style="display:none;background:var(--sur);border:1px solid var(--cy);margin-top:12px;padding:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <!-- Spot info panel -->
+      <div id="rack-info-panel" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--cy);border-radius:6px;background:var(--bg);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div>
-            <div id="rack-info-title" style="font-size:16px;font-weight:900;color:var(--cy);"></div>
-            <div id="rack-info-type" style="font-size:10px;color:var(--td);margin-top:2px;letter-spacing:1px;"></div>
+            <span id="rack-info-title" style="font-size:14px;font-weight:700;color:var(--cy);"></span>
+            <span id="rack-info-type" style="font-size:9px;color:var(--td);margin-left:8px;letter-spacing:1px;"></span>
           </div>
           <button onclick="rackClearHighlight()" style="background:transparent;border:none;color:var(--td);cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <div id="rack-info-orders" style="margin-top:12px;font-size:11px;"></div>
+        <div id="rack-info-orders"></div>
       </div>
 
       <!-- Pick route panel -->
-      <div id="rack-route-panel" style="display:none;background:var(--sur);border:1px solid var(--cy);margin-top:12px;padding:16px;">
-        <div style="font-size:10px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">🚶 OPTIMAL PICK ROUTE</div>
-        <div id="rack-route-steps" style="font-size:11px;"></div>
+      <div id="rack-route-panel" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--cy);border-radius:6px;background:var(--bg);">
+        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">OPTIMAL PICK ROUTE</div>
+        <div id="rack-route-steps"></div>
       </div>
 
     </div>
   </div>
+
+  <!-- ══ RACK LAYOUT CONFIG MODAL ══ -->
+  <div id="rack-config-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:24px;width:min(600px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px #000a;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div style="font-size:15px;font-weight:700;">Configure Warehouse Layout</div>
+        <button onclick="rackCloseConfig()" style="background:transparent;border:none;color:var(--td);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+
+      <!-- Warehouse info -->
+      <div style="margin-bottom:20px;padding:14px;background:var(--bg);border-radius:8px;border:1px solid var(--bdr);">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;">WAREHOUSE INFO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div style="font-size:9px;color:var(--td);margin-bottom:4px;">WAREHOUSE NAME</div>
+            <input id="rack-cfg-name" placeholder="My Warehouse" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:7px 9px;font-size:11px;font-family:inherit;outline:none;border-radius:4px;"/>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--td);margin-bottom:4px;">ADDRESS / NOTE</div>
+            <input id="rack-cfg-addr" placeholder="123 Main St, City TX" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:7px 9px;font-size:11px;font-family:inherit;outline:none;border-radius:4px;"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone list -->
+      <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;">ZONES <span style="font-size:9px;letter-spacing:0;font-weight:400;color:var(--td);">— each zone becomes a labeled section on the map</span></div>
+      <div id="rack-cfg-zones" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+      <button onclick="rackCfgAddZone()" style="width:100%;padding:9px;background:transparent;border:1px dashed var(--bdr);color:var(--cy);font-size:11px;font-family:inherit;cursor:pointer;border-radius:6px;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--cy)'" onmouseout="this.style.borderColor='var(--bdr)'">+ Add Zone</button>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button onclick="rackCfgSave()" style="flex:1;padding:11px;background:var(--cy);color:#0d1117;border:none;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;">💾 Save & Rebuild Map</button>
+        <button onclick="rackCloseConfig()" style="padding:11px 18px;background:transparent;border:1px solid var(--bdr);color:var(--td);border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- ══ DEV PANEL ══ -->
   <div id="view-devpanel" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
