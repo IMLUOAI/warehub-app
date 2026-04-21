@@ -4329,15 +4329,23 @@ async function excelSavePayroll(){
   function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
   pm('⟳ Saving productivity snapshot to Excel…');
   try{
+    // Ensure sheet exists
     var sr=await fetch(base+'/worksheets?$select=name',{headers:auth});
     var sd=await sr.json();
     var names=(sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
+    // Find last used row so we can APPEND instead of overwrite
+    var usedResp = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:auth});
+    var usedData = await usedResp.json();
+    var lastRow  = (usedData && usedData.rowCount) ? usedData.rowCount : 0;
+    // Write header only on first save (empty sheet)
+    if(lastRow === 0){
+      await fetch(rangeUrl('A1:E1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Date','Packer','Orders Packed','Avg Speed (min)','Status']]})});
+      lastRow = 1;
+    }
     var dateStr = new Date().toLocaleDateString();
-    var hdr=[['Date','Packer','Orders Packed','Avg Speed (min)','Status']];
-    await fetch(rangeUrl('A1:E1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
     var data=packers.map(function(p){
       var sessionDone=orders.filter(function(o){return (o.packedBy===p.id||o.assignedTo===p.id)&&o.status==='done';}).length;
       var done=p.ordersCompleted>0?p.ordersCompleted:sessionDone;
@@ -4345,8 +4353,10 @@ async function excelSavePayroll(){
       return [dateStr,p.name,done,avgMin,p.online?'Active':'Off shift'];
     }).filter(function(r){return r[2]>0;});
     if(!data.length){pm('⚠ No completed orders yet.');return;}
-    var wr=await fetch(rangeUrl('A2:E'+(1+data.length)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:data})});
-    if(wr.ok) pm('✓ Productivity saved → "'+sheet+'" tab ('+data.length+' packers)');
+    // Append below last used row
+    var startRow = lastRow + 1;
+    var wr=await fetch(rangeUrl('A'+startRow+':E'+(startRow+data.length-1)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:data})});
+    if(wr.ok) pm('✓ Productivity appended → "'+sheet+'" tab ('+data.length+' packers, row '+startRow+')');
     else{var e=await wr.json();pm('✗ Excel: '+((e.error&&e.error.message)||wr.status));}
   }catch(e){pm('✗ Save failed: '+e.message);}
 }
@@ -4361,26 +4371,34 @@ async function vehicleSaveExcel(){
   function rangeUrl(addr){var q=String.fromCharCode(39);return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address='+q+addr+q+')';}
   pm('⟳ Saving vehicle log to Excel…');
   try{
+    // Ensure sheet exists
     var sr = await fetch(base+'/worksheets?$select=name',{headers:auth});
     var sd = await sr.json();
     var names = (sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
-    // Clear any stale content from previous structure before writing
-    try{
-      await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange/clear',
-        {method:'POST',headers:hdrs,body:JSON.stringify({applyTo:'All'})});
-    }catch(e){ /* ignore if sheet was just created and has no used range */ }
-
-    var vModel = _vehicleConfig.model || 'Company Vehicle';
-    var vPlate = _vehicleConfig.plate || '—';
-    // Row 1: vehicle identity header; Row 2: column headers; Row 3+: data
-    var infoRow = [['Vehicle: '+vModel+'   |   License Plate: '+vPlate,'','','','','','','','']];
-    var colHdr  = [['Date','Driver','Destination','Departure','Return','ODO Start','ODO End','Miles','Notes']];
-    await fetch(rangeUrl('A1:I1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:infoRow})});
-    await fetch(rangeUrl('A2:I2'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:colHdr})});
-    var dataRows = vehicleTrips.map(function(t){
+    // Find last used row to APPEND instead of overwrite
+    var usedResp = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:auth});
+    var usedData = await usedResp.json();
+    var lastRow  = (usedData && usedData.rowCount) ? usedData.rowCount : 0;
+    // Write headers only on first save (empty sheet)
+    if(lastRow === 0){
+      var vModel = _vehicleConfig.model || 'Company Vehicle';
+      var vPlate = _vehicleConfig.plate || '—';
+      await fetch(rangeUrl('A1:I1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Vehicle: '+vModel+'   |   Plate: '+vPlate,'','','','','','','','']]})});
+      await fetch(rangeUrl('A2:I2'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Date','Driver','Destination','Departure','Return','ODO Start','ODO End','Miles','Notes']]})});
+      lastRow = 2;
+    }
+    // Build only new rows not yet in Excel — compare by date+driver+dest
+    var existingCheck = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=values',{headers:auth});
+    var existingData  = await existingCheck.json();
+    var existingRows  = (existingData && existingData.values) ? existingData.values.slice(2) : [];
+    var existingKeys  = existingRows.map(function(r){ return (r[0]||'')+'|'+(r[1]||'')+'|'+(r[2]||''); });
+    var newRows = vehicleTrips.filter(function(t){
+      var key = (t.date||'')+'|'+(t.driver||'')+'|'+(t.dest||'');
+      return !existingKeys.includes(key);
+    }).map(function(t){
       return [
         t.date||'', t.driver||'', t.dest||'',
         t.depart||'', t.ret||'',
@@ -4390,10 +4408,10 @@ async function vehicleSaveExcel(){
         t.notes||''
       ];
     });
-    if(!dataRows.length){ pm('⚠ No trip data to write.'); return; }
-    var endRow = 2 + dataRows.length;
-    var wr = await fetch(rangeUrl('A3:I'+endRow),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:dataRows})});
-    if(wr.ok) pm('✓ Vehicle log saved → "'+sheet+'" tab ('+dataRows.length+' trips)');
+    if(!newRows.length){ pm('✓ No new trips to append — all already saved.'); return; }
+    var startRow = lastRow + 1;
+    var wr = await fetch(rangeUrl('A'+startRow+':I'+(startRow+newRows.length-1)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:newRows})});
+    if(wr.ok) pm('✓ Vehicle log appended → "'+sheet+'" tab ('+newRows.length+' new trip'+(newRows.length>1?'s':'')+', row '+startRow+')');
     else{ var er=await wr.json(); pm('✗ Excel: '+((er.error&&er.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
 }
