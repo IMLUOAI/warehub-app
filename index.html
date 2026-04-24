@@ -9588,6 +9588,14 @@ function aiDoActions(actions){
   var _warehubTenantId = null;
   
   async function warehubApiCall(method, path, body) {
+    // Always get a fresh token — Clerk caches it and silently refreshes
+    // before expiry, so this is safe to call on every request.
+    try {
+      if (window.Clerk && window.Clerk.session) {
+        _clerkToken = await window.Clerk.session.getToken();
+      }
+    } catch(e) { /* keep existing token if refresh fails */ }
+
     if (!_clerkToken) throw new Error('Not authenticated');
     const opts = {
       method,
@@ -9598,7 +9606,19 @@ function aiDoActions(actions){
     };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(WORKER_URL + path, opts);
-    if (resp.status === 401) { await window.__clerk.signOut(); return null; }
+    if (resp.status === 401) {
+      // Token truly invalid — try one token refresh before giving up
+      try {
+        _clerkToken = await window.Clerk.session.getToken({ skipCache: true });
+        const retry = await fetch(WORKER_URL + path, {
+          ...opts,
+          headers: { ...opts.headers, 'Authorization': 'Bearer ' + _clerkToken }
+        });
+        if (retry.status === 401) { await window.__clerk.signOut(); return null; }
+        if (retry.status === 402) { alert('Your Warehub subscription has expired.'); return null; }
+        return retry.json();
+      } catch(e) { await window.__clerk.signOut(); return null; }
+    }
     if (resp.status === 402) {
       alert('Your Warehub subscription has expired. Please renew at your account portal.');
       return null;
