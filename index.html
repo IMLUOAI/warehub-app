@@ -6808,6 +6808,7 @@ function vehicleAddTrip(){
 
   vehicleTrips.unshift(trip);
   vehicleSave();
+  if(window.apiSaveTrip) window.apiSaveTrip(trip);
   vehicleClearForm();
   renderVehicleLog();
   renderVehicleStats();
