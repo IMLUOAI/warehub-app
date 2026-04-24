@@ -4361,6 +4361,21 @@ async function excelSavePayroll(){
   }catch(e){pm('✗ Save failed: '+e.message);}
 }
 
+// Normalise any date format → "YYYY-MM-DD" for deduplication comparisons.
+// Handles: ISO "2026-04-24", US locale "4/24/2026", Excel serial numbers (e.g. 46770).
+function normDate(s){
+  if(!s && s!==0) return '';
+  s = String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);               // already ISO
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return m[3]+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0'); // US locale
+  if(/^\d+(\.\d+)?$/.test(s)){                                          // Excel date serial
+    var d = new Date(Date.UTC(1899,11,30) + Math.round(parseFloat(s))*864e5);
+    return d.toISOString().slice(0,10);
+  }
+  return s;
+}
+
 async function vehicleSaveExcel(){
   if(!_msalToken || !_excelFileId){ excelConnect(); return; }
   if(!vehicleTrips.length){ pm('⚠ No trips to save.'); return; }
@@ -4394,9 +4409,9 @@ async function vehicleSaveExcel(){
     var existingCheck = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=values',{headers:auth});
     var existingData  = await existingCheck.json();
     var existingRows  = (existingData && existingData.values) ? existingData.values.slice(2) : [];
-    var existingKeys  = existingRows.map(function(r){ return (r[0]||'')+'|'+(r[1]||'')+'|'+(r[2]||''); });
+    var existingKeys  = existingRows.map(function(r){ return normDate(r[0])+'|'+(r[1]||'')+'|'+(r[2]||''); });
     var newRows = vehicleTrips.filter(function(t){
-      var key = (t.date||'')+'|'+(t.driver||'')+'|'+(t.dest||'');
+      var key = normDate(t.date||'')+'|'+(t.driver||'')+'|'+(t.dest||'');
       return !existingKeys.includes(key);
     }).map(function(t){
       return [
@@ -6792,7 +6807,7 @@ function vehicleAddTrip(){
 
   var trip = {
     id:      'TRIP-'+Date.now(),
-    date:    new Date().toLocaleDateString(),
+    date:    new Date().toISOString().slice(0,10),  // ISO "YYYY-MM-DD" — consistent with D1
     driver:  driver === '__other__'
                ? (document.getElementById('veh-driver-other')
                   ? document.getElementById('veh-driver-other').value.trim() : 'Unknown')
@@ -9969,7 +9984,16 @@ function aiDoActions(actions){
       };
     });
     if(!apiTrips.length) return;
-    vehicleTrips = apiTrips;
+    // MERGE: add D1 trips not already in local array (match by id, then by date+driver+dest)
+    var localIds  = vehicleTrips.map(function(t){ return t.id; });
+    var localKeys = vehicleTrips.map(function(t){ return normDate(t.date)+'|'+t.driver+'|'+t.dest; });
+    apiTrips.forEach(function(at){
+      var dupById  = localIds.indexOf(at.id) >= 0;
+      var dupByKey = localKeys.indexOf(normDate(at.date)+'|'+at.driver+'|'+at.dest) >= 0;
+      if(!dupById && !dupByKey) vehicleTrips.push(at);
+    });
+    // Sort newest-first
+    vehicleTrips.sort(function(a,b){ return normDate(b.date) > normDate(a.date) ? 1 : -1; });
     vehicleSave();
     if(typeof renderVehicleLog  === 'function') renderVehicleLog();
     if(typeof renderVehicleStats=== 'function') renderVehicleStats();
