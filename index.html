@@ -8234,76 +8234,59 @@ function fbaExportCSV(){
 
 async function fbaSaveExcel(){
   await msRefreshTokenSilent();
-  if(!_msalToken || !_excelFileId){ excelConnect(); return; }
   if(!fbaRecords.length){ pm('⚠ No FBA records to save.'); return; }
 
-  var sheet    = 'FBA Outbound';
-  var base     = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
-  var auth     = {Authorization:'Bearer '+_msalToken};
-  var hdrs     = {Authorization:'Bearer '+_msalToken,'Content-Type':'application/json'};
-  var rangeUrl = function(addr){ return base+'/worksheets/'+encodeURIComponent(sheet)+'/range(address=\''+addr+'\')'; };
+  var headers = ['Date','Shipment ID','FC','SKUs','Total Units','Boxes','Dims (in)','Wt/Box (lbs)','Carrier','Tracking','Submitted By','Notes'];
+  var rows = fbaRecords.map(function(r){
+    var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(' | ');
+    return [
+      r.date||'', r.shipId||'', r.fc||'', skuStr,
+      r.units!=null?r.units:'', r.boxes!=null?r.boxes:'',
+      r.dims||'', r.weight!=null?r.weight:'',
+      r.carrier||'', r.tracking||'', r.by||'', r.notes||''
+    ];
+  });
 
-  try{
-    pm('⟳ Saving FBA Outbound to Excel…');
+  // Build a proper .xlsx binary from the full fbaRecords dataset
+  pm('⟳ Building FBA Outbound Excel file…');
+  try{ await ensureSheetJS(); }
+  catch(e){ pm('✗ Could not load Excel library — check internet connection.'); return; }
 
-    // ── Ensure the "FBA Outbound" sheet exists ───────────────────────────────
-    var sr = await fetch(base+'/worksheets?$select=name',{headers:auth});
-    if(sr.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
-    var sd = await sr.json();
-    var sheetNames = (sd.value||[]).map(function(s){ return s.name; });
-    if(sheetNames.indexOf(sheet) < 0){
-      await fetch(base+'/worksheets/add',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
-      // Write header row on brand-new sheet
-      await fetch(rangeUrl('A1:L1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[
-        ['Date','Shipment ID','FC','SKUs','Total Units','Boxes','Dims (in)','Wt/Box (lbs)','Carrier','Tracking','Submitted By','Notes']
-      ]})});
+  var buf   = buildXlsxBuffer([{name:'FBA Outbound', headers:headers, rows:rows}]);
+  // Dedicated file — named by year, lives in OneDrive root, independent of the shared workbook
+  var fname = 'FBA_Outbound_'+new Date().getFullYear()+'.xlsx';
+
+  // ── OneDrive: PUT to path-based URL so the file is always named correctly ──
+  // FBA uses its own dedicated file and does NOT share _excelFileId with other modules.
+  if(_msalToken){
+    pm('⟳ Uploading '+fname+' to OneDrive…');
+    try{
+      var url = 'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content';
+      var r = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: 'Bearer '+_msalToken,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        },
+        body: new Uint8Array(buf)
+      });
+      if(r.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
+      if(r.ok){
+        playExcelSaveChime();
+        pm('✓ FBA Outbound saved to OneDrive as "'+fname+'" ('+rows.length+' record'+(rows.length>1?'s':'')+') — open in Excel from OneDrive root.');
+        return;
+      }
+      var ed = await r.json();
+      pm('⚠ OneDrive upload failed ('+r.status+(ed&&ed.error?' — '+(ed.error.message||''):'')+'). Downloading locally instead.');
+    }catch(e){
+      pm('⚠ OneDrive error: '+e.message+' — downloading locally.');
     }
+  }
 
-    // ── Find last used row ───────────────────────────────────────────────────
-    var usedResp = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:auth});
-    if(usedResp.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
-    var usedData = await usedResp.json();
-    var lastRow  = (usedData && usedData.rowCount) ? usedData.rowCount : 0;
-
-    // ── Read existing rows for deduplication (by date + shipId) ─────────────
-    var existingKeys = [];
-    if(lastRow > 1){
-      var exResp = await fetch(rangeUrl('A2:B'+lastRow),{headers:auth});
-      var exData = await exResp.json();
-      existingKeys = ((exData && exData.values) ? exData.values : [])
-        .map(function(r){ return normDate(r[0])+'|'+(r[1]||''); });
-    }
-
-    // ── Filter to new records only ───────────────────────────────────────────
-    var newRows = fbaRecords.filter(function(r){
-      var key = normDate(r.date||'')+'|'+(r.shipId||'');
-      return existingKeys.indexOf(key) < 0;
-    }).map(function(r){
-      var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(' | ');
-      return [
-        r.date||'', r.shipId||'', r.fc||'', skuStr,
-        r.units!=null?r.units:'', r.boxes!=null?r.boxes:'',
-        r.dims||'', r.weight!=null?r.weight:'',
-        r.carrier||'', r.tracking||'', r.by||'', r.notes||''
-      ];
-    });
-
-    if(!newRows.length){ pm('✓ No new FBA records to append — all already saved.'); return; }
-
-    // ── Append new rows below last used row ──────────────────────────────────
-    var startRow = lastRow + 1;
-    var wr = await fetch(rangeUrl('A'+startRow+':L'+(startRow+newRows.length-1)),{
-      method:'PATCH', headers:hdrs,
-      body:JSON.stringify({values:newRows})
-    });
-    if(wr.ok){
-      playExcelSaveChime();
-      pm('✓ FBA Outbound appended → "'+sheet+'" tab ('+newRows.length+' new record'+(newRows.length>1?'s':'')+', row '+startRow+')');
-    } else {
-      var er = await wr.json();
-      pm('✗ Excel: '+((er.error&&er.error.message)||wr.status));
-    }
-  }catch(e){ pm('✗ Save failed: '+e.message); }
+  // ── Local download fallback ───────────────────────────────────────────────
+  xlsxDownloadLocal(buf, fname);
+  playExcelSaveChime();
+  pm('✓ FBA Outbound downloaded as "'+fname+'" ('+rows.length+' record'+(rows.length>1?'s':'')+') — open in Excel or upload to OneDrive.');
 }
 
 window._appInitFn = async function(){try{
