@@ -842,7 +842,7 @@ body{
             saveStaff(); renderProductivity(); pm('✓ Shift stats reset.');
           " style="font-size:9px;">↺ RESET SHIFT</button>
           <button id="excel-connect-btn" class="btn" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;white-space:nowrap;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
-          <button id="excel-save-btn"    class="btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;display:none;" onclick="excelSavePayroll()">📊 SAVE STATS</button>
+          <button id="excel-save-btn"    class="btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;display:none;" onclick="playClickSound();excelSavePayroll()">📊 SAVE STATS</button>
           <button id="excel-settings-btn" style="border-color:var(--bdr);color:var(--td);display:none;padding:6px 8px;font-size:10px;cursor:pointer;background:transparent;border:1px solid;" onclick="excelConnect()" title="Change Excel file / Disconnect">⚙</button>
         </div>
       </div>
@@ -3377,6 +3377,29 @@ function setErr(m){ var b=document.getElementById('err-bar'); b.textContent=m; b
 function clearErr(){ document.getElementById('err-bar').classList.remove('show'); }
 function setFb(t,c){ var el=document.getElementById('scan-fb'); el.textContent=t; el.style.color=c; }
 function pm(m){ document.getElementById('pmsg').textContent=m; }
+
+// ── Button click sound (short snappy tap, no external files) ──
+function playClickSound(){
+  try{
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Layered click: brief filtered noise burst + low-freq thud
+    var buf = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for(var i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*Math.pow(1-(i/data.length),3);
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1200;
+    filter.Q.value = 0.8;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.055);
+    src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+    src.start(); src.stop(ctx.currentTime + 0.06);
+    setTimeout(function(){ ctx.close(); }, 200);
+  }catch(e){}
+}
 
 // ── Excel save success chime (Web Audio API, no external files) ──
 function playExcelSaveChime(){
@@ -8442,7 +8465,7 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">
           <button class="btn" onclick="returnsExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="returnsSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
+          <button class="btn" onclick="playClickSound();returnsSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
           <button class="btn btn-r" onclick="if(confirm('Clear all return records?')){returnsList=[];returnsSave();renderReturnsList();renderReturnsStats();pm('Returns cleared.');}" style="font-size:9px;white-space:nowrap;">✕ CLEAR ALL</button>
         </div>
       </div>
@@ -8620,7 +8643,7 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
           <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
+          <button class="btn" onclick="playClickSound();vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
         </div>
       </div>
 
@@ -8727,7 +8750,7 @@ document.addEventListener('DOMContentLoaded', function(){
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
           <button class="btn" onclick="fbaExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="fbaSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
+          <button class="btn" onclick="playClickSound();fbaSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
         </div>
       </div>
 
