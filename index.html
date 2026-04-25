@@ -5167,7 +5167,7 @@ function spotClick(spotId){
              +'padding:6px 0;border-bottom:1px solid var(--bdr);">'
              +'<div>'
              +'<div style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-14)+'</div>'
-             +'<div style="font-size:9px;color:var(--td);margin-top:1px;">'+( o.skus||'—')+'</div>'
+             +'<div style="font-size:9px;color:var(--td);margin-top:1px;">'+(o.skus&&o.skus.length?o.skus.map(function(s){return s.sku+(s.qty?'×'+s.qty:'');}).join(', '):'—')+'</div>'
              +'</div>'
              +'<div style="font-size:9px;color:var(--cy);">'+(packer?packer.name:'—')+'</div>'
              +'<div style="font-size:8px;padding:2px 7px;border-radius:2px;'
@@ -5237,7 +5237,7 @@ rackClearHighlight();
           var packer = o.assignedTo ? (packers.find(function(p){return p.id===o.assignedTo;})||{name:o.assignedTo}).name : '—';
           return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);gap:10px;">'
             +'<span style="font-family:monospace;font-size:10px;color:var(--tx);">'+o.tracking.slice(-12)+'</span>'
-            +'<span style="font-size:10px;color:var(--td);">'+o.skus+'</span>'
+            +'<span style="font-size:10px;color:var(--td);">'+(o.skus&&o.skus.length?o.skus.map(function(s){return s.sku+(s.qty?'×'+s.qty:'');}).join(', '):'—')+'</span>'
             +'<span style="font-size:10px;color:var(--cy);">'+packer+'</span>'
             +'<span style="font-size:9px;padding:1px 6px;background:'+(o.status==='done'?'#38a16922':'#e53e3e22')+';color:'+(o.status==='done'?'var(--gn)':'var(--rd)')+';">'+o.status.toUpperCase()+'</span>'
             +'</div>';
@@ -5383,7 +5383,7 @@ function rackShowPickRoute(){
   steps.innerHTML = zones.map(function(z, i){
     var info = RACK_INFO[z]||{type:'Storage',color:'var(--cy)'};
     var count = zoneMap[z].length;
-    var skus  = zoneMap[z].map(function(o){return o.skus;}).join(', ');
+    var skus  = zoneMap[z].map(function(o){ return (o.skus&&o.skus.length)?o.skus.map(function(s){return s.sku;}).join('/'):'-'; }).join(', ');
     return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bdr);">'
       +'<div style="width:22px;height:22px;border-radius:50%;background:'+info.color+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;">'+(i+1)+'</div>'
       +'<div style="flex:1;">'
