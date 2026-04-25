@@ -4112,6 +4112,30 @@ function msalInit(){
   }
 }
 
+// Silently refresh the MS Graph access token before every Excel operation.
+// MSAL caches the account in sessionStorage; acquireTokenSilent uses it
+// to get a fresh token without prompting the user.
+async function msRefreshTokenSilent(){
+  if(!_msalInstance) return;
+  try{
+    var accounts = _msalInstance.getAllAccounts();
+    if(!accounts || !accounts.length) return;
+    var result = await _msalInstance.acquireTokenSilent({
+      scopes:  GRAPH_SCOPES,
+      account: accounts[0]
+    });
+    if(result && result.accessToken){
+      _msalToken = result.accessToken;
+      sessionStorage.setItem('warehub_ms_token_'+(_clerkUser&&_clerkUser.id||'default'), _msalToken);
+    }
+  }catch(e){
+    console.warn('[MSAL] Silent refresh failed — token may be expired:', e.message);
+    // Clear stale token so the connect dialog is shown
+    _msalToken = null;
+    sessionStorage.removeItem('warehub_ms_token_'+(_clerkUser&&_clerkUser.id||'default'));
+  }
+}
+
 function excelUpdateUI(){
   var cb = document.getElementById('excel-connect-btn');
   var sb = document.getElementById('excel-save-btn');
@@ -4344,6 +4368,7 @@ async function msEnsureSheet(){
 }
 
 async function excelSavePayroll(){
+  await msRefreshTokenSilent();
   if(!_msalToken||!_excelFileId){ excelConnect(); return; }
   var sheet = 'Productivity';
   var base  = 'https://graph.microsoft.com/v1.0/me/drive/items/'+_excelFileId+'/workbook';
@@ -4400,6 +4425,7 @@ function normDate(s){
 }
 
 async function vehicleSaveExcel(){
+  await msRefreshTokenSilent();
   if(!_msalToken || !_excelFileId){ excelConnect(); return; }
   if(!vehicleTrips.length){ pm('⚠ No trips to save.'); return; }
   var sheet = 'Vehicle Log';
@@ -4418,6 +4444,7 @@ async function vehicleSaveExcel(){
     }
     // Find last used row to APPEND instead of overwrite
     var usedResp = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:auth});
+    if(usedResp.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
     var usedData = await usedResp.json();
     var lastRow  = (usedData && usedData.rowCount) ? usedData.rowCount : 0;
     // Write headers only on first save (empty sheet)
@@ -6231,6 +6258,7 @@ function returnsExportCSV(){
 }
 
 async function returnsSaveExcel(){
+  await msRefreshTokenSilent();
   if(!_msalToken||!_excelFileId){excelConnect();return;}
   if(!returnsList.length){pm('⚠ No returns to save.');return;}
   var sheet='Returns Log';
