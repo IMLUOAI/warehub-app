@@ -8234,6 +8234,8 @@ function fbaExportCSV(){
 
 async function fbaSaveExcel(){
   await msRefreshTokenSilent();
+  // Hard block — same pattern as other save functions. No silent local fallback.
+  if(!_msalToken){ pm('⚠ Excel not connected — please connect your Microsoft account first.'); excelConnect(); return; }
   if(!fbaRecords.length){ pm('⚠ No FBA records to save.'); return; }
 
   var headers = ['Date','Shipment ID','FC','SKUs','Total Units','Boxes','Dims (in)','Wt/Box (lbs)','Carrier','Tracking','Submitted By','Notes'];
@@ -8247,46 +8249,35 @@ async function fbaSaveExcel(){
     ];
   });
 
-  // Build a proper .xlsx binary from the full fbaRecords dataset
   pm('⟳ Building FBA Outbound Excel file…');
   try{ await ensureSheetJS(); }
   catch(e){ pm('✗ Could not load Excel library — check internet connection.'); return; }
 
   var buf   = buildXlsxBuffer([{name:'FBA Outbound', headers:headers, rows:rows}]);
-  // Dedicated file — named by year, lives in OneDrive root, independent of the shared workbook
   var fname = 'FBA_Outbound_'+new Date().getFullYear()+'.xlsx';
 
-  // ── OneDrive: PUT to path-based URL so the file is always named correctly ──
-  // FBA uses its own dedicated file and does NOT share _excelFileId with other modules.
-  if(_msalToken){
-    pm('⟳ Uploading '+fname+' to OneDrive…');
-    try{
-      var url = 'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content';
-      var r = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          Authorization: 'Bearer '+_msalToken,
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        },
-        body: new Uint8Array(buf)
-      });
-      if(r.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
-      if(r.ok){
-        playExcelSaveChime();
-        pm('✓ FBA Outbound saved to OneDrive as "'+fname+'" ('+rows.length+' record'+(rows.length>1?'s':'')+') — open in Excel from OneDrive root.');
-        return;
-      }
-      var ed = await r.json();
-      pm('⚠ OneDrive upload failed ('+r.status+(ed&&ed.error?' — '+(ed.error.message||''):'')+'). Downloading locally instead.');
-    }catch(e){
-      pm('⚠ OneDrive error: '+e.message+' — downloading locally.');
+  pm('⟳ Uploading '+fname+' to OneDrive…');
+  try{
+    var url = 'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(fname)+':/content';
+    var r = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer '+_msalToken,
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      },
+      body: new Uint8Array(buf)
+    });
+    if(r.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
+    if(r.ok){
+      playExcelSaveChime();
+      pm('✓ FBA Outbound saved to OneDrive as "'+fname+'" ('+rows.length+' record'+(rows.length>1?'s':'')+') — open in Excel from OneDrive root.');
+      return;
     }
+    var ed = await r.json().catch(function(){ return {}; });
+    pm('✗ OneDrive upload failed ('+r.status+(ed&&ed.error?' — '+(ed.error.message||''):'')+'). Use Export CSV for a local copy.');
+  }catch(e){
+    pm('✗ OneDrive error: '+e.message+'. Use Export CSV for a local copy.');
   }
-
-  // ── Local download fallback ───────────────────────────────────────────────
-  xlsxDownloadLocal(buf, fname);
-  playExcelSaveChime();
-  pm('✓ FBA Outbound downloaded as "'+fname+'" ('+rows.length+' record'+(rows.length>1?'s':'')+') — open in Excel or upload to OneDrive.');
 }
 
 window._appInitFn = async function(){try{
