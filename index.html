@@ -4486,33 +4486,33 @@ async function vehicleSaveExcel(){
   try{
     // Ensure sheet exists
     var sr = await fetch(base+'/worksheets?$select=name',{headers:auth});
+    if(sr.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
     var sd = await sr.json();
     var names = (sd.value||[]).map(function(s){return s.name;});
     if(!names.includes(sheet)){
       await fetch(base+'/worksheets',{method:'POST',headers:hdrs,body:JSON.stringify({name:sheet})});
     }
-    // Find last used row to APPEND instead of overwrite
-    var usedResp = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=rowCount',{headers:auth});
-    if(usedResp.status===401){ pm('✗ Microsoft token expired — reconnect Excel.'); excelConnect(); return; }
-    var usedData = await usedResp.json();
-    var lastRow  = (usedData && usedData.rowCount) ? usedData.rowCount : 0;
-    // Write headers only on first save (empty sheet)
-    if(lastRow === 0){
-      var vModel = _vehicleConfig.model || 'Company Vehicle';
-      var vPlate = _vehicleConfig.plate || '—';
-      await fetch(rangeUrl('A1:I1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Vehicle: '+vModel+'   |   Plate: '+vPlate,'','','','','','','','']]})});
-      await fetch(rangeUrl('A2:I2'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Date','Driver','Destination','Departure','Return','ODO Start','ODO End','Miles','Notes']]})});
-      lastRow = 2;
-    }
-    // Build only new rows not yet in Excel — compare by date+driver+dest
-    var existingCheck = await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange?$select=values',{headers:auth});
-    var existingData  = await existingCheck.json();
-    var existingRows  = (existingData && existingData.values) ? existingData.values.slice(2) : [];
-    var existingKeys  = existingRows.map(function(r){ return normDate(r[0])+'|'+(r[1]||'')+'|'+(r[2]||''); });
-    var newRows = vehicleTrips.filter(function(t){
-      var key = normDate(t.date||'')+'|'+(t.driver||'')+'|'+(t.dest||'');
-      return !existingKeys.includes(key);
-    }).map(function(t){
+
+    // Clear entire sheet and rewrite from vehicleTrips (source of truth).
+    // This keeps the sheet sorted oldest → newest on every save, regardless of
+    // what order trips were entered or loaded from D1.
+    await fetch(base+'/worksheets/'+encodeURIComponent(sheet)+'/usedRange/clear',
+      {method:'POST',headers:hdrs,body:JSON.stringify({applyTo:'All'})});
+
+    // Header rows
+    var vModel = _vehicleConfig.model || 'Company Vehicle';
+    var vPlate = _vehicleConfig.plate || '—';
+    await fetch(rangeUrl('A1:I1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Vehicle: '+vModel+'   |   Plate: '+vPlate,'','','','','','','','']]})});
+    await fetch(rangeUrl('A2:I2'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:[['Date','Driver','Destination','Departure','Return','ODO Start','ODO End','Miles','Notes']]})});
+
+    // Sort all trips ascending by date (oldest → newest), then by departure time
+    var sorted = vehicleTrips.slice().sort(function(a,b){
+      var da=normDate(a.date||''), db=normDate(b.date||'');
+      if(da!==db) return da<db?-1:1;
+      return (a.depart||'')<(b.depart||'')?-1:(a.depart||'')>(b.depart||'')?1:0;
+    });
+
+    var rows = sorted.map(function(t){
       return [
         t.date||'', t.driver||'', t.dest||'',
         t.depart||'', t.ret||'',
@@ -4522,10 +4522,9 @@ async function vehicleSaveExcel(){
         t.notes||''
       ];
     });
-    if(!newRows.length){ pm('✓ No new trips to append — all already saved.'); return; }
-    var startRow = lastRow + 1;
-    var wr = await fetch(rangeUrl('A'+startRow+':I'+(startRow+newRows.length-1)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:newRows})});
-    if(wr.ok){ playExcelSaveChime(); pm('✓ Vehicle log appended → "'+sheet+'" tab ('+newRows.length+' new trip'+(newRows.length>1?'s':'')+', row '+startRow+')'); }
+
+    var wr = await fetch(rangeUrl('A3:I'+(2+rows.length)),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:rows})});
+    if(wr.ok){ playExcelSaveChime(); pm('✓ Vehicle log saved → "'+sheet+'" tab ('+rows.length+' trip'+(rows.length>1?'s':'')+', sorted oldest → newest)'); }
     else{ var er=await wr.json(); pm('✗ Excel: '+((er.error&&er.error.message)||wr.status)); }
   }catch(e){ pm('✗ Save failed: '+e.message); }
 }
@@ -6330,8 +6329,13 @@ async function returnsSaveExcel(){
     // Write header row
     var hdr=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
     await fetch(rangeUrl('A1:M1'),{method:'PATCH',headers:hdrs,body:JSON.stringify({values:hdr})});
-    // Write all records from local returnsList (full source of truth)
-    var data=returnsList.map(function(r){
+    // Write all records sorted oldest → newest (calendar order)
+    var data=returnsList.slice().sort(function(a,b){
+      var da=normDate(a.date||''), db=normDate(b.date||'');
+      if(da!==db) return da<db?-1:1;
+      // Secondary sort: time ascending within the same date
+      return (a.time||'')<(b.time||'')?-1:(a.time||'')>(b.time||'')?1:0;
+    }).map(function(r){
       return [r.date,r.time,r.tracking,r.carrier||'',
         RETURN_TYPES[r.type]||r.type,
         (RETURN_CONDITIONS[r.condition]||r.condition||'').replace(/[✅⚠❌🚨]/g,'').trim(),
