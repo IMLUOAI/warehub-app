@@ -1444,22 +1444,29 @@ async function renderThumbnailsFromPdf(pdfAb, metaOrders){
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
   var pdf = await pdfjsLib.getDocument({data: pdfAb.slice(0)}).promise;
-  var IMG_SCALE = Math.min(2.0, window.devicePixelRatio || 1);
-  for(var i=0; i<metaOrders.length; i++){
-    var m = metaOrders[i];
-    if(m.pageIndex == null) continue;
-    var page   = await pdf.getPage(m.pageIndex);
-    var vp     = page.getViewport({scale: IMG_SCALE});
-    var canvas = document.createElement('canvas');
-    canvas.width = vp.width; canvas.height = vp.height;
-    var ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'medium';
-    await page.render({canvasContext:ctx, viewport:vp}).promise;
-    var liveOrder = orders.find(function(o){ return o.tracking === m.tracking; });
-    if(liveOrder) liveOrder.pageImg = canvas.toDataURL('image/jpeg', 0.92);
-    canvas.width = 0; canvas.height = 0;
-    if((i+1) % 10 === 0){ renderQueue(); renderAssignPanel(); await new Promise(function(r){ setTimeout(r, 0); }); }
+  // 1.5× gives ~108 DPI — readable in UI cards, uses 44% less GPU/CPU memory than 2×
+  var IMG_SCALE = Math.min(1.5, window.devicePixelRatio || 1);
+  try{
+    for(var i=0; i<metaOrders.length; i++){
+      var m = metaOrders[i];
+      if(m.pageIndex == null) continue;
+      var page   = await pdf.getPage(m.pageIndex);
+      var vp     = page.getViewport({scale: IMG_SCALE});
+      var canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      var ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'medium';
+      await page.render({canvasContext:ctx, viewport:vp}).promise;
+      var liveOrder = orders.find(function(o){ return o.tracking === m.tracking; });
+      if(liveOrder) liveOrder.pageImg = canvas.toDataURL('image/jpeg', 0.80);
+      canvas.width = 0; canvas.height = 0;
+      if((i+1) % 10 === 0){ renderQueue(); renderAssignPanel(); await new Promise(function(r){ setTimeout(r, 0); }); }
+    }
+  } finally {
+    // Always destroy the pdf.js document — failure to do so leaves all decoded
+    // page bitmaps alive in the worker indefinitely, causing multi-GB memory leaks.
+    try{ pdf.destroy(); }catch(e){}
   }
   renderQueue(); renderAssignPanel();
   pm('✓ Thumbnails ready — '+metaOrders.length+' label(s) loaded.');
@@ -1482,20 +1489,24 @@ async function renderPagesForPrint(pageIndices, progressCb){
   var pdf = await pdfjsLib.getDocument({data: pdfAb.slice(0)}).promise;
   var PRINT_SCALE = 4.0;   // 4× scale ≈ 288 DPI lossless PNG
   var result = {};
-  for(var i=0; i<pageIndices.length; i++){
-    var idx = pageIndices[i];
-    if(idx == null) continue;
-    var page   = await pdf.getPage(idx);
-    var vp     = page.getViewport({scale: PRINT_SCALE});
-    var canvas = document.createElement('canvas');
-    canvas.width = vp.width; canvas.height = vp.height;
-    var ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    await page.render({canvasContext:ctx, viewport:vp}).promise;
-    result[idx] = canvas.toDataURL('image/png');
-    canvas.width = 0; canvas.height = 0;
-    if(progressCb) progressCb(i+1, pageIndices.length);
+  try{
+    for(var i=0; i<pageIndices.length; i++){
+      var idx = pageIndices[i];
+      if(idx == null) continue;
+      var page   = await pdf.getPage(idx);
+      var vp     = page.getViewport({scale: PRINT_SCALE});
+      var canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      var ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      await page.render({canvasContext:ctx, viewport:vp}).promise;
+      result[idx] = canvas.toDataURL('image/png');
+      canvas.width = 0; canvas.height = 0;
+      if(progressCb) progressCb(i+1, pageIndices.length);
+    }
+  } finally {
+    try{ pdf.destroy(); }catch(e){}
   }
   return result;
 }
@@ -1533,9 +1544,9 @@ async function parsePdf(file){
     pm('⟳ Parsing '+n+' page(s)…');
     dbg('Pages: '+n);
 
-    // Image scale: 2.0 gives ~144 DPI on label output — sharp enough for thermal printing
-    // without excessive memory. Use JPEG quality 0.92 for minimal barcode artifacts.
-    var IMG_SCALE = Math.min(2.0, window.devicePixelRatio || 1);
+    // 1.5× gives ~108 DPI — clear enough for UI thumbnail cards and reduces per-image
+    // heap size by ~44% vs 2×. Print path uses its own 4× render separately.
+    var IMG_SCALE = Math.min(1.5, window.devicePixelRatio || 1);
     var out = [];
 
     for(var p=1; p<=n; p++){
@@ -1619,7 +1630,7 @@ async function parsePdf(file){
         ctx2.imageSmoothingEnabled = true;
         ctx2.imageSmoothingQuality = 'medium';
         await page.render({canvasContext:ctx2, viewport:vp2}).promise;
-        o.pageImg = canvas.toDataURL('image/jpeg', 0.92);
+        o.pageImg = canvas.toDataURL('image/jpeg', 0.80);
         o.pageW   = vp2.width;
         o.pageH   = vp2.height;
         // Release canvas memory immediately
@@ -1627,17 +1638,20 @@ async function parsePdf(file){
         out.push(o);
         dbg('✓ p'+p+': '+o.tracking+' ('+o.carrier+') shelf='+o.shelf);
       } else {
-        // Store skipped page info WITH a rendered image so we can reprint it
-        var vpSkip = page.getViewport({scale: IMG_SCALE});
-        var cSkip  = document.createElement('canvas');
-        cSkip.width  = vpSkip.width;
-        cSkip.height = vpSkip.height;
-        var ctxSkip = cSkip.getContext('2d');
-        ctxSkip.imageSmoothingEnabled = true;
-        ctxSkip.imageSmoothingQuality = 'medium';
-        await page.render({canvasContext: ctxSkip, viewport: vpSkip}).promise;
-        var imgSkip = cSkip.toDataURL('image/jpeg', 0.88);
-        cSkip.width = 0; cSkip.height = 0;   // free canvas memory
+        // Store skipped page info — cap image renders at 50 to avoid unbounded memory
+        var imgSkip = null;
+        if(window._skippedPages.length < 50){
+          var vpSkip = page.getViewport({scale: IMG_SCALE});
+          var cSkip  = document.createElement('canvas');
+          cSkip.width  = vpSkip.width;
+          cSkip.height = vpSkip.height;
+          var ctxSkip = cSkip.getContext('2d');
+          ctxSkip.imageSmoothingEnabled = true;
+          ctxSkip.imageSmoothingQuality = 'medium';
+          await page.render({canvasContext: ctxSkip, viewport: vpSkip}).promise;
+          imgSkip = cSkip.toDataURL('image/jpeg', 0.75);
+          cSkip.width = 0; cSkip.height = 0;
+        }
         window._skippedPages.push({
           pageNum: p,
           tokens:  words.slice(0, 12).map(function(w){ return w.text; }),
@@ -1656,6 +1670,10 @@ async function parsePdf(file){
     }
 
     showDebug();
+    // Release pdf.js document — frees all decoded page bitmaps from the worker.
+    // Must happen before initOrders so the worker memory is freed promptly.
+    try{ pdf.destroy(); }catch(e){}
+
     if(!out.length){ pm('⚠ No orders found — check debug log below'); return; }
     initOrders(out);
     // Persist raw PDF + order metadata to IndexedDB for refresh survival
