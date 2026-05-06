@@ -1720,7 +1720,9 @@ function extractOrder(words, pageH){
   // Guard: never assign a synthetic Uniuni ID to a page that looks like a UPS label.
   // Without this, tall UPS PDFs (pageH >= 600 at higher DPI) that fail tracking
   // extraction could fall into the Uniuni path and show as "Uniuni" on the divider.
-  if(!tracking && !hintUPS && (pageH >= 600 || /UNIUNI/i.test(words.map(function(w){return w.text;}).join(' ')))){
+  var _allText = words.map(function(w){return w.text;}).join(' ');
+  var _looksLikeUPS = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(_allText);
+  if(!tracking && !_looksLikeUPS && (pageH >= 600 || /UNIUNI/i.test(_allText))){
 
     var uuSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
     if(uuSkuW.length){
