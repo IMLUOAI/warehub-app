@@ -1083,17 +1083,27 @@ function matchTracking(words){
   // ── Uniuni early extraction — BEFORE single-word scan ────────────────────
   // Uniuni labels carry both a UUS... own tracking AND a UPS 1Z delivery barcode.
   // The single-word TPAT scan would hit 1Z (index 1) before UUS (index 5) and
-  // return the wrong carrier.  Searching for UUS in the full concatenated text
-  // first guarantees the correct Uniuni tracking is returned.
+  // return the wrong carrier.  Searching per-word for UUS first guarantees the
+  // correct Uniuni tracking is returned without false-positive concat matches.
   //
-  // Guard: only run when the page EXPLICITLY prints "UNIUNI" brand text.
-  // If hintUniuni fired only from an incidental "UUS" string (product barcode,
-  // warehouse code, etc.) on a pure UPS label, skipping this path lets the
-  // TPAT scan correctly identify the 1Z UPS tracking instead.
+  // Guard: only run when the page EXPLICITLY prints "UNIUNI" brand text AND
+  // a word that IS a standalone UUS tracking token (not embedded in other text).
+  // Full-document concat was too greedy — product codes / reference numbers
+  // containing "UUS" would match and override the real 1Z UPS tracking.
   if(hintUniuni && /uniuni/i.test(allText)){
-    var uuEarlyAll = words.map(function(w){return clean(w.text);}).join('');
-    var uuEarlyM = uuEarlyAll.match(/(UUS[A-Z0-9]{10,22})/i);
-    if(uuEarlyM){ dbg('  Uniuni early match: '+uuEarlyM[1]); return uuEarlyM[1].toUpperCase(); }
+    for(var uuWi=0; uuWi<words.length; uuWi++){
+      var uuWc = clean(words[uuWi].text);
+      if(/^UUS[A-Z0-9]{10,22}$/i.test(uuWc)){
+        dbg('  Uniuni early match (word): '+uuWc);
+        return uuWc.toUpperCase();
+      }
+    }
+    // Fallback: try same-row concat for split barcodes (two adjacent tokens)
+    for(var uuRi=0; uuRi<rowKeys.length; uuRi++){
+      var uuRow = rows[rowKeys[uuRi]].map(function(w){return clean(w.text);}).join('');
+      var uuM = uuRow.match(/^(UUS[A-Z0-9]{10,22})$/i);
+      if(uuM){ dbg('  Uniuni early match (row): '+uuM[1]); return uuM[1].toUpperCase(); }
+    }
   }
 
   // ── Single-word TPAT scan ─────────────────────────────────────────────────
