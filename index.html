@@ -941,14 +941,14 @@ var CR = {
   USPS:   {c:'#00ff88', t:function(s){return /^9[0-9]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s)||/^70\d{14}$/.test(s);}},
   SWIFT:  {c:'#eab308', t:function(s){return /^SW/i.test(s);}},
   SpeedX: {c:'#ff3d5a', t:function(s){return /^(SPX|SDX)/i.test(s);}},
-  Uniuni: {c:'#4ade80', t:function(s){return /^UUS/i.test(s);}},
+  Uniuni: {c:'#ffb300', display:'UPS', t:function(s){return /^UUS/i.test(s);}},
   LSO:    {c:'#fb923c', t:function(s){return /^(LSO|1L[0-9])/i.test(s);}},
   OnTrac: {c:'#38bdf8', t:function(s){return /^[CD]\d{14}$/.test(s);}},
   Amazon: {c:'#f59e0b', t:function(s){return /^(TBA|1DS)/i.test(s);}},
   DHL:    {c:'#facc15', t:function(s){return /^(GM\d{16,18}|JD\d{18,22}|\d{10,11}$)/.test(s);}}
 };
-function dc(s){ for(var n in CR) if(CR[n].t(s)) return n; return 'Unknown'; }
-function cc(c){ return (CR[c]&&CR[c].c)||'#4a6080'; }
+function dc(s){ for(var n in CR){ if(CR[n].t(s)) return CR[n].display || n; } return 'Unknown'; }
+function cc(c){ for(var n in CR){ if((CR[n].display||n)===c) return CR[n].c; } return '#4a6080'; }
 
 function gv(name){
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
@@ -1741,7 +1741,7 @@ function extractOrder(words, pageH){
       var uuShelf  = uuShelfW.length ? uuShelfW[0].text : '';
       var uuSku    = uuSkuW[0].text.split('*')[0];
       tracking = 'UUS-' + uuSku + (uuShelf ? '-' + uuShelf : '') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
-      carrier  = 'Uniuni';
+      carrier  = 'UPS';
       dbg('  Uniuni tall-page detected, synthetic ID: ' + tracking);
     }
   }
