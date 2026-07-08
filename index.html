@@ -4316,7 +4316,6 @@ async function msFindFile(fname, msgEl){
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
     var d1 = await r1.json();
-    console.log('Graph path lookup:', r1.status, d1);
     if(r1.ok && d1.id){
       _excelFileId=d1.id; excelSaveConfig();
       setMsg('✓ Found: '+d1.name,'var(--gn)');
@@ -4331,7 +4330,6 @@ async function msFindFile(fname, msgEl){
       {headers:{Authorization:'Bearer '+_msalToken}}
     );
     var d2 = await r2.json();
-    console.log('Graph search:', r2.status, d2);
     if(r2.ok && d2.value && d2.value.length){
       var match = d2.value.find(function(f){ return f.name.toLowerCase()===fname.toLowerCase(); }) || d2.value[0];
       _excelFileId=match.id; excelSaveConfig();
@@ -4567,11 +4565,12 @@ async function msEnsureVehicleSheet(){
   }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
 }
 
+var GMAPS_DEFAULT_KEY = 'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw';
 var _gmapsLoaded = false;
-var _gmapsKey    = 'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw';
+var _gmapsKey    = GMAPS_DEFAULT_KEY;
 
 function gmapsLoadConfig(){
-  try{ _gmapsKey=localStorage.getItem('warehub_gmaps_key')||'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw'; }catch(e){ _gmapsKey='AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw'; }
+  try{ _gmapsKey=localStorage.getItem('warehub_gmaps_key')||GMAPS_DEFAULT_KEY; }catch(e){ _gmapsKey=GMAPS_DEFAULT_KEY; }
 }
 
 function gmapsSaveKey(key){
@@ -4685,7 +4684,7 @@ function vehMapSearch(){
     var placeholder = document.getElementById('veh-map-placeholder');
     if(iframe && placeholder){
       var embedQ = encodeURIComponent(query);
-      iframe.src = 'https://www.google.com/maps/embed/v1/search?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+embedQ+'&zoom=13';
+      iframe.src = 'https://www.google.com/maps/embed/v1/search?key='+_gmapsKey+'&q='+embedQ+'&zoom=13';
       placeholder.style.display='none';
 
       document.getElementById('veh-map-selected').textContent = '📍 '+query;
@@ -4751,7 +4750,7 @@ function vehMapSearch(){
           row.setAttribute('data-selected','1');
           row.style.background='var(--bg)';
           var addr = encodeURIComponent((place.name||'')+' '+(place.formatted_address||''));
-          iframe.src = 'https://www.google.com/maps/embed/v1/place?key=AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw&q='+addr+'&zoom=15';
+          iframe.src = 'https://www.google.com/maps/embed/v1/place?key='+_gmapsKey+'&q='+addr+'&zoom=15';
           placeholder.style.display='none';
           var label = place.name+(place.formatted_address?'  —  '+place.formatted_address:'');
           document.getElementById('veh-map-selected').textContent = '📍 '+label;
@@ -5721,7 +5720,6 @@ async function kvSaveStaff(){
   if(!proxy) return;
   // Safety guard: never overwrite KV with empty data
   if(!packers.length && !managers.length){
-    console.log('[Warehub KV] Skipping save — no staff data to push');
     return;
   }
   var dot = document.getElementById('cloud-status');
@@ -5732,16 +5730,13 @@ async function kvSaveStaff(){
       managers: managers,
       savedAt:  new Date().toISOString()
     });
-    console.log('[Warehub KV] PUT /staff to:', proxy.replace(/\/+$/,'')+'/staff');
     var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: payload
     });
-    console.log('[Warehub KV] PUT /staff response:', r.status);
     if(r.ok){
       if(dot){ dot.style.color='var(--gn)'; dot.title='Cloud sync: saved '+new Date().toLocaleTimeString(); }
-      console.log('[Warehub] Staff saved to KV');
     } else {
       if(dot) dot.style.color = 'var(--rd)';
       console.warn('[Warehub] KV save error:', r.status);
@@ -5755,12 +5750,10 @@ async function kvSaveStaff(){
 async function kvLoadStaff(){
   var proxy = kvGetProxy();
   if(!proxy){ console.warn('[Warehub KV] No proxy URL'); return false; }
-  console.log('[Warehub KV] Loading staff from:', proxy.replace(/\/+$/,'')+'/staff');
   var dot = document.getElementById('cloud-status');
   try{
     if(dot){ dot.style.color='var(--am)'; dot.title='Cloud sync: connecting…'; }
     var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {mode:'cors'});
-    console.log('[Warehub KV] GET /staff response:', r.status);
     if(!r.ok){ if(dot) dot.style.color='var(--rd)'; return false; }
     var data = await r.json();
     if(dot) dot.style.color = 'var(--gn)';
@@ -6405,7 +6398,6 @@ async function returnsAutoSaveExcel(entry){
       base+'/worksheets/'+encodeURIComponent(sheet)+"/range(address='"+addr+"')",
       {method:'PATCH',headers:hdrs,body:JSON.stringify({values:row})}
     );
-    console.log('[Warehub] Return auto-saved to Excel row '+nextRow);
   }catch(e){
     console.warn('[Warehub] Returns auto-save failed:',e.message);
   }
@@ -9443,7 +9435,6 @@ async function aiAsk(text){
   // Try proxy URL first (user-configured), then direct (works locally, not on GitHub Pages)
   var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev';
   var apiUrl = proxyUrl || 'https://api.anthropic.com/v1/messages';
-  console.log('[AI] Sending POST to:', apiUrl);
 
   try{
     var headers = {'Content-Type':'application/json'};
@@ -9465,7 +9456,6 @@ async function aiAsk(text){
     if(!resp.ok){
       var status=resp.status;
       var errBody = await resp.text();
-      console.log('[AI] Error response:', status, errBody);
       if(status===401||status===403){
         loadDiv.innerHTML='✗ AI auth error ('+status+'). Set up a Cloudflare Worker proxy — click the ⚙ in the AI panel.';
       } else {
@@ -9474,7 +9464,6 @@ async function aiAsk(text){
       _aiLoading=false; return;
     }
     var data=await resp.json();
-    console.log('[AI] Response:', data);
     // Extract text from content blocks (may include tool_use blocks from web search)
     var reply='';
     if(data.content && Array.isArray(data.content)){
@@ -10287,7 +10276,6 @@ function aiDoActions(actions){
   // ════════════════════════════════════════════════════════════════
 
   window.apiLoadAll = async function(){
-    console.log('[WH-API] Loading all sections from cloud…');
     await window.apiLoadPackers();
     await window.apiLoadOrders();
     await window.apiLoadReturns();
@@ -10296,7 +10284,6 @@ function aiDoActions(actions){
     await window.apiLoadSettings();
     // Load AI insights last (non-blocking)
     insightsLoad().catch(function(e){ console.warn('[WH-AI] Insights load failed:', e.message); });
-    console.log('[WH-API] Cloud load complete.');
   };
 
 })();

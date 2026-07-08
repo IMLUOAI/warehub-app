@@ -45,11 +45,12 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Vanilla HTML/CSS/JS — single `index.html` (~345KB), no framework |
+| Frontend | Vanilla HTML/CSS/JS — single `index.html` (~505KB), no framework |
 | Layout | CSS Grid (body) + `position:absolute` views, visibility toggle |
 | Theme | Midnight Slate — `#1a1f2e` base, `#818cf8` indigo accent |
 | PDF Parsing | pdf.js 3.11.174 — lazy loaded on first PDF drop; renders labels at 2.0× scale / JPEG 92% |
 | Auth | MSAL.js 2.37.0 — lazy loaded on Excel connect |
+| Excel Export | SheetJS (xlsx) 0.18.5 — lazy loaded on Excel connect |
 | Maps | Google Maps JS API + Places API (`loading=async`) |
 | AI | Anthropic Claude Sonnet via Cloudflare Worker proxy |
 | PIN Security | SHA-256 (WebCrypto) + Cloudflare KV |
@@ -255,7 +256,7 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 
 ```
 warehub-app/
-├── index.html      ← Entire app (~345KB, single file)
+├── index.html      ← Entire app (~505KB, single file)
 └── README.md       ← This file
 ```
 
