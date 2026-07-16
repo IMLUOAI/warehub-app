@@ -7360,9 +7360,20 @@ var FBA_FC_CODES_SRC = '(ONT|PHX|LAX|LGB|SNA|MDW|MKE|ORD|SDF|RNO|TEB|HOU|BWI|EWR
 var FBA_FC_CODES = new RegExp('\\b'+FBA_FC_CODES_SRC+'\\b','g');
 
 // ── Core parser — groups pages by unique FBA shipment ID ─────────
+// Some FBA box-label generators print a per-box ID with a "U000001"-style
+// suffix appended to the shared shipment ID (e.g. "FBA19J38R6RDU000001",
+// "...U000002", "...U000003" — one per box, same shipment). Strip the
+// suffix so all boxes of one shipment group together instead of each
+// becoming its own "shipment" record with only 1 of N boxes found.
+function fbaBaseShipId(raw){
+  var m = raw.match(/^(FBA[A-Z0-9]+?)U(\d{5,7})$/);
+  return m ? m[1] : raw;
+}
+
 function fbaParseLabels(allText, pageTexts){
   var shipMap = {};          // shipId → aggregated data
   var unrecognizedPages = []; // 1-indexed page numbers with no FBA ID
+  var carrierPages = [];      // pages with no FBA ID but that look like a carrier label
 
   pageTexts.forEach(function(pageText, pageIdx){
     // Support {spaced, compact, alnum} object or legacy plain string
@@ -7375,8 +7386,15 @@ function fbaParseLabels(allText, pageTexts){
     // so a missed match in one form is caught by the next.
     // ════════════════════════════════════════════════════════════
 
-    // ── FBA Shipment ID — 4-tier extraction ─────────────────────
+    // ── FBA Shipment ID — 5-tier extraction ─────────────────────
     var fbaIds = new Set();
+
+    // Tier 0: precise match for the "...U######" box-suffix shape, using a
+    // lazy core quantifier so it stops as soon as that shape is satisfied
+    // instead of greedily eating into the next field on the label (e.g.
+    // "...U000001" immediately followed by "Single SKU" on the label).
+    (compact.match(/FBA[A-Z0-9]{6,16}?U\d{5,7}/gi)||[]).forEach(function(s){ fbaIds.add(s.toUpperCase()); });
+    (alnum.match(/FBA[A-Z0-9]{6,16}?U\d{5,7}/gi)||[]).forEach(function(s){ fbaIds.add(s.toUpperCase()); });
 
     // Tier 1: compact (items stripped of internal whitespace, concatenated)
     (compact.match(/FBA[A-Z0-9]{8,18}/gi)||[]).forEach(function(s){ fbaIds.add(s.toUpperCase()); });
@@ -7401,10 +7419,31 @@ function fbaParseLabels(allText, pageTexts){
       if(/^FBA[A-Z0-9]{8,18}$/.test(cleaned)) fbaIds.add(cleaned);
     }
 
-    var ids = Array.from(fbaIds);
+    // De-overrun: compact/alnum blob-scanning has no separator to stop at,
+    // so a greedy tier can swallow a few chars of the next field (e.g.
+    // "...U000001" + "Single SKU" -> "...U000001SI"). When one candidate
+    // is a strict prefix of another, the shorter one is the real ID.
+    var rawIds = Array.from(fbaIds).sort(function(a,b){ return a.length-b.length; });
+    var cleanIds = [];
+    rawIds.forEach(function(id){
+      if(!cleanIds.some(function(k){ return id.indexOf(k)===0; })) cleanIds.push(id);
+    });
+    var ids = cleanIds.map(fbaBaseShipId);
+
     if(!ids.length){
-      // Record snippet so parse report can show what was on this page
-      unrecognizedPages.push({ page: pageIdx + 1, snippet: txt.slice(0,120).replace(/\s+/g,' ') });
+      // No FBA ID on this page — is it a carrier-only label (UPS/FedEx)
+      // we can still pull tracking/weight/dims from? FBA box labels and
+      // carrier shipping labels often share zero text in common (no
+      // FBA reference printed on the carrier label at all), so a page
+      // like this can't be grouped by ID — it gets matched to a
+      // shipment by page-position instead, after this loop.
+      var looksCarrier = /\bTRK#|\bMPS#|\bMstr#\b/i.test(txt) || /1Z[A-Z0-9]{16}/i.test(alnum);
+      if(looksCarrier){
+        carrierPages.push({ pageIdx: pageIdx, txt: txt, compact: compact, alnum: alnum });
+      } else {
+        // Record snippet so parse report can show what was on this page
+        unrecognizedPages.push({ page: pageIdx + 1, snippet: txt.slice(0,120).replace(/\s+/g,' ') });
+      }
       return;
     }
 
@@ -7413,14 +7452,17 @@ function fbaParseLabels(allText, pageTexts){
       shipMap[shipId] = {
         shipId:       shipId,
         pageTexts:    [],
+        pageIdxs:     [],
         totalBoxes:   null,
         boxNums:      [],
         trackingNums: [],
         pagesNoTrk:   0,
         skuQtyMap:    {},
+        carrierKind:  null,
       };
     }
     shipMap[shipId].pageTexts.push(txt);
+    shipMap[shipId].pageIdxs.push(pageIdx);
 
     // ── Box number: "Box 3 of 12" — 4-tier extraction ───────────
     // Tier 1: canonical "Box X of Y"
@@ -7464,6 +7506,18 @@ function fbaParseLabels(allText, pageTexts){
       shipMap[shipId].skuQtyMap[fn] = (shipMap[shipId].skuQtyMap[fn]||0) + (qty||0);
     }
 
+    // ── "Single SKU" plain-text format — some label generators print a
+    //    human-readable SKU name instead of an FNSKU code, e.g.
+    //    "Single SKU  Spray-8 Qty 24 Spray-8" ─────────────────────────
+    var singleSkuM = txt.match(/Single\s+SKU\s+([A-Za-z0-9][A-Za-z0-9\-_.]{1,40}?)\s+Qty\s+(\d+)/i);
+    if(singleSkuM){
+      var ssName = singleSkuM[1].trim();
+      var ssQty  = parseInt(singleSkuM[2]) || 0;
+      // Each box's own page reports that box's quantity — sum across
+      // boxes, same as the FNSKU tier above (e.g. 24/box x 3 boxes = 72).
+      if(ssName) shipMap[shipId].skuQtyMap[ssName] = (shipMap[shipId].skuQtyMap[ssName]||0) + ssQty;
+    }
+
     // ── UPS 1Z Tracking — 4-tier extraction ─────────────────────
     // Format: 1Z + 16 alphanumeric = exactly 18 chars
     var upsFound = false;
@@ -7501,15 +7555,6 @@ function fbaParseLabels(allText, pageTexts){
       }
     }
 
-    // ── FedEx numeric tracking (12–22 digits, fallback if no UPS) ─
-    if(!upsFound){
-      var fedM = txt.match(/\b(\d{12,22})\b/g)||[];
-      fedM.forEach(function(t){
-        if(t.length>=12 && !shipMap[shipId].trackingNums.includes(t))
-          shipMap[shipId].trackingNums.push(t);
-      });
-    }
-
     // ── Amazon Logistics TBA tracking ────────────────────────────
     var tbaM = compact.match(/TBA\d{12,16}/i) || txt.match(/\b(TBA\d{12,16})\b/i);
     if(tbaM){
@@ -7520,10 +7565,72 @@ function fbaParseLabels(allText, pageTexts){
     if(!upsFound && !tbaM) shipMap[shipId].pagesNoTrk++;
   });
 
+  // ── Pair carrier-only pages with FBA shipments ──────────────────
+  // Carrier (UPS/FedEx) labels rarely reference the FBA shipment ID at
+  // all, so there's no shared text to key a match on. Labels are always
+  // generated back-to-back per shipment though, so pages that share a
+  // FedEx master tracking number are grouped, then matched to whichever
+  // shipment's pages sit closest to them in the PDF. With exactly one
+  // shipment in the batch (the common case) this is just a direct merge.
+  var shipIds = Object.keys(shipMap);
+  if(carrierPages.length && shipIds.length){
+    var byMaster = {};
+    carrierPages.forEach(function(cp){
+      var mstrM = cp.txt.match(/Mstr#\s*([\d\s]{10,25})/i) || cp.txt.match(/TRK#\s*([\d\s]{10,25})/i);
+      var key = mstrM ? mstrM[1].replace(/\s+/g,'') : ('p'+cp.pageIdx);
+      if(!byMaster[key]) byMaster[key] = { pages: [], minIdx: cp.pageIdx, maxIdx: cp.pageIdx };
+      byMaster[key].pages.push(cp);
+      byMaster[key].minIdx = Math.min(byMaster[key].minIdx, cp.pageIdx);
+      byMaster[key].maxIdx = Math.max(byMaster[key].maxIdx, cp.pageIdx);
+    });
+    var carrierGroups = Object.values(byMaster);
+
+    var shipRanges = {};
+    shipIds.forEach(function(sid){
+      var idxs = shipMap[sid].pageIdxs;
+      shipRanges[sid] = { min: Math.min.apply(null, idxs), max: Math.max.apply(null, idxs) };
+    });
+
+    carrierGroups.forEach(function(cg){
+      var targetSid = shipIds[0];
+      if(shipIds.length > 1){
+        var bestDist = Infinity;
+        shipIds.forEach(function(sid){
+          var r = shipRanges[sid];
+          var dist = cg.minIdx > r.max ? (cg.minIdx - r.max) : (cg.maxIdx < r.min ? (r.min - cg.maxIdx) : 0);
+          if(dist < bestDist){ bestDist = dist; targetSid = sid; }
+        });
+      }
+      var s = shipMap[targetSid];
+      cg.pages.forEach(function(cp){
+        s.pageTexts.push(cp.txt);
+        var isFedex = /\bTRK#|\bMPS#|\bMstr#\b/i.test(cp.txt);
+        // FedEx Ground master/piece tracking (TRK# on the master page,
+        // Mstr# echoed on every piece page — same value, either works)
+        var trkM = cp.txt.match(/TRK#\s*([\d\s]{10,25})/i) || cp.txt.match(/Mstr#\s*([\d\s]{10,25})/i);
+        if(trkM){
+          var trkT = trkM[1].replace(/\s+/g,'');
+          if(trkT.length>=10 && !s.trackingNums.includes(trkT)) s.trackingNums.push(trkT);
+        }
+        var cu1 = cp.compact.match(/1Z[A-Z0-9]{16}/i) || cp.alnum.match(/1Z[A-Z0-9]{16}/i);
+        if(cu1){
+          var upsT = cu1[0].toUpperCase();
+          if(!s.trackingNums.includes(upsT)) s.trackingNums.push(upsT);
+          s.carrierKind = s.carrierKind || 'UPS Ground';
+        } else if(isFedex){
+          s.carrierKind = s.carrierKind || 'FedEx Ground';
+        }
+      });
+      // With more than one shipment in the batch this pairing is a
+      // best-effort page-proximity guess, not a certain match — flag it.
+      if(shipIds.length > 1) s.carrierMatchedByProximity = true;
+    });
+  }
+
   // Build one record per unique shipment ID
   var shipments = Object.values(shipMap).map(function(s){
     var combined = s.pageTexts.join('\n');
-    var rec = fbaExtractFields(s.shipId, combined, s.totalBoxes || s.pageTexts.length);
+    var rec = fbaExtractFields(s.shipId, combined, s.totalBoxes || s.pageIdxs.length);
 
     // Merge per-page tracking
     if(s.trackingNums.length === 1){
@@ -7533,6 +7640,18 @@ function fbaParseLabels(allText, pageTexts){
       rec.tracking    = s.trackingNums[0];
       rec.allTracking = s.trackingNums;
       rec.notes = 'All tracking: ' + s.trackingNums.join(', ');
+    }
+
+    // If the keyword scan in fbaExtractFields() didn't recognize a
+    // carrier by name, fall back to what the carrier-page merge step
+    // above detected directly (FedEx TRK#/Mstr# or UPS 1Z format).
+    if(!rec.carrier && s.carrierKind) rec.carrier = s.carrierKind;
+
+    // When a carrier label got matched to this shipment by page-proximity
+    // rather than a direct ID match (multi-shipment batch), flag it so
+    // it gets a visual review prompt instead of being silently trusted.
+    if(s.carrierMatchedByProximity){
+      rec.notes = (rec.notes ? rec.notes + ' · ' : '') + '⚠ carrier label matched by page order — verify before logging';
     }
 
     // Merge aggregated FNSKU quantities
@@ -7558,7 +7677,7 @@ function fbaParseLabels(allText, pageTexts){
       rec.parsedBoxCount = s.boxNums.length;  // how many were found
     } else {
       rec.missingBoxes   = [];
-      rec.parsedBoxCount = s.pageTexts.length;
+      rec.parsedBoxCount = s.pageIdxs.length;
     }
     rec.pagesNoTrk = s.pagesNoTrk;           // pages with no tracking number
 
