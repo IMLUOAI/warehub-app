@@ -7135,6 +7135,7 @@ function vehicleDeleteTrip(id){
 var fbaRecords = [];
 var fbaReprints = [];   // persistent reprint queue — saved to warehub_fba_reprints
 var _fbaSkuSeq = 0;
+var _fbaEditingId = null;  // id of the logged record currently being edited, or null for a new entry
 
 function fbaLoadLocal(){
   try{ fbaRecords = JSON.parse(localStorage.getItem('warehub_fba')||'[]'); }
@@ -7221,6 +7222,28 @@ function fbaSubmit(){
   if(msg) msg.textContent='';
 
   var dims = (dimL&&dimW&&dimH) ? dimL+'×'+dimW+'×'+dimH+' in' : '';
+
+  if(_fbaEditingId){
+    // Editing an existing logged shipment — update in place, keep its id.
+    var idx = fbaRecords.findIndex(function(r){ return r.id===_fbaEditingId; });
+    if(idx === -1){
+      if(msg) msg.textContent = 'That shipment no longer exists (may have been deleted). Edit cancelled.';
+      fbaClearForm();
+      return;
+    }
+    fbaRecords[idx] = {
+      id: _fbaEditingId, date: date, shipId: shipId, fc: fc, by: by,
+      carrier: carrier, tracking: tracking, boxes: boxes||'', units: units||'',
+      dims: dims, weight: weight||'', notes: notes, skus: skus
+    };
+    fbaSaveLocal();
+    fbaClearForm();
+    renderFbaLog();
+    renderFbaStats();
+    pm('✓ FBA shipment updated: '+shipId+' → '+fc+' ('+skus.length+' SKU'+(skus.length!==1?'s':'')+', '+(units||0)+' units)');
+    return;
+  }
+
   var rec = {
     id:       'FBA-'+Date.now(),
     date:     date,
@@ -7245,6 +7268,57 @@ function fbaSubmit(){
   pm('✓ FBA shipment logged: '+rec.shipId+' → '+rec.fc+' ('+skus.length+' SKU'+(skus.length!==1?'s':'')+', '+rec.units+' units)');
 }
 
+// Load a previously-logged record back into the manual entry form for
+// editing. Saving (fbaSubmit) will update that same record instead of
+// creating a new one; Cancel/Clear exits edit mode without changing it.
+function fbaEditRecord(id){
+  var rec = fbaRecords.find(function(r){ return r.id===id; });
+  if(!rec) return;
+  _fbaEditingId = id;
+
+  function set(elId, val){ var el=document.getElementById(elId); if(el) el.value = (val==null?'':val); }
+  set('fba-shipment-id', rec.shipId);
+  set('fba-fc', rec.fc);
+  set('fba-date', rec.date);
+  set('fba-submitted-by', rec.by);
+  set('fba-carrier', rec.carrier);
+  set('fba-tracking', rec.tracking);
+  set('fba-boxes', rec.boxes);
+  set('fba-total-units', rec.units);
+  set('fba-weight', rec.weight);
+  set('fba-notes', rec.notes);
+
+  // "18×12×18 in" -> separate L/W/H fields
+  var dimM = (rec.dims||'').match(/([\d.]+)\s*[×xX]\s*([\d.]+)\s*[×xX]\s*([\d.]+)/);
+  set('fba-dim-l', dimM ? dimM[1] : '');
+  set('fba-dim-w', dimM ? dimM[2] : '');
+  set('fba-dim-h', dimM ? dimM[3] : '');
+
+  var rows = document.getElementById('fba-sku-rows');
+  if(rows){
+    rows.innerHTML = '';
+    (rec.skus||[]).forEach(function(s){
+      fbaAddSkuRow();
+      var lastRow = rows.lastElementChild;
+      if(!lastRow) return;
+      var inputs = lastRow.querySelectorAll('input');
+      if(inputs[0]) inputs[0].value = s.sku;
+      if(inputs[1]) inputs[1].value = s.qty;
+    });
+    if(!rows.children.length) fbaAddSkuRow();
+  }
+
+  var banner = document.getElementById('fba-edit-banner');
+  if(banner){ banner.style.display='flex'; banner.querySelector('span').textContent = '✏ Editing shipment '+rec.shipId+' — saving will update this record, not create a new one.'; }
+  var btn = document.getElementById('fba-submit-btn');
+  if(btn) btn.textContent = '✓ SAVE CHANGES';
+
+  var form = document.querySelector('#view-fba .view');
+  if(form) form.scrollTop = 0;
+  var msg = document.getElementById('fba-form-msg');
+  if(msg) msg.textContent='';
+}
+
 function fbaClearForm(){
   var ids = ['fba-shipment-id','fba-fc','fba-carrier','fba-tracking',
              'fba-boxes','fba-total-units','fba-dim-l','fba-dim-w','fba-dim-h',
@@ -7262,6 +7336,13 @@ function fbaClearForm(){
   if(rows){ rows.innerHTML=''; fbaAddSkuRow(); }
   var msg = document.getElementById('fba-form-msg');
   if(msg) msg.textContent='';
+
+  // Exit edit mode, if any
+  _fbaEditingId = null;
+  var banner = document.getElementById('fba-edit-banner');
+  if(banner) banner.style.display='none';
+  var btn = document.getElementById('fba-submit-btn');
+  if(btn) btn.textContent = '+ LOG SHIPMENT';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7270,11 +7351,19 @@ function fbaClearForm(){
 
 var _fbaParsedBatch = [];   // holds parsed shipment objects from last PDF
 
-async function fbaImportPdf(file){
+// Accepts a single File, or a FileList/array of Files — e.g. the FBA box
+// labels and the carrier's (UPS/FedEx) shipping labels dropped/selected
+// together as two separate PDFs in one action. Their pages get combined
+// into a single set before parsing, so fbaParseLabels() can link a
+// carrier-only page (no FBA ID) to the right shipment exactly the way it
+// already does for pages from one combined PDF.
+async function fbaImportPdf(files){
   var spinner = document.getElementById('fba-import-spinner');
   var zone    = document.getElementById('fba-import-zone');
   if(spinner) spinner.style.display = 'block';
   if(zone)    zone.style.borderColor = 'var(--cy)';
+
+  var fileList = files ? Array.from(files.length !== undefined ? files : [files]) : [];
 
   try {
     // Load PDF.js if needed (reuse same CDN as order importer)
@@ -7289,26 +7378,26 @@ async function fbaImportPdf(file){
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
 
-    var ab  = await file.arrayBuffer();
-    var pdf = await pdfjsLib.getDocument({data: ab}).promise;
-    var n   = pdf.numPages;
-
-    // ── Extract all text from all pages ───────────────────────────
+    // ── Extract all text from all pages, across every file dropped ──
     // Three text forms per page:
     //   spaced  — items joined with spaces (human-readable, used for regex w/ \b)
     //   compact — items stripped of ALL internal whitespace then joined (barcode matching)
     //   alnum   — only A-Z 0-9 chars, no separators (nuclear fallback for tracking #s)
     var pageTexts = [];
-    for(var p = 1; p <= n; p++){
-      var page    = await pdf.getPage(p);
-      var content = await page.getTextContent();
-      var rawStrs = content.items.map(function(i){ return i.str; });
-      var stripped = rawStrs.map(function(s){ return s.replace(/\s+/g,''); });
-      pageTexts.push({
-        spaced:  rawStrs.join(' '),
-        compact: stripped.join(''),
-        alnum:   stripped.join('').replace(/[^A-Z0-9]/gi,''),
-      });
+    for(var f = 0; f < fileList.length; f++){
+      var ab  = await fileList[f].arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({data: ab}).promise;
+      for(var p = 1; p <= pdf.numPages; p++){
+        var page    = await pdf.getPage(p);
+        var content = await page.getTextContent();
+        var rawStrs = content.items.map(function(i){ return i.str; });
+        var stripped = rawStrs.map(function(s){ return s.replace(/\s+/g,''); });
+        pageTexts.push({
+          spaced:  rawStrs.join(' '),
+          compact: stripped.join(''),
+          alnum:   stripped.join('').replace(/[^A-Z0-9]/gi,''),
+        });
+      }
     }
     var allText = pageTexts.map(function(pt){ return pt.spaced; }).join('\n');
 
@@ -7323,10 +7412,10 @@ async function fbaImportPdf(file){
       var firstPg = (parsed.report.unrecognizedPages||[])[0];
       if(firstPg && typeof firstPg === 'object' && firstPg.snippet)
         firstSnippet = ' First page text: "'+firstPg.snippet.slice(0,80)+'"';
-      pm('⚠ No FBA shipment IDs found in this PDF ('
-        + pageTexts.length + ' pages, '
+      pm('⚠ No FBA shipment IDs found ('
+        + pageTexts.length + ' page'+(pageTexts.length===1?'':'s')+' across '+fileList.length+' file'+(fileList.length===1?'':'s')+', '
         + (unrec ? unrec + ' unrecognized' : 'none recognized')
-        + ').'+firstSnippet+' Make sure this is an Amazon FBA label PDF.');
+        + ').'+firstSnippet+' Make sure at least one dropped file is an Amazon FBA label PDF — carrier-only labels (UPS/FedEx) need to be dropped together with the FBA labels, not alone, since they have nothing to link to a shipment by themselves.');
       return;
     }
 
@@ -7334,6 +7423,7 @@ async function fbaImportPdf(file){
     fbaShowBatchEdit(shipments, parsed.report);
     var totalMissing = shipments.reduce(function(n,s){ return n+(s.missingBoxes?s.missingBoxes.length:0); }, 0);
     pm('✓ Parsed '+shipments.length+' shipment'+(shipments.length===1?'':'s')
+      +(fileList.length>1 ? ' from '+fileList.length+' files' : '')
       +(totalMissing ? ' — ⚠ '+totalMissing+' label'+(totalMissing>1?'s':'')+' missing, see report' : ' — all boxes accounted for')
       +'. Review & edit below, then log.');
 
@@ -7368,6 +7458,31 @@ var FBA_FC_CODES = new RegExp('\\b'+FBA_FC_CODES_SRC+'\\b','g');
 function fbaBaseShipId(raw){
   var m = raw.match(/^(FBA[A-Z0-9]+?)U(\d{5,7})$/);
   return m ? m[1] : raw;
+}
+
+// Destination ZIP from a "TWO-LETTER STATE + 5-digit ZIP" address pattern
+// (e.g. "DUPONT, WA 98327-7707", "BYHALIA MS 38611") — present on both the
+// FBA box label's SHIP TO block and the carrier label's TO address, so it
+// doubles as a reliable link between the two when a batch has more than
+// one shipment. Returns the 5-digit ZIP only (ignores any +4 suffix, since
+// that's inconsistently printed between the two label types).
+function fbaExtractZip(text){
+  var m = text.match(/\b[A-Z]{2}\s+(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : null;
+}
+
+// FedEx Ground master/piece tracking number after "TRK#" or "Mstr#". Uses
+// a bounded 4-4-4 digit-group shape (matching the real label format,
+// "8742 7902 6036") rather than an open-ended digit-and-space run — an
+// open-ended match bleeds into the next printed field (e.g. "...6036 2 of
+// 4" gets read as tracking number "...60362"), corrupting both the
+// tracking value itself and the grouping key used to link multi-piece
+// master groups together. Falls back to a plain unspaced 12-digit run for
+// text where spacing didn't survive extraction.
+function fbaMasterTracking(text){
+  var m = text.match(/(?:TRK#|Mstr#)\s*(\d{4}\s?\d{4}\s?\d{4})\b/i)
+       || text.match(/(?:TRK#|Mstr#)\s*(\d{12})\b/i);
+  return m ? m[1].replace(/\s+/g,'') : null;
 }
 
 function fbaParseLabels(allText, pageTexts){
@@ -7567,39 +7682,56 @@ function fbaParseLabels(allText, pageTexts){
 
   // ── Pair carrier-only pages with FBA shipments ──────────────────
   // Carrier (UPS/FedEx) labels rarely reference the FBA shipment ID at
-  // all, so there's no shared text to key a match on. Labels are always
-  // generated back-to-back per shipment though, so pages that share a
-  // FedEx master tracking number are grouped, then matched to whichever
-  // shipment's pages sit closest to them in the PDF. With exactly one
-  // shipment in the batch (the common case) this is just a direct merge.
+  // all, so there's no shared text to key a match on. But both label
+  // types are for the exact same box, so they share the same
+  // destination address — matching on the destination ZIP is a much
+  // more confident signal than page order alone when a batch holds
+  // several shipments. Page-proximity remains the fallback for when the
+  // ZIP can't disambiguate (missing, or shared by multiple shipments —
+  // e.g. two shipments going to the same FC). With exactly one shipment
+  // in the batch (the common case) this is just a direct merge either way.
   var shipIds = Object.keys(shipMap);
   if(carrierPages.length && shipIds.length){
     var byMaster = {};
     carrierPages.forEach(function(cp){
-      var mstrM = cp.txt.match(/Mstr#\s*([\d\s]{10,25})/i) || cp.txt.match(/TRK#\s*([\d\s]{10,25})/i);
-      var key = mstrM ? mstrM[1].replace(/\s+/g,'') : ('p'+cp.pageIdx);
+      var mstrTrk = fbaMasterTracking(cp.txt);
+      var key = mstrTrk || ('p'+cp.pageIdx);
       if(!byMaster[key]) byMaster[key] = { pages: [], minIdx: cp.pageIdx, maxIdx: cp.pageIdx };
       byMaster[key].pages.push(cp);
       byMaster[key].minIdx = Math.min(byMaster[key].minIdx, cp.pageIdx);
       byMaster[key].maxIdx = Math.max(byMaster[key].maxIdx, cp.pageIdx);
     });
     var carrierGroups = Object.values(byMaster);
+    carrierGroups.forEach(function(cg){
+      cg.zip = fbaExtractZip(cg.pages.map(function(p){ return p.txt; }).join(' '));
+    });
 
     var shipRanges = {};
+    var shipZips = {};
     shipIds.forEach(function(sid){
       var idxs = shipMap[sid].pageIdxs;
       shipRanges[sid] = { min: Math.min.apply(null, idxs), max: Math.max.apply(null, idxs) };
+      shipZips[sid] = fbaExtractZip(shipMap[sid].pageTexts.join(' '));
     });
 
     carrierGroups.forEach(function(cg){
       var targetSid = shipIds[0];
+      var matchedByZip = false;
       if(shipIds.length > 1){
-        var bestDist = Infinity;
-        shipIds.forEach(function(sid){
-          var r = shipRanges[sid];
-          var dist = cg.minIdx > r.max ? (cg.minIdx - r.max) : (cg.maxIdx < r.min ? (r.min - cg.maxIdx) : 0);
-          if(dist < bestDist){ bestDist = dist; targetSid = sid; }
-        });
+        // Try the ZIP match first — confident when exactly one shipment
+        // shares this carrier group's destination ZIP.
+        if(cg.zip){
+          var zipMatches = shipIds.filter(function(sid){ return shipZips[sid] === cg.zip; });
+          if(zipMatches.length === 1){ targetSid = zipMatches[0]; matchedByZip = true; }
+        }
+        if(!matchedByZip){
+          var bestDist = Infinity;
+          shipIds.forEach(function(sid){
+            var r = shipRanges[sid];
+            var dist = cg.minIdx > r.max ? (cg.minIdx - r.max) : (cg.maxIdx < r.min ? (r.min - cg.maxIdx) : 0);
+            if(dist < bestDist){ bestDist = dist; targetSid = sid; }
+          });
+        }
       }
       var s = shipMap[targetSid];
       cg.pages.forEach(function(cp){
@@ -7607,11 +7739,8 @@ function fbaParseLabels(allText, pageTexts){
         var isFedex = /\bTRK#|\bMPS#|\bMstr#\b/i.test(cp.txt);
         // FedEx Ground master/piece tracking (TRK# on the master page,
         // Mstr# echoed on every piece page — same value, either works)
-        var trkM = cp.txt.match(/TRK#\s*([\d\s]{10,25})/i) || cp.txt.match(/Mstr#\s*([\d\s]{10,25})/i);
-        if(trkM){
-          var trkT = trkM[1].replace(/\s+/g,'');
-          if(trkT.length>=10 && !s.trackingNums.includes(trkT)) s.trackingNums.push(trkT);
-        }
+        var trkT = fbaMasterTracking(cp.txt);
+        if(trkT && !s.trackingNums.includes(trkT)) s.trackingNums.push(trkT);
         var cu1 = cp.compact.match(/1Z[A-Z0-9]{16}/i) || cp.alnum.match(/1Z[A-Z0-9]{16}/i);
         if(cu1){
           var upsT = cu1[0].toUpperCase();
@@ -7621,9 +7750,9 @@ function fbaParseLabels(allText, pageTexts){
           s.carrierKind = s.carrierKind || 'FedEx Ground';
         }
       });
-      // With more than one shipment in the batch this pairing is a
-      // best-effort page-proximity guess, not a certain match — flag it.
-      if(shipIds.length > 1) s.carrierMatchedByProximity = true;
+      // Flag for review only when the match was a page-proximity guess —
+      // a ZIP match is confident enough not to need a manual double-check.
+      if(shipIds.length > 1 && !matchedByZip) s.carrierMatchedByProximity = true;
     });
   }
 
@@ -8351,7 +8480,8 @@ function renderFbaLog(){
       +td(r.tracking,'font-family:monospace;font-size:9px;')
       +td(r.by)
       +td(r.notes)
-      +'<td style="padding:4px 8px;border-bottom:1px solid var(--bdr)10;">'
+      +'<td style="padding:4px 8px;border-bottom:1px solid var(--bdr)10;white-space:nowrap;">'
+        +'<button onclick="fbaEditRecord(\''+r.id+'\')" style="font-size:8px;padding:2px 8px;margin-right:4px;background:transparent;border:1px solid var(--bdr);color:var(--cy);cursor:pointer;font-family:inherit;">✏</button>'
         +'<button onclick="fbaDelete(\''+r.id+'\')" style="font-size:8px;padding:2px 8px;background:transparent;border:1px solid var(--bdr);color:var(--rd);cursor:pointer;font-family:inherit;">🗑</button>'
       +'</td></tr>';
   }).join('');
@@ -8365,6 +8495,7 @@ function renderFbaLog(){
 function fbaDelete(id){
   fbaRecords = fbaRecords.filter(function(r){ return r.id!==id; });
   fbaSaveLocal();
+  if(_fbaEditingId === id) fbaClearForm(); // was open in the edit form — exit edit mode
   renderFbaLog();
   renderFbaStats();
 }
@@ -8916,7 +9047,7 @@ document.addEventListener('DOMContentLoaded', function(){
       <div id="fba-import-zone"
         ondragover="event.preventDefault();this.style.borderColor='var(--cy)';this.style.background='#818cf808';"
         ondragleave="this.style.borderColor='var(--bdr)';this.style.background='transparent';"
-        ondrop="event.preventDefault();this.style.borderColor='var(--bdr)';this.style.background='transparent';if(event.dataTransfer.files[0]) fbaImportPdf(event.dataTransfer.files[0]);"
+        ondrop="event.preventDefault();this.style.borderColor='var(--bdr)';this.style.background='transparent';if(event.dataTransfer.files.length) fbaImportPdf(event.dataTransfer.files);"
         onclick="document.getElementById('fba-pdf-input').click()"
         style="border:2px dashed var(--bdr);padding:20px 24px;margin-bottom:16px;cursor:pointer;
                display:flex;align-items:center;gap:16px;transition:all .2s;">
@@ -8925,11 +9056,13 @@ document.addEventListener('DOMContentLoaded', function(){
           <div style="font-size:10px;letter-spacing:2px;color:var(--cy);margin-bottom:3px;">IMPORT FROM AMAZON FBA LABEL PDF</div>
           <div style="font-size:9px;color:var(--td);line-height:1.5;">
             Drop the PDF here or click to browse — Shipment ID, FC, box count, tracking and SKUs will be parsed automatically.
-            Multi-shipment PDFs create multiple records at once.
+            Multi-shipment PDFs create multiple records at once. If your carrier (UPS/FedEx) labels are a separate PDF from
+            the Amazon box labels, select or drag <b>both files together</b> — carrier-only labels dropped alone have nothing
+            to link them to a shipment.
           </div>
         </div>
-        <input id="fba-pdf-input" type="file" accept="application/pdf" style="display:none"
-          onchange="if(this.files[0]) fbaImportPdf(this.files[0]); this.value='';">
+        <input id="fba-pdf-input" type="file" accept="application/pdf" multiple style="display:none"
+          onchange="if(this.files.length) fbaImportPdf(this.files); this.value='';">
         <div id="fba-import-spinner" style="display:none;font-size:11px;color:var(--cy);flex-shrink:0;">⟳ parsing…</div>
       </div>
 
@@ -9069,11 +9202,16 @@ document.addEventListener('DOMContentLoaded', function(){
           </div>
         </div>
 
+        <div id="fba-edit-banner" style="display:none;align-items:center;justify-content:space-between;background:var(--cy)15;border:1px solid var(--cy);padding:8px 12px;margin-bottom:12px;">
+          <span style="font-size:10px;color:var(--cy);"></span>
+          <button class="btn" onclick="fbaClearForm()" style="font-size:8px;padding:3px 10px;flex-shrink:0;margin-left:10px;">CANCEL EDIT</button>
+        </div>
+
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div id="fba-form-msg" style="font-size:10px;color:var(--am);"></div>
           <div style="display:flex;gap:8px;">
             <button class="btn" onclick="fbaClearForm()" style="font-size:9px;">✕ CLEAR</button>
-            <button class="btn btn-c" onclick="fbaSubmit()" style="font-size:9px;">+ LOG SHIPMENT</button>
+            <button id="fba-submit-btn" class="btn btn-c" onclick="fbaSubmit()" style="font-size:9px;">+ LOG SHIPMENT</button>
           </div>
         </div>
       </div>
