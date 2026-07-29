@@ -9445,7 +9445,7 @@ document.addEventListener('DOMContentLoaded', function(){
         <div class="dev-section-hdr" onclick="devToggle(this)"><span>🤖 Anthropic Claude — AI Assistant</span><span class="dev-chevron">▾</span></div>
         <div class="dev-section-body"><div class="dev-grid">
           <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.anthropic.com" target="_blank" class="dev-link">console.anthropic.com</a></div>
-          <div class="dev-field"><div class="dev-label">MODEL</div><code class="dev-code">claude-sonnet-4-20250514</code></div>
+          <div class="dev-field"><div class="dev-label">MODEL</div><code class="dev-code">claude-sonnet-5</code></div>
           <div class="dev-field"><div class="dev-label">API KEY</div><div class="dev-note">Stored as ANTHROPIC_KEY secret in Cloudflare Worker only — never in the browser</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">SETUP</div><div class="dev-note">Click 🤖 → ⚙ SETUP → paste Worker URL → TEST → SAVE. AI uses web search + warehouse context.</div></div>
           <div class="dev-field dev-wide"><div class="dev-label">FIX AI NOT RESPONDING</div><div class="dev-note">1. Check Worker deployed · 2. ANTHROPIC_KEY secret set · 3. Cloudflare Access OFF · 4. Worker URL saved in app</div></div>
@@ -9694,7 +9694,7 @@ async function aiAsk(text){
     // token-refresh/subscription-check logic as every other API call)
     // instead of hitting a separate, unrelated proxy directly.
     var data = await window.warehubApi('POST', '/api/ai', {
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-5',
       max_tokens:2000,
       system:aiSystemPrompt(),
       tools:[{type:'web_search_20250305',name:'web_search'}],
