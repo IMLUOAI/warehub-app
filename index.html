@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+[Resource from github at repo://imluoai/warehub-app/sha/af712429d3c186202f2720e7d844208a9ea7d4e9/contents/index.html] <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -9689,38 +9689,29 @@ async function aiAsk(text){
   var loadDiv=aiAddMsg('ai','⟳ thinking…');
   _aiHistory.push({role:'user',content:aiGetContext()+'\n\nUSER: '+text});
 
-  // Try proxy URL first (user-configured), then direct (works locally, not on GitHub Pages)
-  var proxyUrl = localStorage.getItem('warehub_ai_proxy')||'https://anthropic-proxy.imluoai.workers.dev';
-  var apiUrl = proxyUrl || 'https://api.anthropic.com/v1/messages';
-
   try{
-    var headers = {'Content-Type':'application/json'};
-    // Only add anthropic headers if using direct API (proxy handles auth itself)
-    if(!proxyUrl){
-      headers['anthropic-dangerous-allow-browser'] = 'true';
-    }
-    var resp=await fetch(apiUrl,{
-      method:'POST',
-      headers:headers,
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:2000,
-        system:aiSystemPrompt(),
-        tools:[{type:'web_search_20250305',name:'web_search'}],
-        messages:_aiHistory
-      })
+    // Routed through the app's own authenticated Worker endpoint (same
+    // token-refresh/subscription-check logic as every other API call)
+    // instead of hitting a separate, unrelated proxy directly.
+    var data = await window.warehubApi('POST', '/api/ai', {
+      model:'claude-sonnet-4-20250514',
+      max_tokens:2000,
+      system:aiSystemPrompt(),
+      tools:[{type:'web_search_20250305',name:'web_search'}],
+      messages:_aiHistory
     });
-    if(!resp.ok){
-      var status=resp.status;
-      var errBody = await resp.text();
-      if(status===401||status===403){
-        loadDiv.innerHTML='✗ AI auth error ('+status+'). Set up a Cloudflare Worker proxy — click the ⚙ in the AI panel.';
-      } else {
-        loadDiv.innerHTML='✗ API error ('+status+').';
-      }
+
+    if(!data){
+      // warehubApi already handled an auth failure (signed out) or an
+      // expired-subscription alert internally — nothing more to show.
+      loadDiv.innerHTML='✗ Not signed in, or your subscription is inactive.';
       _aiLoading=false; return;
     }
-    var data=await resp.json();
+    if(data.error){
+      loadDiv.innerHTML='✗ AI error: '+data.error;
+      _aiLoading=false; return;
+    }
+
     // Extract text from content blocks (may include tool_use blocks from web search)
     var reply='';
     if(data.content && Array.isArray(data.content)){
@@ -9746,16 +9737,7 @@ async function aiAsk(text){
       }catch(e){ console.warn('AI action parse:',e); }
     }
   }catch(e){
-    loadDiv.innerHTML=
-      '<div style="font-size:10px;line-height:1.6;">'
-      +'<strong>⚠ AI blocked by browser CORS</strong><br>'
-      +'GitHub Pages cannot call the Anthropic API directly.<br><br>'
-      +'<strong>Quick fix — Cloudflare Worker proxy (free, 5 min):</strong><br>'
-      +'1. Go to <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--cy);">workers.cloudflare.com</a> → sign up free<br>'
-      +'2. Create Worker → paste the proxy code → deploy<br>'
-      +'3. Click ⚙ in AI panel → paste your Worker URL + Anthropic API key<br><br>'
-      +'<a href="#" onclick="aiShowProxySetup();return false;" style="color:var(--cy);">⚙ Set up proxy now</a>'
-      +'</div>';
+    loadDiv.innerHTML='✗ AI request failed: '+e.message;
   }
   _aiLoading=false;
 }
