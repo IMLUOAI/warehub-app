@@ -1,43 +1,50 @@
 # WAREHUB
 ### Warehouse Management Platform
 
-> Single-file browser app. No installation, no server, no database.
-> Runs entirely from `index.html` hosted on GitHub Pages with a custom domain.
+> Multi-tenant browser app for warehouse and 3PL operations. No installation required.
+> Frontend is static HTML/CSS/JS (`index.html`, `landing.html`, `billing.html`) hosted on GitHub Pages;
+> backend is a Cloudflare Worker + D1 database + KV for sync, auth via Clerk, billing via Stripe.
 
 ---
 
-## 🚀 Live App
+## 🚀 Live URLs
 
-**[https://app.wareplatform.com/](https://app.wareplatform.com/)**
-
----
-
-## 🔐 PIN Lock
-
-App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** in the browser and stored in **Cloudflare KV** — one PIN works across all devices and browsers automatically.
-
-- **First open:** prompted to set a new PIN (enter + confirm)
-- **Subsequent opens:** enter PIN to unlock — session stays open until tab is closed
-- **Change PIN:** ⚙ Dev Panel → 🔐 Security → RESET PIN
-- PIN value is never stored in plaintext anywhere
+| Site | URL | Purpose |
+|------|-----|---------|
+| Marketing site | [https://wareplatform.com](https://wareplatform.com) | Public landing page — features, pricing, testimonials |
+| App | [https://app.wareplatform.com](https://app.wareplatform.com) | The actual warehouse management app (auth + subscription required) |
+| Billing | [https://app.wareplatform.com/billing.html](https://app.wareplatform.com/billing.html) | Plan selection + Stripe checkout |
+| API | `https://api.wareplatform.com` | Cloudflare Worker — auth-protected data + AI proxy |
 
 ---
 
-## 📋 Tabs Overview
+## 🔐 Auth & Billing
+
+- **Auth:** [Clerk](https://clerk.com) — sign-in overlay shown before the app loads (`#clerk-auth-screen`).
+  ⚠️ Currently running on a **development instance** (`golden-magpie-54.clerk.accounts.dev`, `pk_test_...` key). Upgrade to a production Clerk instance before onboarding real customers — dev instances have lower rate limits and an unbranded auth domain.
+- **Billing:** Stripe Checkout, gated behind a subscription wall (`#billing-gate`) shown to any authenticated user without an active plan. Plans are chosen on `billing.html`, which calls `POST /api/billing/checkout` on the Worker.
+- **Trial terms (as shown in-app):** 14-day free trial, no credit card required, cancel anytime. Confirm this is actually configured that way in the Stripe dashboard, since it's a claim shown directly to customers.
+
+⚠️ **Known pricing mismatch:** `billing.html` currently charges **Starter $79/mo · Pro $149/mo**, but the marketing site (`landing.html` / wareplatform.com) advertises **Starter $29/mo · Pro $79/mo · Enterprise custom**. These need to match before driving signups — a prospect who reads one price and is charged another is a fast way to lose trust (and generate chargebacks).
+
+---
+
+## 📋 Tabs Overview (in-app)
 
 | Tab | Purpose |
 |-----|---------|
 | **Import** | Drag & drop PDF from Lingxing OMP. Auto-detects carrier, tracking, SKU, shelf location. Shows `X/N labels parsed` with warning if any pages were skipped. |
-| **Packers** | Add/remove staff. Auto-syncs to Cloudflare KV (all browsers). Print CR80 ID cards. Auto-assign orders. Print pick lists. |
+| **Packers** | Add/remove staff. Auto-syncs via Worker API (D1). Print CR80 ID cards. Auto-assign orders. Print pick lists. |
 | **Pack Station** | Scan gun workflow — scan packer barcode to clock in/out. Single-item orders complete in 1 scan. Multi-item orders require SKU verification. Supports simultaneous multi-packer operation with per-packer order attribution. |
 | **Dashboard** | Live KPIs, shift progress, packer leaderboard, carrier breakdown, orders table. |
-| **📊 Stats** | Productivity chart — packages/speed per packer, active status, timesheet, clock-in log. Connect Excel to save snapshot. |
+| **📊 Stats** | Productivity chart — packages/speed per packer, active status, timesheet, clock-in log. Optional Excel snapshot export. |
 | **Floor Display** | Minimal big-screen view for warehouse TV — remaining orders and active packers. |
-| **📦 Returns** | Scan return packages. Log carrier, type, condition, SKU, restock location, pile assignment, photos. Auto-saves to Excel. Manager alert on damaged/counterfeit items. |
-| **🚗 Vehicle** | Trip log — driver, license plate, Google Maps destination, odometer, departure/return time, notes. Save to Excel. |
-| **🗺 Rack Map** | Interactive SVG warehouse layout — 83 spots across 6 zones. Click cells to see contents. Scan gun LOCATE/ASSIGN modes. Inventory CSV import. |
-| **📤 FBA Outbound** | End-of-day manager form — log FBA Shipment ID, FC destination, carrier + tracking to FC, boxes, units, box dims, weight per box, dynamic SKU rows. Saves to Excel + CSV export. |
-| **⚙ Dev Panel** | All service accounts, API keys, fix guides, PIN reset, changelog, editable notes. |
+| **📦 Returns** | Scan return packages. Log carrier, type, condition, SKU, restock location, pile assignment, photos. Manager alert on damaged/counterfeit items. |
+| **🚗 Vehicle** | Trip log — driver, license plate, Google Maps destination, odometer, departure/return time, notes. |
+| **🗺 Rack Map** | Interactive SVG warehouse layout, configurable zones. Click cells to see contents. Scan gun LOCATE/ASSIGN modes. Inventory CSV import. |
+| **📤 FBA Outbound** | End-of-day manager form — FBA Shipment ID, FC destination, carrier + tracking to FC, boxes, units, box dims, weight per box, dynamic SKU rows. CSV export + reprint queue. |
+
+An internal "Dev Panel" tab (service config reference, API keys, changelog) previously existed but has been **removed from the shipped app** — it was static HTML shipped to every visitor regardless of login state, which exposed internal config publicly. Keep that kind of reference material in a private doc instead of in `index.html`.
 
 ---
 
@@ -45,17 +52,20 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Vanilla HTML/CSS/JS — single `index.html` (~505KB), no framework |
-| Layout | CSS Grid (body) + `position:absolute` views, visibility toggle |
-| Theme | Midnight Slate — `#1a1f2e` base, `#818cf8` indigo accent |
-| PDF Parsing | pdf.js 3.11.174 — lazy loaded on first PDF drop; renders labels at 2.0× scale / JPEG 92% |
-| Auth | MSAL.js 2.37.0 — lazy loaded on Excel connect |
-| Excel Export | SheetJS (xlsx) 0.18.5 — lazy loaded on Excel connect |
-| Maps | Google Maps JS API + Places API (`loading=async`) |
-| AI | Anthropic Claude Sonnet via Cloudflare Worker proxy |
-| PIN Security | SHA-256 (WebCrypto) + Cloudflare KV |
-| Staff Sync | Cloudflare KV — cross-browser, no login |
-| Excel Sync | Microsoft Graph API → OneDrive (Stats, Returns, Vehicle) |
+| Frontend | Vanilla HTML/CSS/JS — single `index.html`, no framework |
+| Layout | CSS Grid (body) + `position:absolute` views, visibility toggle via `gv()` |
+| Auth | Clerk (`@clerk/clerk-js`) |
+| Billing | Stripe Checkout via Worker-proxied endpoints |
+| Backend | Cloudflare Worker (`warehub-worker`) |
+| Database | Cloudflare D1 (`warehub-db`) — primary store for orders, returns, vehicle trips, FBA shipments, settings, insights |
+| Sync strategy | Dual-write: every write goes to `localStorage` first (instant, offline-safe), then to the Worker API (async); reads try the API first and fall back to `localStorage` silently |
+| Legacy sync | Cloudflare KV (`WAREHUB_KV`) — still used for some staff sync paths |
+| PDF Parsing | pdf.js 3.11.174 — lazy loaded on first PDF drop |
+| Excel Export | SheetJS (xlsx) — lazy loaded on Excel connect |
+| Excel Auth | Microsoft Graph API via MSAL.js — lazy loaded on Excel connect |
+| Maps | Google Maps JS API + Places API (`loading=async`), key restricted to `app.wareplatform.com` |
+| AI Assistant | Anthropic Claude (`claude-sonnet-5`) via Worker proxy at `/api/ai` |
+| AI Insights (nightly) | Anthropic Claude (`claude-haiku-4-5`) via `/api/insights` |
 | Deployment | GitHub Pages — auto-deploy on push to `main` |
 
 ---
@@ -65,54 +75,51 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 ### GitHub Pages (Frontend)
 - **Repo:** `https://github.com/imluoai/warehub-app`
 - **Live (custom domain):** `https://app.wareplatform.com/`
-- **Deploy:** `git add index.html README.md && git commit -m "msg" && git push`
+- **Deploy:** `git add . && git commit -m "msg" && git push`
 - Pages deploys in ~1 min. Hard refresh: `Ctrl+Shift+R` / `Cmd+Shift+R`
 - **CNAME record:** `app.wareplatform.com → imluoai.github.io`
-- **GitHub Pages setting:** Settings → Pages → Custom domain → `app.wareplatform.com`
 
 ### Cloudflare Worker (API)
 - **Dashboard:** dash.cloudflare.com
 - **Worker name:** `warehub-worker`
 - **Custom domain:** `https://api.wareplatform.com`
-- **Endpoints:**
-  - `POST /` → Anthropic AI proxy
-  - `GET /staff` · `PUT /staff` → staff KV sync
-  - `GET /pin` · `PUT /pin` → PIN hash KV sync
-  - `POST /api/billing/checkout` → Stripe checkout
-  - `GET /api/health` → health check
-- **Secrets:** `ANTHROPIC_KEY`
-- **KV Binding:** `WAREHUB_KV` → namespace `warehub-data`
-- **⚠ Cloudflare Access must be DISABLED**
-- **CORS:** `Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS` required on all responses
+- **Key endpoints:** `/api/ai` (AI proxy) · `/api/orders` · `/api/returns` · `/api/vehicle/trips` · `/api/fba` · `/api/settings` · `/api/events` · `/api/insights` · `/api/packers` · `/api/packers/sync` · `/api/tenants/register` · `/api/billing/checkout` · `/api/billing/webhook` · `/api/billing/status`
+- **Secrets:** `ANTHROPIC_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CLERK_SECRET_KEY` (Worker-side only — never in the browser)
+- **D1 binding:** `DB` → `warehub-db`
+- **KV binding:** `WAREHUB_KV`
+- **⚠ Cloudflare Access must be DISABLED** on this Worker route (breaks CORS otherwise)
+- **CORS:** `Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS` required on every response, including OPTIONS preflight
 
-### Cloudflare KV
-- **Namespace:** `warehub-data`
-- **Binding variable:** `WAREHUB_KV`
-- **Keys stored:**
-  - `staff` — packers + managers JSON
-  - `pin` — SHA-256 PIN hash
-- **Free tier:** 100k reads/day · 1k writes/day · $0/month
-- **Status:** ☁ icon in header — grey=off · amber=syncing · green=OK · red=error
-- **Live test:** click the ☁ icon — pings `/staff`, reports exact error if failing
+### Clerk (Auth)
+- **Dashboard:** dashboard.clerk.com
+- **Status:** Development instance — upgrade to production before scaling
+- **Secret:** `CLERK_SECRET_KEY` (Worker only)
 
-### Microsoft Azure (Excel Online)
-- **Portal:** portal.azure.com
-- **App Registration:** Warehub (SPA type)
-- **Required permissions:** `Files.ReadWrite` · `Sites.ReadWrite.All` · `User.Read`
-- **Redirect URI:** `https://app.wareplatform.com/`
-- **Excel sheets written:** `Productivity` · `Returns Log` · `Vehicle Log`
-- **Token expiry:** ~1 hour — reconnect via Stats tab → ⊞ CONNECT EXCEL
+### Stripe (Billing)
+- **Dashboard:** dashboard.stripe.com
+- **Secrets:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- **Webhook:** `api.wareplatform.com/api/billing/webhook`
+- Confirm live mode (not test mode) before accepting real customer payments.
 
 ### Google Maps
 - **Console:** console.cloud.google.com
 - **Enabled APIs:** Maps JavaScript API · Places API · Maps Embed API
-- **Key:** `AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw`
-- **Restriction:** `https://app.wareplatform.com/*`
+- **Restriction:** HTTP referrer restricted to `https://app.wareplatform.com` — key value intentionally not documented here; rotate via Google Cloud Console if it's ever suspected of leaking, referrer restriction is what actually protects it.
 
 ### Anthropic Claude AI
-- **Model:** `claude-sonnet-4-20250514`
+- **Console:** console.anthropic.com
+- **Models:** `claude-sonnet-5` (in-app assistant) · `claude-haiku-4-5` (nightly insights)
 - **API Key:** Stored as `ANTHROPIC_KEY` in Cloudflare Worker only
-- **Features:** Warehouse Q&A · web search · actions (assign orders, clock in/out)
+
+### Microsoft Azure (Excel Online) — optional per-tenant integration
+- **Portal:** portal.azure.com
+- **Required permissions:** `Files.ReadWrite` · `Sites.ReadWrite.All` · `User.Read`
+- **Excel sheets written:** `Productivity` · `Returns Log` · `Vehicle Log`
+- **Token expiry:** ~1 hour — reconnect via Stats tab → ⊞ CONNECT EXCEL
+
+### FedEx (Shipping Status Tracking) — optional, per-tenant
+- **Developer portal:** developer.fedex.com
+- Uses FedEx Track API v1, called directly from the browser. Use production (not sandbox) credentials — sandbox blocks CORS.
 
 ### Lingxing ERP / OMP
 - **URL:** omp.xlms.com/wms/outbound/parcel
@@ -145,7 +152,7 @@ App is protected by a 6-digit PIN on every open. PIN is hashed with **SHA-256** 
 | **🖨 PRINT BY SKU GROUP** | Sorts all labels by SKU, prints each group together. Each order prints exactly once (deduped by tracking number). Sorted by shelf location within each group. |
 | **🖨 PRINT BY PACKER** | Prints a full 4"×6" color-coded divider page per packer (name + label count), followed by their label stack sorted by shelf location. Unassigned orders grouped at the end. |
 
-Both buttons use `@page { size: 4in 6in; margin: 0 }` for direct thermal printer output. Labels render at ~144 DPI (scale 2.0, JPEG 92%).
+Both use `@page { size: 4in 6in; margin: 0 }` for direct thermal printer output.
 
 ---
 
@@ -158,25 +165,6 @@ Both buttons use `@page { size: 4in 6in; margin: 0 }` for direct thermal printer
 5. Each packer logs in at Pack Station with their ID barcode
 6. Scan completions are credited to `order.assignedTo` — correct packer always gets credit
 7. **Stats tab** shows all on-shift packers with orders completed, avg pack speed, and active status
-
----
-
-## 🗺 Warehouse Layout — 83 Spots
-
-| Zone | Type | Spots | Numbering |
-|------|------|-------|-----------|
-| R1 🟥 | Metal Racking | 15 | R1-01 → R1-15 · bottom→top |
-| R2 🟥 | Metal Racking | 8 | R2-01 → R2-08 · bottom→top |
-| R3 🟥 | Metal Racking | 8 | R3-01 → R3-08 · bottom→top |
-| B-1 🟦 | Ground Pile | 20 | B-1-01 → B-1-20 · bottom→top |
-| A-1 🟪 | Ground Pallet | 20 | A-1-01 → A-1-20 · right→left, bottom→top |
-| C-1 🟧 | Ground Pallet | 12 | C-1-01 → C-1-12 · left→right, bottom→top |
-
-**Search formats:** `R1-01` · `r1-1` · `B-1-05` · `A-1` · `b1`
-
-**Scan gun modes:**
-- 🔍 LOCATE — scan SKU → highlights all spots containing it
-- 📍 ASSIGN — click spot on map → scan SKU → assigns item
 
 ---
 
@@ -202,16 +190,13 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 
 ## 💾 Data Persistence
 
-| Data | Storage | Cross-browser |
-|------|---------|--------------|
-| PIN hash | Cloudflare KV | ✅ All devices |
-| Packers & managers | Cloudflare KV + localStorage | ✅ Auto-sync |
-| Vehicle trips | localStorage | ❌ Save to Excel |
-| Returns | localStorage | ❌ Auto-saves to Excel |
-| Settings (Excel, AI) | localStorage | ❌ Per browser |
-| Orders (current batch) | Memory only | ❌ Re-import PDF |
+Dual-write model: every write lands in `localStorage` immediately, then syncs to the Worker/D1 asynchronously. Reads try the API first and fall back to `localStorage` if the Worker is unreachable, so the app stays usable offline.
 
-**Excel workbook tabs:** `Productivity` · `Returns Log` · `Vehicle Log` · `FBA Outbound`
+| Data | Primary store | Cross-device |
+|------|---------|--------------|
+| Orders, Returns, Vehicle trips, FBA shipments, Settings, Insights | Cloudflare D1 via Worker API | ✅ |
+| Packers & managers | D1 API (+ legacy KV path) | ✅ |
+| Everything above, offline | localStorage | ❌ per browser until next sync |
 
 ---
 
@@ -219,36 +204,45 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 
 | Problem | Fix |
 |---------|-----|
-| PIN screen won't load | Worker not deployed or Cloudflare Access still ON → deploy Worker, disable Access |
-| Staff lost on new browser | ☁ icon red → check Worker URL · KV binding `WAREHUB_KV` set |
-| ☁ turns red | Click ☁ icon → runs live KV test with exact error message |
-| AI not responding | 🤖 → ⚙ SETUP → verify Worker URL · `ANTHROPIC_KEY` secret set |
+| Staff/data not syncing | ☁ icon red → check Worker deployed, D1/KV bindings set, Cloudflare Access disabled |
+| ☁ turns red | Click the ☁ icon → runs a live connectivity test with the exact error message |
+| AI not responding | 🤖 → ⚙ SETUP → verify Worker URL and that `ANTHROPIC_KEY` secret is set |
 | Excel 401 error | Token expired — Stats tab → ⊞ CONNECT EXCEL → sign in again |
-| Google Maps blank | Enable all 3 APIs in Google Cloud Console |
+| Google Maps blank | Enable all 3 Maps APIs in Google Cloud Console; check key's referrer restriction includes `app.wareplatform.com` |
 | PDF not parsing | Re-export from OMP · check Debug Log in Import tab |
 | Batch count mismatch | Status bar shows `X/N labels parsed` — scroll Debug Log for skipped pages |
-| FedEx multi-piece fail | Handled — GS1-128 prefix auto-stripped; raw scan fallback added |
-| Print buttons do nothing | Allow popups for `app.wareplatform.com` in browser |
+| Print buttons do nothing | Allow popups for `app.wareplatform.com` in the browser |
 | App shows old version | `Ctrl+Shift+R` (PC) / `Cmd+Shift+R` (Mac) |
-| Stats showing only 1 packer | Fixed — shows all `active`/`online` packers using persisted order counts |
+| FedEx status check fails | Use production FedEx credentials, not sandbox — sandbox blocks browser CORS |
+| Billing/checkout errors | Confirm Stripe is in live mode and webhook secret matches the live endpoint |
 
 ---
 
 ## 📝 Changelog
 
-### March 2026
-- **feat:** Amazon FBA Outbound tab — end-of-day shipment form with dynamic SKU rows, stats bar, filterable log, CSV + Excel export to new "FBA Outbound" sheet
-- **feat:** Print by Packer — 4"×6" named divider cover page per packer, labels in shelf order
-- **feat:** Batch completeness check — `X/N labels parsed` status, warns on skipped pages
-- **fix:** Label image quality — scale 1.5→2.0, JPEG 82%→92% for sharper thermal output (~144 DPI)
-- **fix:** `kvTestConnection()` — ☁ icon now pings Worker live and surfaces exact errors
-- **fix:** FedEx GS1-128 multi-piece barcodes — raw scan fallback prevents "not found" errors
-- **fix:** Multi-packer attribution — `order.assignedTo` used as primary credit source
-- **fix:** Per-packer `_lastCompleteTime` map for accurate individual pack speed tracking
-- **fix:** Stats panel shows all on-shift packers using persisted `p.ordersCompleted`
-- **fix:** SKU-grouped label printing deduplicates multi-SKU orders correctly
-- **fix:** Full carrier support — LSO, OnTrac, Amazon, DHL, SDX added to CR map + TPATS
-- **fix:** Full button audit — 80+ interactive elements verified; 1 broken handler fixed
+### August 2026
+- **security:** Removed the internal Dev Panel (service config, API key references, changelog) from the shipped app — it was static HTML served to every visitor regardless of auth state
+- **security:** Rotated Google Maps API key after review
+- **content:** Replaced placeholder landing page testimonials with real quotes from actual users and clients
+
+### April 2026 — v2.5
+- **feat:** Domain migration → wareplatform.com (app / api / landing page)
+- **feat:** Landing page deployed on Cloudflare Pages — hero, features, pricing, testimonials
+- **feat:** User menu in header — avatar, name/email, Billing link, sign out (Clerk)
+- **feat:** FBA Reprint Queue — persistent panel for missing FBA box labels
+- **feat:** Missing-labels panel with per-label reprint buttons
+- **fix:** FedEx shared batch barcode — 3-tier fallback prevents duplicate tracking
+- **fix:** GOFO / USPS / SWIFT parse fallbacks
+- **fix:** Missing label count accuracy
+- **fix:** OneDrive config scoped per Clerk user ID — prevents cross-tenant leak on shared browsers
+- **remove:** PIN lock screen (redundant — Clerk handles auth)
+- **remove:** FM radio / music player
+
+### March 2026 — v2.0–v2.4
+- Amazon FBA Outbound tab, Print by Packer, Vehicle tracking module, Returns intake with photos, Rack Map SVG, AI assistant (Claude), full carrier parsing overhaul (11 carriers), Dev Panel rewrite (later removed — see above)
+
+### Feb 2026 — v1.x
+- Initial build: Import → Packers → Pack Station → Dashboard → Stats → Floor Display. Cloudflare KV staff sync. MSAL Excel integration. GS1-128 barcode support.
 
 ---
 
@@ -256,8 +250,15 @@ Tracking · Carrier · Return Type · Item Condition · SKU · Qty · Return Pil
 
 ```
 warehub-app/
-├── index.html      ← Entire app (~505KB, single file)
-└── README.md       ← This file
+├── index.html            ← Main app (single file)
+├── landing.html          ← Public marketing site (wareplatform.com)
+├── billing.html          ← Plan selection + Stripe checkout
+├── marketing-copy.md     ← Product Hunt / AppSumo / outreach copy drafts
+├── SHIPPING_LABEL_RULES.md ← Internal label-parsing design notes
+├── src/utils/labelSorter.js
+├── logo.svg / logo-dark.svg
+├── CNAME
+└── README.md             ← This file
 ```
 
 ---
@@ -266,8 +267,7 @@ warehub-app/
 
 **Double Sided ISCM LLC**
 1701 10th St Suite 200, Plano, TX 75074
-Warehouse: 9,129 sqft · Office: 1,486 sqft · Total: 10,615 sqft
 
 ---
 
-*Built with Claude · March 2026*
+*Built with Claude*
