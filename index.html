@@ -1,4 +1,4 @@
-[Resource from github at repo://imluoai/warehub-app/sha/af712429d3c186202f2720e7d844208a9ea7d4e9/contents/index.html] <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -553,7 +553,6 @@ body{
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
     <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
     <button class="tab" data-view="fba" onclick="gv('fba')">📤 FBA Outbound</button>
-    <button class="tab" data-view="devpanel" onclick="gv('devpanel')">⚙ Dev Panel</button>
   </div>
 </div>
 
@@ -4565,7 +4564,7 @@ async function msEnsureVehicleSheet(){
   }catch(e){ console.warn('msEnsureVehicleSheet:',e); }
 }
 
-var GMAPS_DEFAULT_KEY = 'AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw';
+var GMAPS_DEFAULT_KEY = 'AIzaSyADIvGnksrSH-Ih16T7IEWIScvFp506Tw8';
 var _gmapsLoaded = false;
 var _gmapsKey    = GMAPS_DEFAULT_KEY;
 
@@ -9325,206 +9324,6 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 
 
-  <!-- ══ DEV PANEL ══ -->
-  <div id="view-devpanel" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
-    <div style="padding:16px 18px;width:100%;box-sizing:border-box;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">DEVELOPER REFERENCE</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">App Config &amp; Service Registry</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub v2.5 · April 2026</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-c" onclick="devSave()" style="font-size:9px;">💾 SAVE NOTES</button>
-          <button class="btn" onclick="devExport()" style="font-size:9px;">⬇ EXPORT</button>
-        </div>
-      </div>
-
-      <!-- ── SECTION: GitHub ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🐙 GitHub — Source &amp; Deployment</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">REPO</div><a href="https://github.com/imluoai/warehub-app" target="_blank" class="dev-link">github.com/imluoai/warehub-app</a></div>
-          <div class="dev-field"><div class="dev-label">LIVE URL</div><a href="https://app.wareplatform.com/" target="_blank" class="dev-link">app.wareplatform.com</a></div>
-          <div class="dev-field dev-wide"><div class="dev-label">DEPLOY</div><code class="dev-code">git add index.html README.md &amp;&amp; git commit -m "msg" &amp;&amp; git push</code></div>
-          <div class="dev-field dev-wide"><div class="dev-label">AFTER DEPLOY</div><div class="dev-note">GitHub Pages takes ~1 min. Hard refresh: Ctrl+Shift+R (PC) · Cmd+Shift+R (Mac)</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Cloudflare Worker ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>☁ Cloudflare Worker — API + KV Sync</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">DASHBOARD</div><a href="https://dash.cloudflare.com" target="_blank" class="dev-link">dash.cloudflare.com</a></div>
-          <div class="dev-field"><div class="dev-label">WORKER NAME</div><code class="dev-code">warehub-worker</code></div>
-          <div class="dev-field"><div class="dev-label">CUSTOM DOMAIN</div><code class="dev-code">api.wareplatform.com</code></div>
-          <div class="dev-field"><div class="dev-label">WORKER URL</div><div id="dev-worker-url" class="dev-editable" contenteditable="true" data-key="worker_url">https://api.wareplatform.com</div></div>
-          <div class="dev-field"><div class="dev-label">SECRETS</div><div class="dev-note">ANTHROPIC_KEY · STRIPE_SECRET_KEY · STRIPE_WEBHOOK_SECRET · CLERK_SECRET_KEY</div></div>
-          <div class="dev-field"><div class="dev-label">KV BINDING</div><code class="dev-code">WAREHUB_KV</code></div>
-          <div class="dev-field"><div class="dev-label">D1 DATABASE</div><code class="dev-code">DB (warehub-db)</code></div>
-          <div class="dev-field dev-wide"><div class="dev-label">KEY ENDPOINTS</div><div class="dev-note">
-            POST /api/ai → AI proxy &nbsp;·&nbsp;
-            GET/PUT /staff → staff sync &nbsp;·&nbsp;
-            GET /api/billing/status → subscription check &nbsp;·&nbsp;
-            POST /api/billing/checkout → Stripe checkout &nbsp;·&nbsp;
-            POST /api/billing/webhook → Stripe events &nbsp;·&nbsp;
-            POST /api/tenants/register → tenant onboarding
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">CORS REQUIRED</div><div class="dev-note">Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS on every response including OPTIONS preflight. Cloudflare Access must be DISABLED.</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">HOW TO REDEPLOY</div><div class="dev-note">cd warehub-worker → git push → dash.cloudflare.com → Workers &amp; Pages → warehub-worker → Deployments → verify latest.</div></div>
-          <div class="dev-field"><div class="dev-label">LIVE TEST</div><div class="dev-note">Click ☁ icon in app header — pings Worker and reports exact HTTP error if failing.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Microsoft Azure / Excel ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🟦 Microsoft Azure — Excel Online</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">AZURE PORTAL</div><a href="https://portal.azure.com" target="_blank" class="dev-link">portal.azure.com</a></div>
-          <div class="dev-field"><div class="dev-label">APP NAME</div><div id="dev-azure-appname" class="dev-editable" contenteditable="true" data-key="azure_appname">Warehub</div></div>
-          <div class="dev-field"><div class="dev-label">CLIENT ID</div><div id="dev-azure-clientid" class="dev-editable" contenteditable="true" data-key="azure_clientid">Paste Client ID here</div></div>
-          <div class="dev-field"><div class="dev-label">TENANT ID</div><div id="dev-azure-tenantid" class="dev-editable" contenteditable="true" data-key="azure_tenantid">Paste Tenant ID here</div></div>
-          <div class="dev-field"><div class="dev-label">REDIRECT URI</div><code id="dev-azure-redirect" class="dev-code">—</code></div>
-          <div class="dev-field"><div class="dev-label">EXCEL FILE</div><div id="dev-azure-filename" class="dev-editable" contenteditable="true" data-key="azure_filename">Warehub 2026.xlsx</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">PERMISSIONS</div><div class="dev-note">Files.ReadWrite · Sites.ReadWrite.All · User.Read — all with Admin Consent granted</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">EXCEL SHEETS</div><div class="dev-note">Productivity · Returns Log · Vehicle Log — created automatically on first save</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">TOKEN EXPIRY</div><div class="dev-note">~1 hour. Fix: Stats tab → ⊞ CONNECT EXCEL → sign in again. Or Stats → ⚙ → DISCONNECT → reconnect.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Domain & Infrastructure ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🌐 Domain &amp; Infrastructure</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">REGISTRAR</div><div class="dev-note">Cloudflare — wareplatform.com</div></div>
-          <div class="dev-field"><div class="dev-label">LANDING PAGE</div><a href="https://wareplatform.com" target="_blank" class="dev-link">wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ Cloudflare Pages (warehublandingpage)</span></div>
-          <div class="dev-field"><div class="dev-label">APP</div><a href="https://app.wareplatform.com" target="_blank" class="dev-link">app.wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ GitHub Pages (CNAME)</span></div>
-          <div class="dev-field"><div class="dev-label">API</div><a href="https://api.wareplatform.com" target="_blank" class="dev-link">api.wareplatform.com</a> <span style="color:var(--td);font-size:9px;">→ Cloudflare Worker custom domain</span></div>
-          <div class="dev-field"><div class="dev-label">AUTH</div><div class="dev-note">Clerk (dev instance: golden-magpie-54.clerk.accounts.dev) — upgrade to production instance before scaling</div></div>
-          <div class="dev-field"><div class="dev-label">BILLING</div><div class="dev-note">Stripe — STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET set as Worker secrets. Webhook: api.wareplatform.com/api/billing/webhook</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">DNS RECORDS</div><div class="dev-note">
-            CNAME app → imluoai.github.io (GitHub Pages) &nbsp;·&nbsp;
-            Worker route api → warehub-worker (Cloudflare) &nbsp;·&nbsp;
-            Pages custom domain → wareplatform.com (Cloudflare Pages)
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">ONEDRIVE SCOPING</div><div class="dev-note">Excel config stored under warehub_excel_{clerkUserId} — each tenant has isolated OneDrive connection. MS token scoped to warehub_ms_token_{clerkUserId}.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Google Maps ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🗺 Google Maps — Vehicle Destination</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.cloud.google.com" target="_blank" class="dev-link">console.cloud.google.com</a></div>
-          <div class="dev-field"><div class="dev-label">API KEY</div><code class="dev-code">AIzaSyDW3aqZisH4Fl6p725LQdEp1V8fh0laqrw</code></div>
-          <div class="dev-field"><div class="dev-label">ENABLED APIs</div><div class="dev-note">Maps JavaScript API · Places API · Maps Embed API</div></div>
-          <div class="dev-field"><div class="dev-label">KEY RESTRICTION</div><div class="dev-note">https://app.wareplatform.com/*</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">FIX BLANK MAP</div><div class="dev-note">Verify all 3 APIs are enabled in Google Cloud Console. Check key restrictions include the GitHub Pages URL.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: FedEx Tracking ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📦 FedEx — Shipping Status Tracking</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">DEVELOPER PORTAL</div><a href="https://developer.fedex.com" target="_blank" class="dev-link">developer.fedex.com</a></div>
-          <div class="dev-field dev-wide"><div class="dev-label">SETUP STEPS</div><div class="dev-note">1. Register at developer.fedex.com &nbsp;·&nbsp; 2. Create a project → select "Track API" &nbsp;·&nbsp; 3. Copy Client ID &amp; Client Secret below &nbsp;·&nbsp; 4. Click SAVE CREDENTIALS &nbsp;·&nbsp; 5. Use "📦 CHECK FEDEX" in the order queue.</div></div>
-          <div class="dev-field"><div class="dev-label">CLIENT ID</div><input id="fdx-client-id" type="text" placeholder="l7xxxxxxxxxxxxx" style="width:100%;font-family:monospace;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--fg);border-radius:2px;" oninput="fedexLoadConfig&&null"/></div>
-          <div class="dev-field"><div class="dev-label">CLIENT SECRET</div><input id="fdx-client-secret" type="password" placeholder="••••••••••••••••" style="width:100%;font-family:monospace;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--fg);border-radius:2px;"/></div>
-          <div class="dev-field"><div class="dev-label">SAVE</div><button class="btn btn-c" onclick="fedexSaveConfig()" style="font-size:9px;">💾 SAVE CREDENTIALS</button></div>
-          <div class="dev-field dev-wide"><div class="dev-label">HOW IT WORKS</div><div class="dev-note">When FedEx orders appear in the queue, a "CHECK" button shows on each row, and a "📦 CHECK FEDEX" button appears at the top of the queue. Click either to look up status via FedEx Track API v1. Token is cached until expiry.</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">STATUS COLORS</div><div class="dev-note"><span style="color:#4caf80;">■</span> DELIVERED &nbsp; <span style="color:#ffc107;">■</span> OUT FOR DELIVERY &nbsp; <span style="color:#c77dff;">■</span> IN TRANSIT / PICKED UP &nbsp; <span style="color:#f56565;">■</span> EXCEPTION &nbsp; <span style="color:#7096b8;">■</span> PENDING / UNKNOWN</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">CORS NOTE</div><div class="dev-note">FedEx API is called directly from the browser. If you see CORS errors, the FedEx sandbox may be blocking cross-origin requests — use the production credentials (not test credentials) which have CORS allowed.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Anthropic / AI ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>🤖 Anthropic Claude — AI Assistant</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">CONSOLE</div><a href="https://console.anthropic.com" target="_blank" class="dev-link">console.anthropic.com</a></div>
-          <div class="dev-field"><div class="dev-label">MODEL</div><code class="dev-code">claude-sonnet-5</code></div>
-          <div class="dev-field"><div class="dev-label">API KEY</div><div class="dev-note">Stored as ANTHROPIC_KEY secret in Cloudflare Worker only — never in the browser</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">SETUP</div><div class="dev-note">Click 🤖 → ⚙ SETUP → paste Worker URL → TEST → SAVE. AI uses web search + warehouse context.</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">FIX AI NOT RESPONDING</div><div class="dev-note">1. Check Worker deployed · 2. ANTHROPIC_KEY secret set · 3. Cloudflare Access OFF · 4. Worker URL saved in app</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: OMP / Lingxing ERP ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📦 Lingxing ERP / OMP — Order Source</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field"><div class="dev-label">OMP URL</div><a href="https://omp.xlms.com/wms/outbound/parcel" target="_blank" class="dev-link">omp.xlms.com/wms/outbound/parcel</a></div>
-          <div class="dev-field"><div class="dev-label">INTEGRATION</div><div class="dev-note">Export shipping labels as PDF → drag into Import tab or click drop zone</div></div>
-          <div class="dev-field"><div class="dev-label">LABEL FORMAT</div><div class="dev-note">GOFO SN-D2D ECO — text-based PDF, one label per page</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">CARRIERS DETECTED</div><div class="dev-note">GOFO · UPS · FedEx · USPS · SpeedX · SWIFT · Uniuni · LSO · OnTrac · Amazon · DHL</div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">FIX PARSE FAILURES</div><div class="dev-note">Re-export PDF from OMP. Check Debug Log in Import tab for raw extracted text. GS1-128 barcodes auto-stripped.</div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Changelog ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📋 Changelog</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body"><div class="dev-grid">
-          <div class="dev-field dev-wide"><div class="dev-label">v2.5 — April 2026</div><div class="dev-note">
-            <strong>feat</strong> Domain migration → wareplatform.com (app / api / landing page) <br>
-            <strong>feat</strong> Landing page (wareplatform.com) deployed on Cloudflare Pages — hero, features, pricing, testimonials<br>
-            <strong>feat</strong> User menu in header — gradient avatar, name/email, Billing link, Sign out (Clerk signOut)<br>
-            <strong>feat</strong> FBA Reprint Queue — persistent panel for missing FBA box labels<br>
-            <strong>feat</strong> Import missing-labels panel — skipped page thumbnails with per-label reprint buttons<br>
-            <strong>feat</strong> Print date/time on carrier divider pages (printSkuSort + printByPacker)<br>
-            <strong>fix</strong> FedEx shared batch barcode — 3-tier fallback (Tracking ID# → CUST REF → page-suffix) prevents duplicate tracking<br>
-            <strong>fix</strong> GOFO / USPS / SWIFT parse fallbacks — row-concat + full-page collapse tiers added<br>
-            <strong>fix</strong> Missing label count was wrong (groups vs individual labels) — now sums dropped copies correctly<br>
-            <strong>fix</strong> OneDrive config scoped to Clerk user ID — prevents cross-tenant data leak on shared browsers<br>
-            <strong>fix</strong> Billing success/cancel/portal URLs updated to wareplatform.com in Worker<br>
-            <strong>remove</strong> PIN lock screen (redundant — Clerk handles auth)<br>
-            <strong>remove</strong> FM radio / music player
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v2.4 — March 2026</div><div class="dev-note">
-            <strong>feat</strong> Amazon FBA Outbound tab — end-of-day shipment form (Shipment ID, FC destination, carrier/tracking to FC, boxes, units, dims, weight, dynamic SKU rows), stats bar, filterable log, CSV export, Save to Excel → "FBA Outbound" sheet
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v2.3 — March 2026</div><div class="dev-note">
-            <strong>feat</strong> Print by Packer — named 4"×6" divider cover page per packer, labels sorted by shelf location; unassigned group at end<br>
-            <strong>feat</strong> Batch completeness — status bar now shows <code>X/N labels parsed</code> and warns on any skipped pages<br>
-            <strong>fix</strong> Label image quality raised to scale 2.0 / JPEG 92% (~144 DPI) for sharper thermal output<br>
-            <strong>fix</strong> <code>kvTestConnection()</code> implemented — ☁ icon pings Worker live and reports exact HTTP error<br>
-            <strong>fix</strong> FedEx GS1-128 multi-piece barcodes — raw-scan fallback pass prevents "not found" errors<br>
-            <strong>fix</strong> Multi-packer attribution — <code>order.assignedTo</code> is primary credit source in <code>completeOrder()</code><br>
-            <strong>fix</strong> <code>_lastCompleteTime</code> changed to per-packer map for accurate individual pack speed<br>
-            <strong>fix</strong> Stats panel shows all on-shift packers using persisted <code>p.ordersCompleted</code><br>
-            <strong>fix</strong> SKU-grouped printing deduplicates multi-SKU orders across groups<br>
-            <strong>fix</strong> Full carrier support — LSO, OnTrac, Amazon, DHL, SDX added to CR map + TPATS<br>
-            <strong>fix</strong> Full button audit — 80+ handlers verified; 1 broken handler found and fixed
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v2.2 — March 2026</div><div class="dev-note">
-            Carrier parsing overhaul (11 carriers). Pack speed elapsed time fix. renderPayroll() removed — logic folded into renderProductivity(). Timesheet + clock-in log added to Stats.
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v2.1 — March 2026</div><div class="dev-note">
-            iPad PDF parse speed (scale cap, JPEG compression, 10-page yield). Fix PDF double-trigger. Google Maps duplicate script guard. Vehicle delete DOM fix.
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v2.0 — March 2026</div><div class="dev-note">
-            Vehicle tracking module. Returns intake with photo support. Rack map SVG (83 spots, 6 zones). AI assistant (Claude Sonnet). Dev panel rewrite.
-          </div></div>
-          <div class="dev-field dev-wide"><div class="dev-label">v1.x — Feb 2026</div><div class="dev-note">
-            Initial build: Import → Packers → Pack Station → Dashboard → Stats → Floor Display. Cloudflare KV staff sync. MSAL Excel integration. GS1-128 barcode support.
-          </div></div>
-        </div></div>
-      </div>
-
-      <!-- ── SECTION: Custom Notes ── -->
-      <div class="dev-section">
-        <div class="dev-section-hdr" onclick="devToggle(this)"><span>📝 Custom Notes &amp; Reminders</span><span class="dev-chevron">▾</span></div>
-        <div class="dev-section-body">
-          <textarea id="dev-custom-notes" placeholder="Add your own notes, reminders, or anything else here…" style="width:100%;box-sizing:border-box;min-height:140px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:10px;font-size:11px;font-family:inherit;resize:vertical;outline:none;"></textarea>
-          <div style="font-size:9px;color:var(--td);margin-top:6px;">Stored in localStorage on this device only.</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
   </div>
 
 <!-- ── AI Insights Panel ── -->
