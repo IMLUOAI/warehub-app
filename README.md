@@ -25,7 +25,15 @@
 - **Billing:** Stripe Checkout, gated behind a subscription wall (`#billing-gate`) shown to any authenticated user without an active plan. Plans are chosen on `billing.html`, which calls `POST /api/billing/checkout` on the Worker.
 - **Trial terms (as shown in-app):** 14-day free trial, no credit card required, cancel anytime. Confirm this is actually configured that way in the Stripe dashboard, since it's a claim shown directly to customers.
 
-⚠️ **Known pricing mismatch:** `billing.html` currently charges **Starter $79/mo · Pro $149/mo**, but the marketing site (`landing.html` / wareplatform.com) advertises **Starter $29/mo · Pro $79/mo · Enterprise custom**. These need to match before driving signups — a prospect who reads one price and is charged another is a fast way to lose trust (and generate chargebacks).
+**Plans** (kept in sync across `billing.html`, `landing.html`, and the Worker's `STRIPE_PRICES` map in `src/index.js`):
+
+| Plan | Price | Stripe Price ID (name only — value lives in Worker secrets/code, not here) |
+|------|-------|------|
+| Basic | $29/mo | `STRIPE_PRICES.basic` |
+| Starter | $79/mo | `STRIPE_PRICES.starter` |
+| Pro | $149/mo | `STRIPE_PRICES.pro` |
+
+If these three ever get out of sync between the marketing site, `billing.html`, and the Worker, checkout will silently charge a different amount than what's advertised — worth a quick cross-check any time pricing changes.
 
 ---
 
@@ -223,7 +231,10 @@ Dual-write model: every write lands in `localStorage` immediately, then syncs to
 ### August 2026
 - **security:** Removed the internal Dev Panel (service config, API key references, changelog) from the shipped app — it was static HTML served to every visitor regardless of auth state
 - **security:** Rotated Google Maps API key after review
+- **security:** Fixed a stray `[Resource from github...]` string that had been accidentally committed before `<!DOCTYPE html>` in `index.html`
 - **content:** Replaced placeholder landing page testimonials with real quotes from actual users and clients
+- **feat:** Added a third pricing tier (Basic, $29/mo) alongside Starter ($79/mo) and Pro ($149/mo); aligned pricing across `billing.html`, `landing.html`, and the Worker's `STRIPE_PRICES` map, which had previously drifted out of sync
+- **fix:** Mobile-responsive styles added to `billing.html` (previously fixed-width plan cards overflowed on small screens)
 
 ### April 2026 — v2.5
 - **feat:** Domain migration → wareplatform.com (app / api / landing page)

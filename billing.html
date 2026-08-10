@@ -43,6 +43,7 @@
   .plan-btn{width:100%;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;border:none;transition:opacity .15s;}
   .plan-btn:hover{opacity:.85;}
   .plan-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .basic-btn{background:transparent;border:1.5px solid #2d3748;color:#e2e8f0;}
   .starter-btn{background:#4a9eff;color:#fff;}
   .pro-btn{background:linear-gradient(135deg,#c77dff,#4a9eff);color:#fff;}
   .trial-note{text-align:center;font-size:12px;color:#4a6080;padding-bottom:48px;}
@@ -50,6 +51,25 @@
   .msg.success{background:#1a3a2a;border:1px solid #4caf80;color:#4caf80;display:block;}
   .msg.error{background:#3a1a1a;border:1px solid #f56565;color:#f56565;display:block;}
   #user-bar{text-align:center;padding:8px;font-size:12px;color:#4a6080;border-bottom:1px solid #1e2a3a;}
+
+  @media(max-width:600px){
+    .nav{padding:12px 16px;flex-wrap:wrap;gap:8px;}
+    .logo{font-size:17px;}
+    .nav-right{gap:8px;}
+    .nav-right .btn-outline{padding:7px 12px;font-size:12px;white-space:nowrap;}
+    .hero{padding:40px 16px 32px;}
+    .hero h1{font-size:clamp(26px,7vw,34px);}
+    .hero p{font-size:14px;padding:0 8px;}
+    .plans{padding:0 16px 48px;gap:16px;}
+    .plan{width:100%;max-width:360px;padding:24px 20px;}
+    .plan-price{font-size:34px;}
+    .msg{margin:0 16px 16px;}
+    .trial-note{font-size:11px;padding:0 16px 40px;}
+  }
+  @media(max-width:360px){
+    .hero h1{font-size:24px;}
+    .plan{padding:20px 16px;}
+  }
 </style>
 </head>
 <body>
@@ -89,14 +109,30 @@
 
 <div class="plans">
 
+  <!-- Basic -->
+  <div class="plan">
+    <div class="plan-name">BASIC</div>
+    <div class="plan-price">$29<span>/month</span></div>
+    <div class="plan-desc">For solo sellers and small teams just getting started.</div>
+    <ul class="plan-features">
+      <li><span class="check">✓</span> Order queue &amp; barcode scanning</li>
+      <li><span class="check">✓</span> PDF label import (all carriers)</li>
+      <li><span class="check">✓</span> Basic productivity stats</li>
+      <li><span class="check">✓</span> Single warehouse location</li>
+      <li><span class="check">✓</span> Up to 3 packers</li>
+    </ul>
+    <button class="plan-btn basic-btn" id="btn-basic" onclick="checkout('basic')">
+      Get Started — $29/mo
+    </button>
+  </div>
+
   <!-- Starter -->
   <div class="plan">
     <div class="plan-name">STARTER</div>
     <div class="plan-price">$79<span>/month</span></div>
     <div class="plan-desc">Perfect for a single warehouse location with a small team.</div>
     <ul class="plan-features">
-      <li><span class="check">✓</span> Order queue &amp; barcode scanning</li>
-      <li><span class="check">✓</span> PDF label import (all carriers)</li>
+      <li><span class="check">✓</span> Everything in Basic</li>
       <li><span class="check">✓</span> Packer time tracking &amp; stats</li>
       <li><span class="check">✓</span> Vehicle trip log</li>
       <li><span class="check">✓</span> Returns intake</li>
@@ -139,6 +175,11 @@
 <script>
 const WORKER = 'https://api.wareplatform.com';
 var _token = null;
+var PLAN_LABELS = {
+  basic:   'Get Started — $29/mo',
+  starter: 'Get Started — $79/mo',
+  pro:     'Get Pro — $149/mo',
+};
 
 function showMsg(text, type) {
   var el = document.getElementById('msg');
@@ -179,7 +220,7 @@ async function checkout(plan) {
       try { errText = (await resp.json()).error; } catch(e2) { errText = 'HTTP ' + resp.status; }
       showMsg('Error: ' + (errText || 'Something went wrong'), 'error');
       btn.disabled = false;
-      btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
+      btn.textContent = PLAN_LABELS[plan] || 'Try again';
       return;
     }
     var data = await resp.json();
@@ -188,13 +229,13 @@ async function checkout(plan) {
     } else {
       showMsg(data.error || 'Something went wrong. Please try again.', 'error');
       btn.disabled = false;
-      btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
+      btn.textContent = PLAN_LABELS[plan] || 'Try again';
     }
   } catch(e) {
     console.error('[Warehub billing]', e);
     showMsg('Network error: ' + e.message + ' — check console for details.', 'error');
     btn.disabled = false;
-    btn.textContent = plan === 'pro' ? 'Get Pro — $149/mo' : 'Get Started — $79/mo';
+    btn.textContent = PLAN_LABELS[plan] || 'Try again';
   }
 }
 
