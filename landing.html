@@ -111,6 +111,7 @@ nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.95);backdrop
 .plan-btn.solid:hover{background:var(--brand-dark);}
 
 /* TESTIMONIALS */
+
 .testimonials{padding:96px 5%;background:var(--sur);border-top:1px solid var(--border);}
 .testi-grid{max-width:1100px;margin:64px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
 .testi-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:28px 24px;}
@@ -120,11 +121,6 @@ nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.95);backdrop
 .testi-avatar{width:38px;height:38px;border-radius:50%;background:var(--brand-light);color:var(--brand);font-weight:700;font-size:0.9rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .testi-name{font-weight:700;font-size:0.88rem;}
 .testi-role{font-size:0.78rem;color:var(--muted);}
-.testi-featured{max-width:800px;margin:0 auto;background:var(--white);border:1.5px solid var(--brand);border-radius:16px;padding:36px 40px;text-align:center;box-shadow:0 8px 32px rgba(37,99,235,0.08);}
-.testi-featured .testi-stars{font-size:1.1rem;}
-.testi-featured p{font-size:1.05rem;color:var(--text);line-height:1.7;margin-bottom:22px;}
-.testi-featured .testi-author{justify-content:center;}
-.testi-featured .testi-avatar{width:46px;height:46px;font-size:1rem;}
 
 /* CTA BANNER */
 .cta-banner{padding:80px 5%;background:linear-gradient(135deg,var(--brand) 0%,#1e40af 100%);text-align:center;}
@@ -387,70 +383,49 @@ footer{background:var(--text);color:rgba(255,255,255,0.6);padding:48px 5% 32px;}
 </section>
 
 <!-- TESTIMONIALS -->
-<section class="testimonials">
-  <div class="section-header">
-    <div class="section-tag">Testimonials</div>
-    <h2>Trusted by fulfillment teams</h2>
-    <p>Warehouses that switched to Warehub cut their label prep time by over 60%.</p>
+<section class="testi-featured" style="margin-top:24px;">
+  <div class="testi-stars">★★★★★</div>
+  <p>"I've been using Warehub for about 4 months now to sort our return items, manage packer hours, scan package quantities, and keep our rack map organized — it's an incredibly powerful tool. The built-in AI assistant is a standout for us: it summarizes our daily outbound data and even our part-time coworkers' hours automatically."</p>
+  <div class="testi-author">
+    <div class="testi-avatar">EM</div>
+    <div>
+      <div class="testi-name">Eloy Martinez</div>
+      <div class="testi-role">Specialist Operator, Topseat</div>
+    </div>
   </div>
-  <div class="testi-featured">
+</div>
+<div class="testi-grid">
+  <div class="testi-card">
     <div class="testi-stars">★★★★★</div>
-    <p>"I've run Double-Sided ISCM's daily operations on Warehub for over 6 months now, and it's been invaluable. Our team sorts hundreds of labels across 50+ different SKUs every single day, and what used to take us 2 hours now takes about 15 minutes. Beyond labels, the Returns, FBA Outbound, and Vehicle tracking features have been just as useful for keeping the rest of our operation running smoothly."</p>
+    <p>"I sort labels with Warehub every shift. It used to mean going carrier by carrier by hand — now I drop in the PDF and everything's grouped and ready before I even sit down at my station."</p>
     <div class="testi-author">
-      <div class="testi-avatar">SL</div>
+      <div class="testi-avatar">JH</div>
       <div>
-        <div class="testi-name">Samuel Luo</div>
-        <div class="testi-role">Manager, Double-Sided ISCM LLC — Warehub's creator</div>
+        <div class="testi-name">Jessica Huerta</div>
+        <div class="testi-role">Warehouse Assistant</div>
       </div>
     </div>
   </div>
-  <div class="testi-featured" style="margin-top:24px;">
+  <div class="testi-card">
     <div class="testi-stars">★★★★★</div>
-    <p>"I've been using Warehub for about 4 months now to sort our return items, manage packer hours, scan package quantities, and keep our rack map organized — it's an incredibly powerful tool. The built-in AI assistant is a standout for us: it summarizes our daily outbound data and even our part-time coworkers' hours automatically."</p>
+    <p>"I handle our FBA outbound shipments and log new inventory as it comes in through Warehub. The rack map makes it easy to see exactly where things go as we rearrange stock, instead of trying to remember it all."</p>
     <div class="testi-author">
-      <div class="testi-avatar">EM</div>
+      <div class="testi-avatar">KZ</div>
       <div>
-        <div class="testi-name">Eloy Martinez</div>
-        <div class="testi-role">Specialist Operator, Topseat</div>
+        <div class="testi-name">Kevin Zhang</div>
+        <div class="testi-role">Packer</div>
       </div>
     </div>
   </div>
-  <div class="testi-grid">
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I sort labels with Warehub every shift. It used to mean going carrier by carrier by hand — now I drop in the PDF and everything's grouped and ready before I even sit down at my station."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">JH</div>
-        <div>
-          <div class="testi-name">Jessica Huerta</div>
-          <div class="testi-role">Warehouse Assistant</div>
-        </div>
-      </div>
-    </div>
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I handle our FBA outbound shipments and log new inventory as it comes in through Warehub. The rack map makes it easy to see exactly where things go as we rearrange stock, instead of trying to remember it all."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">KZ</div>
-        <div>
-          <div class="testi-name">Kevin Zhang</div>
-          <div class="testi-role">Packer</div>
-        </div>
-      </div>
-    </div>
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I log every return that comes through my station in Warehub — scan it, mark the condition, and it's already sorted into the right pile. If something needs a second look, my manager gets flagged automatically."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">IK</div>
-        <div>
-          <div class="testi-name">Ira Kim</div>
-          <div class="testi-role">Packer</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+  <div class="testi-card">
+    <div class="testi-stars">★★★★★</div>
+    <p>"I log every return that comes through my station in Warehub — scan it, mark the condition, and it's already sorted into the right pile. If something needs a second look, my manager gets flagged automatically."</p>
+    <div class="testi-author">
+      <div class="testi-avatar">IK</div>
+      <div>
+        <div class="testi-name">Ira Kim</div>
+        <div class="testi-role">Packer</div>
+      </section>
 
 <!-- CTA BANNER -->
 <section class="cta-banner">
