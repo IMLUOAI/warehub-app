@@ -507,6 +507,7 @@ body{
             <div style="min-width:0;">
               <div id="user-menu-name" style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
               <div id="user-menu-email" style="font-size:10px;color:var(--td);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+              <div id="user-menu-plan" style="display:inline-block;margin-top:5px;font-size:9px;font-weight:800;letter-spacing:0.05em;padding:2px 8px;border-radius:10px;background:linear-gradient(135deg,#4a9eff 0%,#c77dff 100%);color:#fff;text-transform:uppercase;"></div>
             </div>
           </div>
           <!-- Menu items -->
@@ -3479,11 +3480,21 @@ function userMenuPopulate(){
   var em   = document.getElementById('user-email-hdr');
   var mn   = document.getElementById('user-menu-name');
   var me   = document.getElementById('user-menu-email');
+  var pl   = document.getElementById('user-menu-plan');
   if(av)   av.textContent = initials;
   if(avLg) avLg.textContent = initials;
   if(em)   em.textContent = email || name;
   if(mn)   mn.textContent = name;
   if(me)   me.textContent = email;
+  if(pl){
+    var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
+    var plan = window._tenantPlan || 'trial';
+    pl.textContent = planLabels[plan] || (plan.charAt(0).toUpperCase() + plan.slice(1));
+    pl.style.background = plan === 'trial'
+      ? 'var(--sur2, #2d3748)'
+      : 'linear-gradient(135deg,#4a9eff 0%,#c77dff 100%)';
+    pl.style.color = plan === 'trial' ? 'var(--td)' : '#fff';
+  }
 }
 async function userSignOut(){
   try{
@@ -9826,7 +9837,7 @@ function aiDoActions(actions){
     window.__clerk = window.Clerk;
   
     // Register tenant on first sign-up (idempotent — safe to call every login)
-    let _tenantPlan = 'trial';
+    window._tenantPlan = 'trial';
     let _tenantActive = false;
     try {
       const email = user.emailAddresses[0]?.emailAddress || '';
@@ -9838,7 +9849,7 @@ function aiDoActions(actions){
       });
       const regData = await regResp.json();
       _warehubTenantId = regData.tenantId;
-      _tenantPlan   = regData.plan   || 'trial';
+      window._tenantPlan = regData.plan   || 'trial';
       _tenantActive = regData.active || false;
     } catch(e) {
       console.warn('[Warehub] Tenant registration failed:', e.message);
