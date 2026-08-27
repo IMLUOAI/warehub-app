@@ -510,7 +510,22 @@ body{
               <div id="user-menu-plan" style="display:inline-block;margin-top:5px;font-size:9px;font-weight:800;letter-spacing:0.05em;padding:2px 8px;border-radius:10px;background:linear-gradient(135deg,#4a9eff 0%,#c77dff 100%);color:#fff;text-transform:uppercase;"></div>
             </div>
           </div>
+          <div id="user-menu-renewal" style="display:none;padding:9px 16px;font-size:10.5px;line-height:1.4;border-bottom:1px solid var(--bdr);"></div>
           <!-- Menu items -->
+          <button id="user-menu-team-btn" onclick="teamOpen()" style="
+            display:none;width:100%;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
+            color:var(--tx);text-decoration:none;transition:background .12s;background:transparent;
+            border:none;cursor:pointer;font-family:inherit;text-align:left;
+          " onmouseover="this.style.background='rgba(129,140,248,0.07)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;">👥</span> Team
+          </button>
+          <button onclick="companyInfoOpen()" style="
+            width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
+            color:var(--tx);text-decoration:none;transition:background .12s;background:transparent;
+            border:none;cursor:pointer;font-family:inherit;text-align:left;
+          " onmouseover="this.style.background='rgba(129,140,248,0.07)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;">🏢</span> Company Info
+          </button>
           <a href="https://app.wareplatform.com/billing.html" target="_blank" style="
             display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
             color:var(--tx);text-decoration:none;transition:background .12s;
@@ -525,6 +540,97 @@ body{
           " onmouseover="this.style.background='rgba(248,113,113,0.07)'" onmouseout="this.style.background=''">
             <span style="font-size:13px;">⎋</span> Sign out
           </button>
+        </div>
+      </div>
+
+      <!-- Company Info modal -->
+      <div id="company-info-modal" style="
+        display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:340px;max-width:92vw;padding:22px 22px 20px;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="font-size:13px;font-weight:800;color:var(--tx);margin-bottom:4px;">Company Info</div>
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+            Shown on every exported report (CSV &amp; Excel).
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:4px;">COMPANY NAME</div>
+            <input id="ci-name" type="text" placeholder="e.g. Double Sided ISCM LLC" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:7px;
+              background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:4px;">ADDRESS</div>
+            <input id="ci-address" type="text" placeholder="Street, City, State ZIP" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:7px;
+              background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+          </div>
+          <div style="margin-bottom:18px;">
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:4px;">PHONE</div>
+            <input id="ci-phone" type="text" placeholder="(555) 123-4567" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:7px;
+              background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="companyInfoClose()" style="
+              padding:8px 16px;font-size:11px;font-weight:600;border-radius:7px;cursor:pointer;
+              background:transparent;border:1px solid var(--bdr);color:var(--td);font-family:inherit;
+            ">Cancel</button>
+            <button onclick="companyInfoSave()" style="
+              padding:8px 16px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
+              background:var(--cy,#818cf8);border:none;color:#0a0f18;font-family:inherit;
+            ">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team modal -->
+      <div id="team-modal" style="
+        display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:400px;max-width:92vw;max-height:80vh;overflow-y:auto;padding:22px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:13px;font-weight:800;color:var(--tx);">Team</div>
+            <button onclick="teamClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
+          </div>
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+            Invite packers or managers to sign in on their own device under your account — no extra subscription needed.
+          </div>
+
+          <div id="team-list" style="margin-bottom:18px;"></div>
+
+          <div style="border-top:1px solid var(--bdr);padding-top:16px;">
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:8px;">INVITE SOMEONE</div>
+            <input id="team-invite-email" type="email" placeholder="email@example.com" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:7px;margin-bottom:8px;
+              background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+            <div style="display:flex;gap:8px;">
+              <select id="team-invite-role" style="
+                flex:1;padding:8px 10px;font-size:12px;border-radius:7px;
+                background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+              ">
+                <option value="packer">Packer</option>
+                <option value="manager">Manager</option>
+              </select>
+              <button onclick="teamInvite()" style="
+                padding:8px 16px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
+                background:var(--cy,#818cf8);border:none;color:#0a0f18;font-family:inherit;white-space:nowrap;
+              ">Send Invite</button>
+            </div>
+            <div id="team-invite-msg" style="font-size:10.5px;margin-top:8px;"></div>
+          </div>
         </div>
       </div>
 
@@ -3486,6 +3592,8 @@ function userMenuPopulate(){
   if(em)   em.textContent = email || name;
   if(mn)   mn.textContent = name;
   if(me)   me.textContent = email;
+  var teamBtn = document.getElementById('user-menu-team-btn');
+  if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
     var plan = window._tenantPlan || 'trial';
@@ -3495,12 +3603,175 @@ function userMenuPopulate(){
       : 'linear-gradient(135deg,#4a9eff 0%,#c77dff 100%)';
     pl.style.color = plan === 'trial' ? 'var(--td)' : '#fff';
   }
+
+  // Renewal / expiry reminder — only shown within 7 days of the date
+  var rn = document.getElementById('user-menu-renewal');
+  if(rn){
+    rn.style.display = 'none';
+    var expiresAt = window._tenantExpiresAt;
+    if(expiresAt){
+      var msLeft = new Date(expiresAt).getTime() - Date.now();
+      var daysLeft = Math.ceil(msLeft / 86400000);
+      if(daysLeft <= 7 && daysLeft >= 0){
+        var dateStr = new Date(expiresAt).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+        var dayWord = daysLeft === 0 ? 'today' : daysLeft === 1 ? 'in 1 day' : 'in ' + daysLeft + ' days';
+        if(window._tenantCancelAtPeriodEnd){
+          rn.innerHTML = '⚠ <strong>Access ends ' + dayWord + '</strong> (' + dateStr + ') — '
+            + '<a href="https://app.wareplatform.com/billing.html" target="_blank" style="color:inherit;text-decoration:underline;">resubscribe</a>';
+          rn.style.color = '#f87171';
+          rn.style.background = 'rgba(248,113,113,0.08)';
+        } else {
+          rn.innerHTML = 'Renews ' + dayWord + ' (' + dateStr + ')';
+          rn.style.color = 'var(--td)';
+          rn.style.background = 'transparent';
+        }
+        rn.style.display = 'block';
+      }
+    }
+  }
 }
 async function userSignOut(){
   try{
     if(window.Clerk) await window.Clerk.signOut();
   }catch(e){}
   location.reload();
+}
+
+// ── Company Info (shown on exports) ──────────────────────────────
+window._companyInfo = { name:'', address:'', phone:'' };
+function companyInfoOpen(){
+  var m = document.getElementById('company-info-modal');
+  if(!m) return;
+  document.getElementById('ci-name').value    = window._companyInfo.name    || '';
+  document.getElementById('ci-address').value = window._companyInfo.address || '';
+  document.getElementById('ci-phone').value   = window._companyInfo.phone   || '';
+  m.style.display = 'flex';
+  var dd = document.getElementById('user-menu-dropdown');
+  if(dd) dd.style.display = 'none';
+}
+function companyInfoClose(){
+  var m = document.getElementById('company-info-modal');
+  if(m) m.style.display = 'none';
+}
+async function companyInfoSave(){
+  window._companyInfo = {
+    name:    document.getElementById('ci-name').value.trim(),
+    address: document.getElementById('ci-address').value.trim(),
+    phone:   document.getElementById('ci-phone').value.trim(),
+  };
+  try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
+  if(window.apiSaveSettings) await window.apiSaveSettings({ company_info: window._companyInfo });
+  companyInfoClose();
+  if(typeof pm === 'function') pm('✓ Company info saved');
+}
+// Rows prepended to CSV/XLSX exports — [name],[address],[Tel: phone], blank row.
+// Skips empty fields; returns [] entirely if nothing is set.
+function companyHeaderRows(){
+  var ci = window._companyInfo || {};
+  var rows = [];
+  if(ci.name)    rows.push([ci.name]);
+  if(ci.address) rows.push([ci.address]);
+  if(ci.phone)   rows.push(['Tel: '+ci.phone]);
+  if(rows.length) rows.push(['']);
+  return rows;
+}
+// Same info as plain CSV-escaped text lines, for exports built as joined strings.
+function companyHeaderCSVLines(){
+  var ci = window._companyInfo || {};
+  var q = function(v){ return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  var lines = [];
+  if(ci.name)    lines.push(q(ci.name));
+  if(ci.address) lines.push(q(ci.address));
+  if(ci.phone)   lines.push(q('Tel: '+ci.phone));
+  if(lines.length) lines.push('');
+  return lines;
+}
+
+// ── Team management (owner only) ─────────────────────────────────
+function teamOpen(){
+  var m = document.getElementById('team-modal');
+  if(!m) return;
+  m.style.display = 'flex';
+  var dd = document.getElementById('user-menu-dropdown');
+  if(dd) dd.style.display = 'none';
+  teamRender();
+}
+function teamClose(){
+  var m = document.getElementById('team-modal');
+  if(m) m.style.display = 'none';
+  var msg = document.getElementById('team-invite-msg');
+  if(msg) msg.textContent = '';
+}
+async function teamRender(){
+  var list = document.getElementById('team-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  if(typeof window.warehubApi !== 'function' || !window._clerkToken){
+    list.innerHTML = '<div style="font-size:11px;color:var(--td);">Not ready — try again in a moment.</div>';
+    return;
+  }
+  var result = await window.warehubApi('GET', '/api/team').catch(function(){ return null; });
+  if(!result){
+    list.innerHTML = '<div style="font-size:11px;color:#f87171;">Could not load team. Try again.</div>';
+    return;
+  }
+  var roleLabel = { owner:'Owner', manager:'Manager', packer:'Packer' };
+  var html = '';
+  (result.members||[]).forEach(function(m){
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:11.5px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+ (m.name||m.email) +'</div>'
+      +   '<div style="font-size:10px;color:var(--td);">'+ (roleLabel[m.role]||m.role) +' · '+ m.email +'</div>'
+      + '</div>'
+      + (m.role !== 'owner'
+          ? '<button onclick="teamRemoveMember(\''+m.id+'\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Remove</button>'
+          : '')
+      + '</div>';
+  });
+  (result.pendingInvites||[]).forEach(function(inv){
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:11.5px;font-weight:600;color:var(--td);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+ inv.email +'</div>'
+      +   '<div style="font-size:10px;color:var(--td);">'+ (roleLabel[inv.role]||inv.role) +' · pending invite</div>'
+      + '</div>'
+      + '<button onclick="teamCancelInvite(\''+inv.id+'\')" style="background:transparent;border:none;color:var(--td);font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Cancel</button>'
+      + '</div>';
+  });
+  if(!html) html = '<div style="font-size:11px;color:var(--td);">No team members yet.</div>';
+  list.innerHTML = html;
+}
+async function teamInvite(){
+  var emailEl = document.getElementById('team-invite-email');
+  var roleEl  = document.getElementById('team-invite-role');
+  var msg     = document.getElementById('team-invite-msg');
+  var email   = (emailEl.value||'').trim();
+  if(!email || email.indexOf('@') === -1){
+    msg.style.color = '#f87171';
+    msg.textContent = 'Enter a valid email address.';
+    return;
+  }
+  msg.style.color = 'var(--td)';
+  msg.textContent = 'Sending invite…';
+  var result = await window.warehubApi('POST', '/api/team/invite', { email: email, role: roleEl.value })
+    .catch(function(e){ return { error: e.message }; });
+  if(!result || result.error){
+    msg.style.color = '#f87171';
+    msg.textContent = (result && result.error) || 'Could not send invite.';
+    return;
+  }
+  msg.style.color = '#4caf80';
+  msg.textContent = '✓ Invite sent — they can now sign up with that email.';
+  emailEl.value = '';
+  teamRender();
+}
+async function teamRemoveMember(userId){
+  if(!confirm('Remove this team member? They will lose access immediately.')) return;
+  await window.warehubApi('DELETE', '/api/team/'+userId).catch(function(){});
+  teamRender();
+}
+async function teamCancelInvite(inviteId){
+  await window.warehubApi('DELETE', '/api/team/invite/'+inviteId).catch(function(){});
+  teamRender();
 }
 // Close menu when clicking outside
 document.addEventListener('click', function(e){
@@ -3762,7 +4033,7 @@ function exportPayrollCSV(){
     return hasTodaySess||(p.online&&_isTodayMs(p.loginTime));
   });
   if(!activePackers.length){ alert('No clock-in data for today yet.'); return; }
-  var lines=['Packer,Packages Scanned,Clock In,Clock Out,Hours,Date'];
+  var lines=companyHeaderCSVLines().concat(['Packer,Packages Scanned,Clock In,Clock Out,Hours,Date']);
   activePackers.forEach(function(p){
     var sessions=(p.shiftSessions||[]).filter(function(s){
       var inT=s.clockIn?new Date(s.clockIn).getTime():(s.in||0);
@@ -4086,7 +4357,7 @@ function ensureSheetJS(){
 function buildXlsxBuffer(sheets){
   var wb=XLSX.utils.book_new();
   sheets.forEach(function(s){
-    var data=[s.headers].concat(s.rows);
+    var data=companyHeaderRows().concat([s.headers]).concat(s.rows);
     var ws=XLSX.utils.aoa_to_sheet(data);
     // Auto column widths based on header length
     ws['!cols']=s.headers.map(function(h){ return {wch:Math.max((h||'').length+4,12)}; });
@@ -6301,7 +6572,7 @@ function returnsDelete(id){
 
 function returnsExportCSV(){
   if(!returnsList.length){pm('⚠ No returns to export.');return;}
-  var rows=[['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']];
+  var rows=companyHeaderRows().concat([['Date','Time','Tracking','Carrier','Type','Condition','SKU','Qty','Pile','Location','Notes','Scanned By','Mgr Review']]);
   returnsList.forEach(function(r){
     rows.push([r.date,r.time,r.tracking,r.carrier||'',
       RETURN_TYPES[r.type]||r.type,
@@ -7039,10 +7310,10 @@ function vehicleExportCSV(){
   if(!vehicleTrips.length){ pm('⚠ No trips to export.'); return; }
   var vModel = _vehicleConfig.model || 'Company Vehicle';
   var vPlate = _vehicleConfig.plate || '—';
-  var rows = [
+  var rows = companyHeaderRows().concat([
     ['Vehicle: '+vModel+'   |   License Plate: '+vPlate,'','','','','','','',''],
     ['Date','Driver','Destination','Depart','Return','ODO Start','ODO End','Miles','Notes']
-  ];
+  ]);
   vehicleTrips.forEach(function(t){
     rows.push([
       t.date, t.driver, t.dest,
@@ -8518,7 +8789,7 @@ function fbaExportCSV(){
     var skuStr = (r.skus||[]).map(function(s){ return s.sku+'×'+s.qty; }).join(' | ');
     return [r.date,r.shipId,r.fc,skuStr,r.units,r.boxes,r.dims,r.weight,r.carrier,r.tracking,r.by,r.notes].map(q).join(',');
   });
-  var csv = [header.map(q).join(',')].concat(rows).join('\n');
+  var csv = companyHeaderCSVLines().concat([header.map(q).join(',')]).concat(rows).join('\n');
   var a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download = 'FBA_Outbound_'+new Date().toISOString().slice(0,10)+'.csv';
@@ -9838,6 +10109,8 @@ function aiDoActions(actions){
   
     // Register tenant on first sign-up (idempotent — safe to call every login)
     window._tenantPlan = 'trial';
+    window._tenantExpiresAt = null;
+    window._tenantCancelAtPeriodEnd = false;
     let _tenantActive = false;
     try {
       const email = user.emailAddresses[0]?.emailAddress || '';
@@ -9850,7 +10123,22 @@ function aiDoActions(actions){
       const regData = await regResp.json();
       _warehubTenantId = regData.tenantId;
       window._tenantPlan = regData.plan   || 'trial';
+      window._tenantRole = regData.role   || 'owner';
       _tenantActive = regData.active || false;
+
+      // Fetch renewal/expiry info for the reminder banner (best-effort)
+      try {
+        const statusResp = await fetch(WORKER_URL + '/api/billing/status', {
+          headers: { 'Authorization': 'Bearer ' + _clerkToken },
+        });
+        if (statusResp.ok) {
+          const statusData = await statusResp.json();
+          window._tenantExpiresAt = statusData.expiresAt || null;
+          window._tenantCancelAtPeriodEnd = !!statusData.cancelAtPeriodEnd;
+        }
+      } catch(e2) {
+        console.warn('[Warehub] Billing status fetch failed:', e2.message);
+      }
     } catch(e) {
       console.warn('[Warehub] Tenant registration failed:', e.message);
       // On network error, allow access (fail open so warehouse doesn't go down)
@@ -10303,6 +10591,10 @@ function aiDoActions(actions){
     if(s.fedex_config){
       _fedexConfig = s.fedex_config;
       try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+    }
+    if(s.company_info){
+      window._companyInfo = s.company_info;
+      try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
     }
   };
 
