@@ -95,6 +95,12 @@ body{
   min-width:64px;
   scroll-snap-align:start;
 }
+.tab.plan-locked{
+  opacity:0.5;
+}
+.tab.plan-locked:hover{
+  opacity:0.75;
+}
 
 :root{
   --bg:#1a1f2e;--sur:#242937;--bdr:#323852;
@@ -634,6 +640,34 @@ body{
         </div>
       </div>
 
+      <!-- Upgrade prompt modal (shown when clicking a plan-locked feature) -->
+      <div id="upgrade-modal" style="
+        display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:360px;max-width:92vw;padding:28px 24px 22px;text-align:center;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="font-size:32px;margin-bottom:12px;">🔒</div>
+          <div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:6px;">
+            <span id="upgrade-modal-feature">This feature</span> isn't on your current plan
+          </div>
+          <div style="font-size:11px;color:var(--td);margin-bottom:20px;line-height:1.6;">
+            Upgrade to Starter or Pro to unlock this, along with more packers and additional tools.
+          </div>
+          <a href="https://app.wareplatform.com/billing.html" target="_blank" onclick="upgradeModalClose()" style="
+            display:block;padding:11px;border-radius:8px;font-size:12px;font-weight:700;
+            background:linear-gradient(135deg,#4a9eff,#c77dff);color:#fff;text-decoration:none;margin-bottom:8px;
+          ">View Plans &amp; Pricing →</a>
+          <button onclick="upgradeModalClose()" style="
+            width:100%;padding:10px;font-size:11px;font-weight:600;border-radius:8px;cursor:pointer;
+            background:transparent;border:1px solid var(--bdr);color:var(--td);font-family:inherit;
+          ">Maybe later</button>
+        </div>
+      </div>
+
       <!-- AI Insights bell -->
       <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="
         position:relative;background:transparent;border:none;cursor:pointer;padding:4px;
@@ -1056,7 +1090,68 @@ var CR = {
 function dc(s){ for(var n in CR){ if(CR[n].t(s)) return CR[n].display || n; } return 'Unknown'; }
 function cc(c){ for(var n in CR){ if((CR[n].display||n)===c) return CR[n].c; } return '#4a6080'; }
 
+// Mirrors the backend's PLAN_LIMITS — server still enforces this for real;
+// this copy is just so the UI can show a clean prompt instead of letting
+// someone click into a tab and hit a raw API error.
+var PLAN_FEATURES = {
+  trial:   { vehicle:false, returns:false, fba:false },
+  basic:   { vehicle:false, returns:false, fba:false },
+  starter: { vehicle:true,  returns:true,  fba:true  },
+  pro:     { vehicle:true,  returns:true,  fba:true  },
+};
+var VIEW_FEATURE_MAP = { vehicle:'vehicle', returns:'returns', fba:'fba' };
+var FEATURE_LABELS = { vehicle:'Vehicle Log', returns:'Returns', fba:'FBA Outbound' };
+
+function planAllows(feature){
+  var plan = window._tenantPlan || 'trial';
+  var f = PLAN_FEATURES[plan] || PLAN_FEATURES.trial;
+  return !!f[feature];
+}
+
+function showUpgradePrompt(feature){
+  var modal = document.getElementById('upgrade-modal');
+  if(!modal){
+    // Fallback if markup isn't present for some reason — still better than
+    // a silent failure or a raw fetch error.
+    window.open('https://app.wareplatform.com/billing.html', '_blank');
+    return;
+  }
+  document.getElementById('upgrade-modal-feature').textContent = FEATURE_LABELS[feature] || 'This feature';
+  modal.style.display = 'flex';
+}
+function upgradeModalClose(){
+  var m = document.getElementById('upgrade-modal');
+  if(m) m.style.display = 'none';
+}
+
+// Dim + lock nav tabs the current plan doesn't include. Called once the
+// tenant's plan is known (from userMenuPopulate).
+function applyPlanUIGating(){
+  document.querySelectorAll('.tab').forEach(function(btn){
+    var view = btn.dataset.view;
+    var feature = VIEW_FEATURE_MAP[view];
+    if(!feature) return;
+    var locked = !planAllows(feature);
+    btn.classList.toggle('plan-locked', locked);
+    if(locked && !btn.querySelector('.lock-badge')){
+      var badge = document.createElement('span');
+      badge.className = 'lock-badge';
+      badge.textContent = ' 🔒';
+      badge.style.opacity = '0.7';
+      btn.appendChild(badge);
+    } else if(!locked){
+      var existing = btn.querySelector('.lock-badge');
+      if(existing) existing.remove();
+    }
+  });
+}
+
 function gv(name){
+  var neededFeature = VIEW_FEATURE_MAP[name];
+  if(neededFeature && !planAllows(neededFeature)){
+    showUpgradePrompt(neededFeature);
+    return;
+  }
   document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('on'); });
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
@@ -3594,6 +3689,7 @@ function userMenuPopulate(){
   if(me)   me.textContent = email;
   var teamBtn = document.getElementById('user-menu-team-btn');
   if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
+  applyPlanUIGating();
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
     var plan = window._tenantPlan || 'trial';
@@ -10044,15 +10140,26 @@ function aiDoActions(actions){
           headers: { ...opts.headers, 'Authorization': 'Bearer ' + _clerkToken }
         });
         if (retry.status === 401) { await window.__clerk.signOut(); return null; }
-        if (retry.status === 402) { alert('Your Warehub subscription has expired.'); return null; }
+        if (retry.status === 402) { showExpiredGate(); return null; }
         return retry.json();
       } catch(e) { await window.__clerk.signOut(); return null; }
     }
     if (resp.status === 402) {
-      alert('Your Warehub subscription has expired. Please renew at your account portal.');
+      showExpiredGate();
       return null;
     }
     return resp.json();
+  }
+
+  // Subscription lapsed mid-session (e.g. renewal payment failed) — show
+  // the same gate a brand-new unsubscribed user sees, instead of a jarring
+  // native alert() that gives no path forward.
+  function showExpiredGate(){
+    var gate = document.getElementById('billing-gate');
+    if (!gate) { alert('Your Warehub subscription has expired. Please renew at your account portal.'); return; }
+    var msgEl = gate.querySelector('p');
+    if (msgEl) msgEl.textContent = 'Your subscription has expired or a recent payment failed. Renew to keep using Warehub.';
+    gate.style.display = 'flex';
   }
   
   // Expose globally so existing app code can call it
