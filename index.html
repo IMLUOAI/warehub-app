@@ -525,6 +525,13 @@ body{
           " onmouseover="this.style.background='rgba(129,140,248,0.07)'" onmouseout="this.style.background=''">
             <span style="font-size:13px;">👥</span> Team
           </button>
+          <button id="user-menu-api-btn" onclick="apiAccessOpen()" style="
+            display:none;width:100%;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
+            color:var(--tx);text-decoration:none;transition:background .12s;background:transparent;
+            border:none;cursor:pointer;font-family:inherit;text-align:left;
+          " onmouseover="this.style.background='rgba(129,140,248,0.07)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;">🔌</span> API Access
+          </button>
           <button onclick="companyInfoOpen()" style="
             width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:11px;
             color:var(--tx);text-decoration:none;transition:background .12s;background:transparent;
@@ -636,6 +643,71 @@ body{
               ">Send Invite</button>
             </div>
             <div id="team-invite-msg" style="font-size:10.5px;margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Access modal -->
+      <div id="api-access-modal" style="
+        display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:460px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:13px;font-weight:800;color:var(--tx);">API Access</div>
+            <button onclick="apiAccessClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
+          </div>
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:18px;line-height:1.5;">
+            Connect an ERP or other system to sync orders in real time — pushing new orders in, and receiving events as they're packed and shipped.
+          </div>
+
+          <!-- API Keys -->
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:8px;">API KEYS</div>
+          <div id="api-keys-list" style="margin-bottom:12px;"></div>
+          <div id="api-key-reveal" style="display:none;background:rgba(76,175,128,0.08);border:1px solid #4caf80;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+            <div style="font-size:10px;color:#4caf80;font-weight:700;margin-bottom:4px;">✓ Key created — copy it now, it won't be shown again</div>
+            <div id="api-key-reveal-value" style="font-family:monospace;font-size:10.5px;color:var(--tx);word-break:break-all;background:var(--bg,#0a0f18);padding:8px;border-radius:6px;"></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:24px;">
+            <input id="api-key-name" type="text" placeholder="e.g. Acme ERP" style="
+              flex:1;padding:8px 10px;font-size:12px;border-radius:7px;
+              background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+            <button onclick="apiKeyCreate()" style="
+              padding:8px 16px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
+              background:var(--cy,#818cf8);border:none;color:#0a0f18;font-family:inherit;white-space:nowrap;
+            ">Generate Key</button>
+          </div>
+
+          <!-- Webhooks -->
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin-bottom:8px;border-top:1px solid var(--bdr);padding-top:16px;">OUTBOUND WEBHOOKS</div>
+          <div style="font-size:10px;color:var(--td);margin-bottom:10px;line-height:1.5;">
+            Warehub will POST to this URL when orders are created or marked done.
+          </div>
+          <div id="webhooks-list" style="margin-bottom:12px;"></div>
+          <div id="webhook-secret-reveal" style="display:none;background:rgba(76,175,128,0.08);border:1px solid #4caf80;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+            <div style="font-size:10px;color:#4caf80;font-weight:700;margin-bottom:4px;">✓ Webhook registered — signing secret (shown once)</div>
+            <div id="webhook-secret-reveal-value" style="font-family:monospace;font-size:10.5px;color:var(--tx);word-break:break-all;background:var(--bg,#0a0f18);padding:8px;border-radius:6px;"></div>
+          </div>
+          <input id="webhook-url" type="url" placeholder="https://your-erp.example.com/webhooks/warehub" style="
+            width:100%;padding:8px 10px;font-size:12px;border-radius:7px;margin-bottom:8px;
+            background:var(--bg,#0a0f18);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+          "/>
+          <button onclick="webhookCreate()" style="
+            width:100%;padding:9px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
+            background:var(--cy,#818cf8);border:none;color:#0a0f18;font-family:inherit;
+          ">Add Webhook</button>
+
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">API REFERENCE</div>
+          <div style="font-size:10px;color:var(--td);line-height:1.7;font-family:monospace;background:var(--bg,#0a0f18);padding:10px;border-radius:6px;">
+            GET  /api/v1/orders?status=pending<br/>
+            POST /api/v1/orders  { orders: [{tracking, carrier, skus}] }<br/>
+            PATCH /api/v1/orders/:id  { status: "done" }<br/>
+            <span style="opacity:0.7;">Header: X-API-Key: wh_live_...</span>
           </div>
         </div>
       </div>
@@ -3689,6 +3761,8 @@ function userMenuPopulate(){
   if(me)   me.textContent = email;
   var teamBtn = document.getElementById('user-menu-team-btn');
   if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
+  var apiBtn = document.getElementById('user-menu-api-btn');
+  if(apiBtn) apiBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   applyPlanUIGating();
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
@@ -3869,6 +3943,102 @@ async function teamCancelInvite(inviteId){
   await window.warehubApi('DELETE', '/api/team/invite/'+inviteId).catch(function(){});
   teamRender();
 }
+
+// ── API Access (owner only) ───────────────────────────────────────
+function apiAccessOpen(){
+  var m = document.getElementById('api-access-modal');
+  if(!m) return;
+  document.getElementById('api-key-reveal').style.display = 'none';
+  document.getElementById('webhook-secret-reveal').style.display = 'none';
+  m.style.display = 'flex';
+  var dd = document.getElementById('user-menu-dropdown');
+  if(dd) dd.style.display = 'none';
+  apiKeysRender();
+  webhooksRender();
+}
+function apiAccessClose(){
+  var m = document.getElementById('api-access-modal');
+  if(m) m.style.display = 'none';
+}
+
+async function apiKeysRender(){
+  var list = document.getElementById('api-keys-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/integrations/keys').catch(function(){ return null; });
+  if(!result){ list.innerHTML = '<div style="font-size:11px;color:#f87171;">Could not load keys.</div>'; return; }
+  var keys = result.keys || [];
+  if(!keys.length){ list.innerHTML = '<div style="font-size:11px;color:var(--td);">No API keys yet.</div>'; return; }
+  var html = '';
+  keys.forEach(function(k){
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:11.5px;font-weight:600;color:var(--tx);">'+ k.name +'</div>'
+      +   '<div style="font-size:10px;color:var(--td);font-family:monospace;">'+ k.key_prefix +'</div>'
+      + '</div>'
+      + '<button onclick="apiKeyRevoke(\''+k.id+'\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Revoke</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+async function apiKeyCreate(){
+  var nameEl = document.getElementById('api-key-name');
+  var name = (nameEl.value||'').trim();
+  var result = await window.warehubApi('POST', '/api/integrations/keys', { name: name })
+    .catch(function(e){ return { error: e.message }; });
+  if(!result || result.error){ alert((result && result.error) || 'Could not create key.'); return; }
+  var reveal = document.getElementById('api-key-reveal');
+  document.getElementById('api-key-reveal-value').textContent = result.key;
+  reveal.style.display = 'block';
+  nameEl.value = '';
+  apiKeysRender();
+}
+async function apiKeyRevoke(id){
+  if(!confirm('Revoke this API key? Any integration using it will stop working immediately.')) return;
+  await window.warehubApi('DELETE', '/api/integrations/keys/'+id).catch(function(){});
+  apiKeysRender();
+}
+
+async function webhooksRender(){
+  var list = document.getElementById('webhooks-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/integrations/webhooks').catch(function(){ return null; });
+  if(!result){ list.innerHTML = '<div style="font-size:11px;color:#f87171;">Could not load webhooks.</div>'; return; }
+  var hooks = result.webhooks || [];
+  if(!hooks.length){ list.innerHTML = '<div style="font-size:11px;color:var(--td);">No webhooks registered yet.</div>'; return; }
+  var html = '';
+  hooks.forEach(function(w){
+    var statusLabel = w.last_status ? (w.last_status >= 200 && w.last_status < 300 ? '✓ ' + w.last_status : '✗ ' + w.last_status) : 'not yet triggered';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:11px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;">'+ w.url +'</div>'
+      +   '<div style="font-size:10px;color:var(--td);">Last delivery: '+ statusLabel +'</div>'
+      + '</div>'
+      + '<button onclick="webhookDelete(\''+w.id+'\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Remove</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+async function webhookCreate(){
+  var urlEl = document.getElementById('webhook-url');
+  var url = (urlEl.value||'').trim();
+  if(!url.startsWith('https://')){ alert('Please enter a valid https:// URL.'); return; }
+  var result = await window.warehubApi('POST', '/api/integrations/webhooks', { url: url })
+    .catch(function(e){ return { error: e.message }; });
+  if(!result || result.error){ alert((result && result.error) || 'Could not add webhook.'); return; }
+  var reveal = document.getElementById('webhook-secret-reveal');
+  document.getElementById('webhook-secret-reveal-value').textContent = result.secret;
+  reveal.style.display = 'block';
+  urlEl.value = '';
+  webhooksRender();
+}
+async function webhookDelete(id){
+  if(!confirm('Remove this webhook?')) return;
+  await window.warehubApi('DELETE', '/api/integrations/webhooks/'+id).catch(function(){});
+  webhooksRender();
+}
+
 // Close menu when clicking outside
 document.addEventListener('click', function(e){
   var wrap = document.getElementById('user-menu-wrap');
