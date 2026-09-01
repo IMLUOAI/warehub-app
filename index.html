@@ -3767,7 +3767,12 @@ function userMenuPopulate(){
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
     var plan = window._tenantPlan || 'trial';
-    pl.textContent = planLabels[plan] || (plan.charAt(0).toUpperCase() + plan.slice(1));
+    var label = planLabels[plan] || (plan.charAt(0).toUpperCase() + plan.slice(1));
+    if(plan === 'trial' && window._tenantTrialEndsAt){
+      var trialDaysLeft = Math.max(0, Math.ceil((new Date(window._tenantTrialEndsAt).getTime() - Date.now()) / 86400000));
+      label = 'Trial · ' + trialDaysLeft + 'd left';
+    }
+    pl.textContent = label;
     pl.style.background = plan === 'trial'
       ? 'var(--sur2, #2d3748)'
       : 'linear-gradient(135deg,#4a9eff 0%,#c77dff 100%)';
@@ -3778,6 +3783,24 @@ function userMenuPopulate(){
   var rn = document.getElementById('user-menu-renewal');
   if(rn){
     rn.style.display = 'none';
+    if(window._tenantPlan === 'trial' && window._tenantTrialEndsAt){
+      var trialMsLeft = new Date(window._tenantTrialEndsAt).getTime() - Date.now();
+      var trialDays = Math.ceil(trialMsLeft / 86400000);
+      if(trialDays <= 0){
+        rn.innerHTML = '⚠ <strong>Trial ended</strong> — '
+          + '<a href="https://app.wareplatform.com/billing.html" target="_blank" style="color:inherit;text-decoration:underline;">choose a plan</a>';
+        rn.style.color = '#f87171';
+        rn.style.background = 'rgba(248,113,113,0.08)';
+      } else {
+        var trialWord = trialDays === 1 ? '1 day' : trialDays + ' days';
+        rn.innerHTML = 'Free trial — ' + trialWord + ' left · '
+          + '<a href="https://app.wareplatform.com/billing.html" target="_blank" style="color:inherit;text-decoration:underline;">upgrade anytime</a>';
+        rn.style.color = trialDays <= 3 ? '#fbbf24' : 'var(--td)';
+        rn.style.background = trialDays <= 3 ? 'rgba(251,191,36,0.08)' : 'transparent';
+      }
+      rn.style.display = 'block';
+      return;
+    }
     var expiresAt = window._tenantExpiresAt;
     if(expiresAt){
       var msLeft = new Date(expiresAt).getTime() - Date.now();
@@ -10388,6 +10411,7 @@ function aiDoActions(actions){
     window._tenantPlan = 'trial';
     window._tenantExpiresAt = null;
     window._tenantCancelAtPeriodEnd = false;
+    window._tenantTrialEndsAt = null;
     let _tenantActive = false;
     try {
       const email = user.emailAddresses[0]?.emailAddress || '';
@@ -10401,6 +10425,7 @@ function aiDoActions(actions){
       _warehubTenantId = regData.tenantId;
       window._tenantPlan = regData.plan   || 'trial';
       window._tenantRole = regData.role   || 'owner';
+      window._tenantTrialEndsAt = regData.trialEndsAt || null;
       _tenantActive = regData.active || false;
 
       // Fetch renewal/expiry info for the reminder banner (best-effort)
