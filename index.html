@@ -7780,17 +7780,21 @@ async function fbaGridDeleteRow(rowId){
 
 function fbaGridExportExcel(){
   if(!fbaGridRows.length){ alert('No rows to export.'); return; }
-  var headers = ['Ship Date','Shipment ID','FC','SKU','Qty','Size (L*W*H)','Weight (lb)','Carrier','Tracking #','Boxes','Submitted By','Notes'];
-  var rows = fbaGridRows.map(function(r){
-    return [r.ship_date||'', r.shipment_id||'', r.fulfillment_center||'', r.sku||'', r.qty||0,
-            r.size||'', r.weight||'', r.carrier||'', r.tracking||'', r.boxes||'', r.submitted_by||'', r.notes||''];
+  ensureSheetJS().then(function(){
+    var headers = ['Ship Date','Shipment ID','FC','SKU','Qty','Size (L*W*H)','Weight (lb)','Carrier','Tracking #','Boxes','Submitted By','Notes'];
+    var rows = fbaGridRows.map(function(r){
+      return [r.ship_date||'', r.shipment_id||'', r.fulfillment_center||'', r.sku||'', r.qty||0,
+              r.size||'', r.weight||'', r.carrier||'', r.tracking||'', r.boxes||'', r.submitted_by||'', r.notes||''];
+    });
+    var buf = buildXlsxBuffer([{ name:'Outbound Items', headers: headers, rows: rows }]);
+    var blob = new Blob([buf], { type:'application/octet-stream' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'outbound-items-'+new Date().toISOString().slice(0,10)+'.xlsx';
+    a.click();
+  }).catch(function(e){
+    alert('Could not load Excel export library: ' + e.message);
   });
-  var buf = buildXlsxBuffer([{ name:'Outbound Items', headers: headers, rows: rows }]);
-  var blob = new Blob([buf], { type:'application/octet-stream' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'outbound-items-'+new Date().toISOString().slice(0,10)+'.xlsx';
-  a.click();
 }
 
 // ══════════════════════════════════════════════════════
