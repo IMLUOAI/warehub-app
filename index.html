@@ -1237,7 +1237,7 @@ function gv(name){
   if(name==='payroll') renderProductivity();
   if(name==='floor')  renderFloor();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
-  if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); }
+  if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
 }
 
 var TPATS=[
@@ -7701,6 +7701,98 @@ function vehicleDeleteTrip(id){
 
 // ══════════════════════════════════════════════════════
 // FBA OUTBOUND — data, form, log, export, Excel
+// ── Outbound Items Grid (spreadsheet-style quick entry) ────────────
+var fbaGridRows = [];
+var FBA_GRID_COLS = [
+  { key:'ship_date',          type:'date',   w:110 },
+  { key:'shipment_id',        type:'text',   w:130 },
+  { key:'fulfillment_center', type:'text',   w:80  },
+  { key:'sku',                type:'text',   w:120 },
+  { key:'qty',                type:'number', w:70  },
+  { key:'size',                type:'text',   w:110, placeholder:'12*10*8' },
+  { key:'weight',              type:'number', w:90,  placeholder:'lb' },
+  { key:'carrier',             type:'text',   w:90  },
+  { key:'tracking',            type:'text',   w:150 },
+  { key:'boxes',                type:'number', w:70  },
+  { key:'submitted_by',        type:'text',   w:110 },
+  { key:'notes',                type:'text',   w:160 },
+];
+
+async function fbaGridLoad(){
+  var result = await window.warehubApi('GET', '/api/fba-grid').catch(function(){ return null; });
+  fbaGridRows = (result && result.rows) || [];
+  fbaGridRender();
+}
+
+function fbaGridRender(){
+  var body = document.getElementById('fba-grid-body');
+  var empty = document.getElementById('fba-grid-empty');
+  if(!body) return;
+  if(!fbaGridRows.length){
+    body.innerHTML = '';
+    if(empty) empty.style.display = 'block';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+  var html = '';
+  fbaGridRows.forEach(function(row){
+    html += '<tr data-row-id="'+row.id+'" style="border-bottom:1px solid var(--bdr);">';
+    FBA_GRID_COLS.forEach(function(col){
+      var val = row[col.key] != null ? row[col.key] : '';
+      html += '<td style="padding:3px 4px;">'
+        + '<input type="'+col.type+'" value="'+String(val).replace(/"/g,'&quot;')+'" '
+        + (col.placeholder ? 'placeholder="'+col.placeholder+'" ' : '')
+        + 'onchange="fbaGridUpdateCell(\''+row.id+'\',\''+col.key+'\',this.value)" '
+        + 'style="width:'+col.w+'px;background:transparent;border:1px solid transparent;color:var(--tx);padding:4px 5px;font-size:10.5px;font-family:inherit;border-radius:4px;" '
+        + 'onfocus="this.style.borderColor=\'var(--cy)\'" onblur="this.style.borderColor=\'transparent\'"/>'
+        + '</td>';
+    });
+    html += '<td style="padding:3px 4px;"><button onclick="fbaGridDeleteRow(\''+row.id+'\')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;">✕</button></td>';
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+async function fbaGridAddRow(){
+  var result = await window.warehubApi('POST', '/api/fba-grid', { ship_date: new Date().toISOString().slice(0,10) })
+    .catch(function(){ return null; });
+  if(!result || !result.id){ alert('Could not add row.'); return; }
+  fbaGridRows.unshift({ id: result.id, ship_date: new Date().toISOString().slice(0,10) });
+  fbaGridRender();
+}
+
+async function fbaGridUpdateCell(rowId, field, value){
+  var row = fbaGridRows.find(function(r){ return r.id === rowId; });
+  if(row) row[field] = value;
+  var body = {};
+  body[field] = (field === 'qty' || field === 'boxes') ? (parseInt(value)||0)
+              : (field === 'weight') ? (parseFloat(value)||0)
+              : value;
+  await window.warehubApi('PATCH', '/api/fba-grid/'+rowId, body).catch(function(){});
+}
+
+async function fbaGridDeleteRow(rowId){
+  if(!confirm('Delete this row?')) return;
+  await window.warehubApi('DELETE', '/api/fba-grid/'+rowId).catch(function(){});
+  fbaGridRows = fbaGridRows.filter(function(r){ return r.id !== rowId; });
+  fbaGridRender();
+}
+
+function fbaGridExportExcel(){
+  if(!fbaGridRows.length){ alert('No rows to export.'); return; }
+  var headers = ['Ship Date','Shipment ID','FC','SKU','Qty','Size (L*W*H)','Weight (lb)','Carrier','Tracking #','Boxes','Submitted By','Notes'];
+  var rows = fbaGridRows.map(function(r){
+    return [r.ship_date||'', r.shipment_id||'', r.fulfillment_center||'', r.sku||'', r.qty||0,
+            r.size||'', r.weight||'', r.carrier||'', r.tracking||'', r.boxes||'', r.submitted_by||'', r.notes||''];
+  });
+  var buf = buildXlsxBuffer([{ name:'Outbound Items', headers: headers, rows: rows }]);
+  var blob = new Blob([buf], { type:'application/octet-stream' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'outbound-items-'+new Date().toISOString().slice(0,10)+'.xlsx';
+  a.click();
+}
+
 // ══════════════════════════════════════════════════════
 var fbaRecords = [];
 var fbaReprints = [];   // persistent reprint queue — saved to warehub_fba_reprints
@@ -9612,6 +9704,43 @@ document.addEventListener('DOMContentLoaded', function(){
 
       <!-- Stats bar -->
       <div id="fba-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
+
+      <!-- ── Outbound Items Grid (spreadsheet-style) ── -->
+      <div style="margin-bottom:28px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-size:10px;letter-spacing:3px;color:var(--td);">OUTBOUND ITEMS</div>
+            <div style="font-size:13px;font-weight:700;">Quick-entry grid</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="fbaGridAddRow()" style="font-size:9px;white-space:nowrap;">+ ADD ROW</button>
+            <button class="btn" onclick="fbaGridExportExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 EXPORT EXCEL</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;border:1px solid var(--bdr);border-radius:8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:10.5px;min-width:960px;">
+            <thead>
+              <tr style="background:var(--sur2,#1a2030);">
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Ship Date</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Shipment ID</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">FC</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">SKU</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Qty</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Size (L*W*H)</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Weight (lb)</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Carrier</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Tracking #</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Boxes</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Submitted By</th>
+                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Notes</th>
+                <th style="padding:7px 8px;border-bottom:1px solid var(--bdr);"></th>
+              </tr>
+            </thead>
+            <tbody id="fba-grid-body"></tbody>
+          </table>
+        </div>
+        <div id="fba-grid-empty" style="display:none;padding:16px;text-align:center;font-size:11px;color:var(--td);">No items yet — click "+ Add Row" to start.</div>
+      </div>
 
       <!-- ── FBA Label PDF Import ── -->
       <div id="fba-import-zone"
