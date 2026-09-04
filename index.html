@@ -784,6 +784,15 @@ body{
     </div>
     <input id="fi" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]) parsePdf(this.files[0]);this.value='';">
 
+    <!-- ── xlwms sync (owner only) ── -->
+    <div id="xlwms-sync-panel" style="display:none;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;margin-bottom:14px;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:9px;letter-spacing:2px;color:var(--td);">XLWMS INTEGRATION</div>
+        <div id="xlwms-sync-status" style="font-size:11px;color:var(--tx);margin-top:2px;">Pull today's outbound orders directly from xlwms.</div>
+      </div>
+      <button class="btn" id="xlwms-sync-btn" onclick="xlwmsSyncNow()" style="font-size:9px;white-space:nowrap;border-color:var(--cy);color:var(--cy);background:#00e5ff10;">🔄 SYNC FROM XLWMS</button>
+    </div>
+
     <!-- ── Missing Labels Panel — populated by renderSkippedPanel() after parse ── -->
     <div id="import-skipped-panel" style="display:none;background:var(--sur);border:1px solid var(--rd);margin-bottom:14px;">
       <!-- header injected by JS -->
@@ -3763,6 +3772,8 @@ function userMenuPopulate(){
   if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   var apiBtn = document.getElementById('user-menu-api-btn');
   if(apiBtn) apiBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
+  var xlwmsPanel = document.getElementById('xlwms-sync-panel');
+  if(xlwmsPanel) xlwmsPanel.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   applyPlanUIGating();
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
@@ -4060,6 +4071,28 @@ async function webhookDelete(id){
   if(!confirm('Remove this webhook?')) return;
   await window.warehubApi('DELETE', '/api/integrations/webhooks/'+id).catch(function(){});
   webhooksRender();
+}
+
+// ── xlwms sync (owner only) ───────────────────────────────────────
+async function xlwmsSyncNow(){
+  var btn = document.getElementById('xlwms-sync-btn');
+  var status = document.getElementById('xlwms-sync-status');
+  btn.disabled = true;
+  btn.textContent = '⟳ Syncing…';
+  status.textContent = 'Pulling recent outbound orders from xlwms…';
+  status.style.color = 'var(--td)';
+  var result = await window.warehubApi('POST', '/api/integrations/xlwms/sync', {})
+    .catch(function(e){ return { error: e.message }; });
+  btn.disabled = false;
+  btn.textContent = '🔄 SYNC FROM XLWMS';
+  if(!result || result.error){
+    status.textContent = '✗ ' + ((result && result.error) || 'Sync failed — check console/Worker logs.');
+    status.style.color = '#f87171';
+    return;
+  }
+  status.textContent = '✓ Synced ' + (result.imported || 0) + ' new order(s) from xlwms.'
+    + (result.imported > 0 ? ' Refresh the page to see them in your queue.' : '');
+  status.style.color = '#4caf80';
 }
 
 // Close menu when clicking outside
