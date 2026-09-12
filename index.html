@@ -6613,6 +6613,7 @@ function rackDoScan(val){
 
 function rackScanIntercept(e){
   if(_rackScanMode==='off') return;
+  if(typeof isAnyModalOpen==='function' && isAnyModalOpen()) return;
   var inp = document.getElementById('rack-scan-input');
   if(!inp || document.activeElement===inp) return;
 
@@ -9798,8 +9799,22 @@ window._appInitFn = async function(){try{
   });
 
 
+  // Modal IDs that should be allowed to keep normal keyboard focus — the
+  // global scan-refocus listener below otherwise yanks focus back to the
+  // main scan field on every keystroke, which made it impossible to type
+  // into any of these while Pack Station is the active view underneath.
+  var _MODAL_IDS = ['api-access-modal','company-info-modal','import-history-modal',
+                     'oos-modal','rack-config-modal','team-modal','upgrade-modal'];
+  window.isAnyModalOpen = function(){
+    return _MODAL_IDS.some(function(id){
+      var el = document.getElementById(id);
+      return el && el.style.display === 'flex';
+    });
+  };
+
   document.addEventListener('keydown',function(e){
     if(e.ctrlKey||e.metaKey||e.altKey) return;
+    if(isAnyModalOpen()) return;
     var packView=document.getElementById('view-pack');
     if(!packView||!packView.classList.contains('on')) return;
     var loginOv=document.getElementById('packer-login');
