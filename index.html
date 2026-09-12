@@ -271,6 +271,20 @@ body{
 .fp-detail{font-size:8px;color:var(--td);margin-top:2px;}
 
 @keyframes shk{0%,100%{transform:translateX(0)}30%{transform:translateX(-5px)}70%{transform:translateX(5px)}}
+@keyframes neonPulse{0%,100%{opacity:1;}50%{opacity:0.55;}}
+@keyframes neonFlow{
+  0%{background-position:-200% 0;}
+  100%{background-position:200% 0;}
+}
+#dz-neon-date.parsing{
+  background:linear-gradient(90deg,#0ff 0%,#fff 15%,#0ff 30%,#0ff 100%);
+  background-size:200% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:neonFlow 1.6s linear infinite;
+}
+#dz-neon-date.idle{
+  animation:neonPulse 3s ease-in-out infinite;
+}
 
 
 .dev-section{background:var(--sur);border:1px solid var(--bdr);margin-bottom:12px;}
@@ -726,9 +740,10 @@ body{
             <div style="font-size:13px;font-weight:800;color:var(--tx);">⚠ Out of Stock</div>
             <button onclick="oosClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
           </div>
-          <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:10px;line-height:1.5;">
             Scan a label that can't be fulfilled — this looks it up directly in the system (even if it's from an older import), so it works even after a page refresh or on a different device.
           </div>
+          <div id="oos-history-range" style="font-size:10px;color:var(--cy);background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:6px;padding:7px 10px;margin-bottom:16px;">Loading data range…</div>
 
           <input id="oos-scan-in" type="text" placeholder="Scan or type tracking number…" autocomplete="off"
             style="width:100%;padding:10px 12px;font-size:13px;border-radius:7px;margin-bottom:10px;
@@ -824,7 +839,12 @@ body{
     <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;">
 
     <!-- Drop zone -->
-    <div id="dz" style="margin-bottom:14px;cursor:pointer;">
+    <div id="dz" style="margin-bottom:14px;cursor:pointer;position:relative;overflow:hidden;">
+      <div id="dz-neon-date" style="
+        font-family:'Barlow',sans-serif;font-weight:800;font-size:clamp(20px,5vw,34px);
+        letter-spacing:3px;color:#0ff;text-shadow:0 0 6px #0ff,0 0 16px #0ff,0 0 32px #0ff8;
+        margin-bottom:10px;user-select:none;
+      "></div>
       <div style="font-size:28px;margin-bottom:8px;">📦</div>
       <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
       <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX · Uniuni</div>
@@ -1298,6 +1318,22 @@ function gv(name){
   if(name==='floor')  renderFloor();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
+  if(name==='import'){ dzUpdateNeonDate(); }
+}
+
+// ── Neon date reminder in the drop zone ─────────────────────────
+function dzUpdateNeonDate(){
+  var el = document.getElementById('dz-neon-date');
+  if(!el) return;
+  var d = new Date();
+  var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  el.textContent = months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+}
+function dzSetParsingGlow(isParsing){
+  var el = document.getElementById('dz-neon-date');
+  if(!el) return;
+  el.classList.toggle('parsing', !!isParsing);
+  el.classList.toggle('idle', !isParsing);
 }
 
 var TPATS=[
@@ -1873,6 +1909,7 @@ async function parsePdf(file){
   // Prevent concurrent parses (double-drop race condition)
   if(window._parsing){ pm('⚠ Already parsing, please wait…'); return; }
   window._parsing = true;
+  dzSetParsingGlow(true);
   window._skippedPages = [];   // reset for this parse run
   // Hide previous missing-labels panel immediately
   var _sp = document.getElementById('import-skipped-panel');
@@ -2027,6 +2064,7 @@ async function parsePdf(file){
     // Persist raw PDF + order metadata to IndexedDB for refresh survival
     idbSaveBatch(abForIdb, out).catch(function(e){ console.warn('[idbSaveBatch]', e); });
     window._parsing = false;
+    dzSetParsingGlow(false);
     var skipped = n - out.length;
     var msg = '✓ '+out.length+'/'+n+' label(s) parsed.';
     if(skipped > 0){
@@ -2043,6 +2081,7 @@ async function parsePdf(file){
 
   }catch(err){
     window._parsing = false;
+    dzSetParsingGlow(false);
     pm('✗ '+err.message);
     dbg('ERROR: '+err.message+' '+err.stack);
   }
@@ -2951,9 +2990,9 @@ async function printSkuSort(){
   var hiRes=null;
   if(pageIndices.some(function(x){return x!=null;})){
     pm('⟳ Rendering high-quality labels from PDF…');
-    hiRes = await renderPagesForPrint(pageIndices, function(done,total){
+    hiRes = await renderPagesForPrintSafe(pageIndices, function(done,total){
       if(done % 10===0) pm('⟳ Rendering '+done+'/'+total+'…');
-    }).catch(function(){ return null; });
+    }, printWin);
   }
 
   // ── Build HTML with carrier divider pages ───────────────────────────────────
@@ -3090,9 +3129,9 @@ async function printByPacker(){
   var hiRes=null;
   if(pageIndices.some(function(x){return x!=null;})){
     pm('⟳ Rendering high-quality labels from PDF…');
-    hiRes = await renderPagesForPrint(pageIndices, function(done,total){
+    hiRes = await renderPagesForPrintSafe(pageIndices, function(done,total){
       if(done % 10===0) pm('⟳ Rendering '+done+'/'+total+'…');
-    }).catch(function(){ return null; });
+    }, printWin);
   }
 
   // ── Build HTML ──────────────────────────────────────────────────────────────
@@ -3608,6 +3647,45 @@ function clearErr(){ document.getElementById('err-bar').classList.remove('show')
 function setFb(t,c){ var el=document.getElementById('scan-fb'); el.textContent=t; el.style.color=c; }
 function pm(m){ document.getElementById('pmsg').textContent=m; }
 
+// ── Renders labels with a visible timeout + error surface ──────────
+// renderPagesForPrint can silently hang or fail (e.g. PDF.js CDN blocked,
+// worker never responding) with zero console output, leaving the print
+// window stuck on "Rendering…" forever with no way to tell what went
+// wrong. This wraps it so any real error is logged, and a genuine hang
+// gets a visible timeout message written directly into the print window
+// itself, instead of failing invisibly.
+function renderPagesForPrintSafe(pageIndices, progressCb, printWin, timeoutMs){
+  timeoutMs = timeoutMs || Math.max(60000, pageIndices.length * 1500);
+  var timedOut = false;
+  var timer = setTimeout(function(){
+    timedOut = true;
+    console.error('[Warehub print] Rendering timed out after '+timeoutMs+'ms for '+pageIndices.length+' page(s).');
+    try{
+      if(printWin && !printWin.closed){
+        printWin.document.body.innerHTML =
+          '<div style="text-align:center;padding:40px;">'
+          +'<div style="font-size:22px;margin-bottom:12px;">⚠ Rendering timed out</div>'
+          +'<div style="font-size:14px;color:#aaa;max-width:480px;margin:0 auto;line-height:1.6;">'
+          +'This batch ('+pageIndices.length+' labels) took too long to render — likely a slow '
+          +'connection loading the PDF library, or a very large batch. Close this tab, check your '
+          +'internet connection, and try again with a smaller batch if it keeps happening.'
+          +'</div></div>';
+      }
+    }catch(e){}
+  }, timeoutMs);
+
+  return renderPagesForPrint(pageIndices, progressCb)
+    .then(function(result){
+      clearTimeout(timer);
+      return timedOut ? null : result;
+    })
+    .catch(function(e){
+      clearTimeout(timer);
+      console.error('[Warehub print] renderPagesForPrint failed:', e);
+      return null;
+    });
+}
+
 // ── Duplicate-batch print guard ──────────────────────────────────
 // Catches accidentally re-clicking a print button and reprinting the
 // exact same batch of labels within a short window (wastes thermal
@@ -4033,11 +4111,29 @@ function oosOpen(){
   oosLookupResult = null;
   m.style.display = 'flex';
   oosRenderLog();
+  oosRenderHistoryRange();
   setTimeout(function(){ var el=document.getElementById('oos-scan-in'); if(el) el.focus(); }, 50);
 }
 function oosClose(){
   var m = document.getElementById('oos-modal');
   if(m) m.style.display = 'none';
+}
+
+async function oosRenderHistoryRange(){
+  var el = document.getElementById('oos-history-range');
+  if(!el) return;
+  el.textContent = 'Loading data range…';
+  var result = await window.warehubApi('GET', '/api/orders/stats').catch(function(){ return null; });
+  if(!result || !result.count){
+    el.textContent = '📅 No order history on file yet.';
+    return;
+  }
+  var oldest = result.oldest ? new Date(result.oldest) : null;
+  var daysBack = oldest ? Math.max(0, Math.floor((Date.now() - oldest.getTime()) / 86400000)) : null;
+  var oldestStr = oldest ? oldest.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) : '—';
+  el.textContent = '📅 ' + result.count.toLocaleString() + ' order(s) on file, back to '
+    + oldestStr + (daysBack != null ? ' (' + daysBack + ' day' + (daysBack===1?'':'s') + ' ago)' : '')
+    + ' — any label from this range can be scanned above.';
 }
 
 async function oosLookup(tracking){
@@ -4701,22 +4797,29 @@ function printViaIframe(css, bodyHtml, existingWin){
     pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.');
     return;
   }
+  var triggered = false;
+  function doPrint(){
+    if(triggered) return;
+    triggered = true;
+    try{
+      w.focus();
+      w.print();
+      setTimeout(function(){ try{ w.close(); }catch(e){} }, 1500);
+    }catch(e){ console.error('[Warehub print] w.print() failed:', e); }
+  }
+  // Attach the load handler BEFORE writing/closing the document — assigning
+  // it after close() is a real race: for fast-loading content the window's
+  // load event can fire before the handler is attached, so it's silently
+  // missed and print() never gets called (window just sits there "stuck").
+  w.onload = function(){ setTimeout(doPrint, 400); };
   w.document.open();
   w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+bodyHtml+'</body></html>');
   w.document.close();
-  w.onload = function(){
-    setTimeout(function(){
-      w.focus();
-      w.print();
-      setTimeout(function(){ w.close(); }, 1500);
-    }, 400);
-  };
-  // Fallback for browsers that don't fire onload on document.write
+  // Firm backstop in case onload never fires at all (some browsers don't
+  // fire it reliably after document.write) or fired before we attached it.
   setTimeout(function(){
-    if(w && !w.closed){
-      try{ w.focus(); w.print(); }catch(e){}
-    }
-  }, 800);
+    if(w && !w.closed) doPrint();
+  }, 1200);
 }
 
 var _msalInstance  = null;
@@ -9582,6 +9685,7 @@ window._appInitFn = async function(){try{
 }catch(e){console.error("[Warehub init]",e);}};
 // Called by Clerk onSignedIn — or directly if Clerk is not configured
 document.addEventListener('DOMContentLoaded', function(){
+  dzUpdateNeonDate();
   // If Clerk hasn't loaded within 3s, init anyway (fallback for dev/offline)
   window._appInitTimer = setTimeout(function(){
     if(!window._appInitCalled){ window._appInitCalled=true; window._appInitFn(); }
