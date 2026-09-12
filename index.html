@@ -2816,17 +2816,19 @@ async function printSkuSort(){
     return;
   }
 
-  if(!checkDuplicatePrintBatch(withImg, 'SKU Group')) return;
-
   // ── Open print window NOW (still inside the user-gesture call frame) ────────
-  // window.open() is blocked as a "popup" if called after any await. Opening it
-  // here — synchronously — keeps it in the same gesture event and the browser
-  // allows it. We show a loading placeholder until the render is done.
+  // window.open() is blocked as a "popup" if called after any await — or after
+  // a confirm()/alert() dialog in some browsers. Opening it here, as the very
+  // first thing, keeps it safely inside the same gesture. The duplicate-batch
+  // check runs after, and just closes this window again if declined.
   var printWin = window.open('', '_blank', 'width=800,height=600');
   if(!printWin){
     pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
     return;
   }
+
+  if(!checkDuplicatePrintBatch(withImg, 'SKU Group')){ printWin.close(); return; }
+
   printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
     +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
     +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
@@ -3028,14 +3030,17 @@ async function printByPacker(){
     return;
   }
 
-  if(!checkDuplicatePrintBatch(withImg, 'By Packer')) return;
-
-  // Open print window synchronously (before any await) to avoid popup block
+  // Open print window synchronously (before any await, and before any dialog
+  // like confirm()) to avoid popup block. Duplicate check runs after — if
+  // declined, this freshly-opened window just gets closed again.
   var printWin = window.open('', '_blank', 'width=800,height=600');
   if(!printWin){
     pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
     return;
   }
+
+  if(!checkDuplicatePrintBatch(withImg, 'By Packer')){ printWin.close(); return; }
+
   printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
     +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
     +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
@@ -7930,6 +7935,12 @@ async function fbaBatchHistoryToggle(){
   if(!panel) return;
   if(panel.style.display === 'block'){ panel.style.display = 'none'; return; }
   panel.style.display = 'block';
+  await fbaBatchHistoryRender();
+}
+
+async function fbaBatchHistoryRender(){
+  var panel = document.getElementById('fba-batch-history');
+  if(!panel) return;
   panel.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
   var result = await window.warehubApi('GET', '/api/fba-grid/batches').catch(function(){ return null; });
   var batches = (result && result.batches) || [];
@@ -7943,7 +7954,10 @@ async function fbaBatchHistoryToggle(){
       +   '<div style="font-size:11px;font-weight:600;color:var(--tx);">'+b.label+(isCurrent?' <span style="color:var(--cy);font-weight:400;">(current)</span>':'')+'</div>'
       +   '<div style="font-size:9.5px;color:var(--td);">'+b.item_count+' item(s) · '+when+'</div>'
       + '</div>'
-      + '<button onclick="fbaBatchView(\''+b.id+'\')" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--bdr);color:var(--tx);cursor:pointer;font-family:inherit;border-radius:4px;">View / Export</button>'
+      + '<div style="display:flex;gap:6px;">'
+      +   '<button onclick="fbaBatchView(\''+b.id+'\')" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--bdr);color:var(--tx);cursor:pointer;font-family:inherit;border-radius:4px;">View / Export</button>'
+      +   '<button onclick="fbaBatchDelete(\''+b.id+'\',\''+b.label.replace(/'/g,"\\'")+'\')" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid #f87171;color:#f87171;cursor:pointer;font-family:inherit;border-radius:4px;">🗑 Delete</button>'
+      + '</div>'
       + '</div>';
   });
   panel.innerHTML = html;
@@ -7954,6 +7968,19 @@ async function fbaBatchView(batchId){
   await fbaGridLoad();
   var hist = document.getElementById('fba-batch-history');
   if(hist) hist.style.display = 'none';
+}
+
+async function fbaBatchDelete(batchId, label){
+  if(!confirm('Delete "'+label+'" and all its rows? This can\'t be undone.')) return;
+  await window.warehubApi('DELETE', '/api/fba-grid/batches/'+batchId).catch(function(){});
+  if(batchId === fbaCurrentBatchId || batchId === fbaViewingBatchId){
+    // The batch we were looking at is gone — reset and let the server
+    // hand back whichever batch is now current.
+    fbaCurrentBatchId = null;
+    fbaViewingBatchId = null;
+    await fbaGridLoad();
+  }
+  await fbaBatchHistoryRender();
 }
 
 // ══════════════════════════════════════════════════════
