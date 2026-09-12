@@ -2855,23 +2855,10 @@ async function printSkuSort(){
     return;
   }
 
-  // ── Open print window NOW (still inside the user-gesture call frame) ────────
-  // window.open() is blocked as a "popup" if called after any await — or after
-  // a confirm()/alert() dialog in some browsers. Opening it here, as the very
-  // first thing, keeps it safely inside the same gesture. The duplicate-batch
-  // check runs after, and just closes this window again if declined.
-  var printWin = window.open('', '_blank', 'width=800,height=600');
-  if(!printWin){
-    pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
-    return;
-  }
-
-  if(!checkDuplicatePrintBatch(withImg, 'SKU Group')){ printWin.close(); return; }
-
-  printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-    +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
-    +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
-    +'</style></head><body>⟳ Rendering high-quality labels…</body></html>');
+  // No popup window anymore — printing happens via a hidden iframe in this
+  // same tab (see printLabelsViaHiddenIframe), so this tab never loses focus
+  // and never gets throttled by the browser during rendering.
+  if(!checkDuplicatePrintBatch(withImg, 'SKU Group')) return;
 
   pm('⟳ Building sorted labels ('+withImg.length+')…');
 
@@ -2992,7 +2979,7 @@ async function printSkuSort(){
     pm('⟳ Rendering high-quality labels from PDF…');
     hiRes = await renderPagesForPrintSafe(pageIndices, function(done,total){
       if(done % 10===0) pm('⟳ Rendering '+done+'/'+total+'…');
-    }, printWin);
+    });
   }
 
   // ── Build HTML with carrier divider pages ───────────────────────────────────
@@ -3052,7 +3039,7 @@ async function printSkuSort(){
     return c+': '+Object.values(carrierBuckets[c]).reduce(function(n,arr){ return n+arr.length; },0);
   }).join(' · ');
   pm('✓ '+orderedOrders.length+' label(s) across '+carrierNames.length+' carrier(s) — '+carrierSummary);
-  printViaIframe(css, bodyHtml, printWin);
+  printLabelsViaHiddenIframe(css, bodyHtml);
 
   // Show missing labels overlay if anything was skipped or dropped
   var _skipped = window._skippedPages || [];
@@ -3069,21 +3056,10 @@ async function printByPacker(){
     return;
   }
 
-  // Open print window synchronously (before any await, and before any dialog
-  // like confirm()) to avoid popup block. Duplicate check runs after — if
-  // declined, this freshly-opened window just gets closed again.
-  var printWin = window.open('', '_blank', 'width=800,height=600');
-  if(!printWin){
-    pm('⚠ Pop-up blocked — allow pop-ups for this site, then try again.');
-    return;
-  }
-
-  if(!checkDuplicatePrintBatch(withImg, 'By Packer')){ printWin.close(); return; }
-
-  printWin.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-    +'body{background:#111;color:#eee;font-family:Arial,sans-serif;display:flex;'
-    +'align-items:center;justify-content:center;height:100vh;margin:0;font-size:20px;}'
-    +'</style></head><body>⟳ Rendering high-quality labels…</body></html>');
+  // No popup window anymore — printing happens via a hidden iframe in this
+  // same tab (see printLabelsViaHiddenIframe), so this tab never loses focus
+  // and never gets throttled by the browser during rendering.
+  if(!checkDuplicatePrintBatch(withImg, 'By Packer')) return;
 
   pm('⟳ Building packer stacks…');
 
@@ -3131,7 +3107,7 @@ async function printByPacker(){
     pm('⟳ Rendering high-quality labels from PDF…');
     hiRes = await renderPagesForPrintSafe(pageIndices, function(done,total){
       if(done % 10===0) pm('⟳ Rendering '+done+'/'+total+'…');
-    }, printWin);
+    });
   }
 
   // ── Build HTML ──────────────────────────────────────────────────────────────
@@ -3243,7 +3219,7 @@ async function printByPacker(){
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
   pm('✓ '+total+' label(s) ready — opening print dialog…');
-  printViaIframe(css, bodyHtml, printWin);
+  printLabelsViaHiddenIframe(css, bodyHtml);
 }
 
 // (removed dead/unreachable duplicate of printPickLists — see the active implementation later in this file)
@@ -3654,24 +3630,13 @@ function pm(m){ document.getElementById('pmsg').textContent=m; }
 // wrong. This wraps it so any real error is logged, and a genuine hang
 // gets a visible timeout message written directly into the print window
 // itself, instead of failing invisibly.
-function renderPagesForPrintSafe(pageIndices, progressCb, printWin, timeoutMs){
+function renderPagesForPrintSafe(pageIndices, progressCb, timeoutMs){
   timeoutMs = timeoutMs || Math.max(60000, pageIndices.length * 1500);
   var timedOut = false;
   var timer = setTimeout(function(){
     timedOut = true;
     console.error('[Warehub print] Rendering timed out after '+timeoutMs+'ms for '+pageIndices.length+' page(s).');
-    try{
-      if(printWin && !printWin.closed){
-        printWin.document.body.innerHTML =
-          '<div style="text-align:center;padding:40px;">'
-          +'<div style="font-size:22px;margin-bottom:12px;">⚠ Rendering timed out</div>'
-          +'<div style="font-size:14px;color:#aaa;max-width:480px;margin:0 auto;line-height:1.6;">'
-          +'This batch ('+pageIndices.length+' labels) took too long to render — likely a slow '
-          +'connection loading the PDF library, or a very large batch. Close this tab, check your '
-          +'internet connection, and try again with a smaller batch if it keeps happening.'
-          +'</div></div>';
-      }
-    }catch(e){}
+    pm('⚠ Rendering timed out — this batch may be too large, or your connection to the PDF library is slow. Try again, or with a smaller batch.');
   }, timeoutMs);
 
   return renderPagesForPrint(pageIndices, progressCb)
@@ -3682,6 +3647,7 @@ function renderPagesForPrintSafe(pageIndices, progressCb, printWin, timeoutMs){
     .catch(function(e){
       clearTimeout(timer);
       console.error('[Warehub print] renderPagesForPrint failed:', e);
+      pm('✗ Rendering failed: ' + (e && e.message ? e.message : 'unknown error') + ' — check console for details.');
       return null;
     });
 }
@@ -4820,6 +4786,49 @@ function printViaIframe(css, bodyHtml, existingWin){
   setTimeout(function(){
     if(w && !w.closed) doPrint();
   }, 1200);
+}
+
+// ── Print large label batches via a hidden iframe in THIS tab ──────
+// Used by printSkuSort/printByPacker instead of window.open(). A popup
+// steals focus the instant it opens, which backgrounds this tab — and
+// browsers heavily throttle JS execution in background tabs. Since all
+// the actual PDF-to-image rendering work runs as JS in this tab (not
+// inside the popup), that throttling could make a 50-100 label batch
+// appear to hang indefinitely, only "unsticking" when the user manually
+// switched focus back. A same-tab hidden iframe never loses focus, so
+// this class of bug can't happen at all — no popup-blocking risk either.
+function printLabelsViaHiddenIframe(css, bodyHtml){
+  var old = document.getElementById('warehub-print-iframe');
+  if(old) old.remove();
+
+  var iframe = document.createElement('iframe');
+  iframe.id = 'warehub-print-iframe';
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(iframe);
+
+  var doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+bodyHtml+'</body></html>');
+  doc.close();
+
+  var triggered = false;
+  function doPrint(){
+    if(triggered) return;
+    triggered = true;
+    try{
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }catch(e){
+      console.error('[Warehub print] iframe print() failed:', e);
+      pm('✗ Print failed to open — check console for details.');
+    }
+    // Give the print dialog time to actually open before removing the
+    // iframe out from under it.
+    setTimeout(function(){ try{ iframe.remove(); }catch(e){} }, 3000);
+  }
+  iframe.onload = function(){ setTimeout(doPrint, 400); };
+  // Firm backstop in case onload never fires, or fired before attaching.
+  setTimeout(function(){ doPrint(); }, 1500);
 }
 
 var _msalInstance  = null;
