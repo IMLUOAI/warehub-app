@@ -749,7 +749,7 @@ body{
           <input id="oos-scan-in" type="text" placeholder="Scan or type tracking number…" autocomplete="off"
             style="width:100%;padding:10px 12px;font-size:13px;border-radius:7px;margin-bottom:10px;
                    background:var(--bg,#0a0f18);border:2px solid var(--am,#fbbf24);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-            onkeydown="if(event.key==='Enter'){if(window._oosScanTimer)clearTimeout(window._oosScanTimer);var v=this.value.trim();if(v)oosLookup(v);}else{if(window._oosScanTimer)clearTimeout(window._oosScanTimer);window._oosScanTimer=setTimeout(function(){var v=document.getElementById('oos-scan-in').value.trim();if(v&&v.length>=4&&!/\s/.test(v))oosLookup(v);},150);}"/>
+            onkeydown="if(event.key==='Enter'){if(window._oosScanTimer)clearTimeout(window._oosScanTimer);var v=this.value.trim();if(v)oosLookup(v);}else{if(window._oosScanTimer)clearTimeout(window._oosScanTimer);window._oosScanTimer=setTimeout(function(){var v=document.getElementById('oos-scan-in').value.trim();if(v&&v.length>=10&&!/\s/.test(v))oosLookup(v);},300);}"/>
 
           <div id="oos-lookup-result" style="display:none;background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:14px;">
             <div id="oos-lookup-found" style="display:none;">
@@ -1051,7 +1051,7 @@ body{
         <div id="err-bar"></div>
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
-          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="if(event.key==='Enter'){if(window._scanTimer)clearTimeout(window._scanTimer);var v=this.value.trim();if(v)doScan(v);}else{if(window._scanTimer)clearTimeout(window._scanTimer);window._scanTimer=setTimeout(function(){var v=document.getElementById('scan-in').value.trim();if(v&&v.length>=4&&!/\s/.test(v))doScan(v);},150);}"/>
+          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="if(event.key==='Enter'){if(window._scanTimer)clearTimeout(window._scanTimer);var v=this.value.trim();if(v)doScan(v);}else{if(window._scanTimer)clearTimeout(window._scanTimer);window._scanTimer=setTimeout(function(){var v=document.getElementById('scan-in').value.trim();if(v&&v.length>=10&&!/\s/.test(v))doScan(v);},300);}"/>
           <div id="scan-fb">ready…</div>
         </div>
       </div>
@@ -3852,7 +3852,13 @@ function playExcelSaveChime(){
     setTimeout(function(){ ctx.close(); }, 1400);
   }catch(e){ /* audio not available — fail silently */ }
 }
-function dbg(m){ var el=document.getElementById('debug-log'); if(el) el.textContent+=m+'\n'; }
+function dbg(m){
+  // appendChild avoids re-reading/rewriting the entire existing log text on
+  // every call (which textContent += does) — matters a lot at scale, since
+  // this fires once per page and a big batch can be 1000+ pages.
+  var el=document.getElementById('debug-log');
+  if(el) el.appendChild(document.createTextNode(m+'\n'));
+}
 
 // ── User menu ──────────────────────────────────────────────────
 function userMenuToggle(){
@@ -9782,7 +9788,7 @@ window._appInitFn = async function(){try{
     scanIn.addEventListener('keydown',function(e){
       if(e.key==='Enter'){ clearTimeout(scanTimer); var v=this.value.trim(); if(v) doScan(v); return; }
       clearTimeout(scanTimer);
-      scanTimer=setTimeout(function(){ var v=scanIn.value.trim(); if(v&&v.length>=4&&!/\s/.test(v)) doScan(v); },150);
+      scanTimer=setTimeout(function(){ var v=scanIn.value.trim(); if(v&&v.length>=10&&!/\s/.test(v)) doScan(v); },300);
     });
   }
 
