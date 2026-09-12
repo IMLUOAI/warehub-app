@@ -2228,6 +2228,10 @@ function extractOrder(words, pageH){
 
 function initOrders(parsed){
   orders=parsed; ai=0;
+  // Stamp once, at import time — used on print divider pages so reprinting
+  // this batch later in the day (or after a refresh) still shows the date
+  // it actually came in on, not whatever moment the print button is clicked.
+  window._currentBatchImportDate = new Date();
   document.getElementById('dot').classList.add('live');
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
@@ -2985,7 +2989,9 @@ async function printSkuSort(){
   // ── Build HTML with carrier divider pages ───────────────────────────────────
   // Print date — shown on every divider page
   var _printDate = (function(){
-    var d=new Date();
+    // Use the batch's actual import date, not "right now" — so reprinting
+    // an older batch still shows the date it was actually imported on.
+    var d=window._currentBatchImportDate||new Date();
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var pad=function(n){return n<10?'0'+n:n;};
     return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
@@ -2993,10 +2999,16 @@ async function printSkuSort(){
   })();
 
   var bodyHtml='';
+  var isFirstDivider = true;
+  var missingCount = (window._skippedPages && window._skippedPages.length) || 0;
   sections.forEach(function(s){
     if(s.type==='carrier'){
       // Full 4"×6" monochrome carrier divider (same style as packer dividers)
       var safeCarrier = s.carrier.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var missingNote = (isFirstDivider && missingCount > 0)
+        ? '<div class="divider-missing-note">⚠ '+missingCount+' label(s) from this batch failed to parse and are NOT included above — see Missing Labels panel to reprint them separately</div>'
+        : '';
+      isFirstDivider = false;
       bodyHtml +=
         '<div class="label-page divider-page">'
         +'<div class="divider-header">'+safeCarrier+'</div>'
@@ -3005,6 +3017,7 @@ async function printSkuSort(){
           +'<div class="divider-unit">LABEL'+(s.count!==1?'S':'')+'</div>'
           +'<div class="divider-date">'+_printDate+'</div>'
         +'</div>'
+        + missingNote
         +'</div>';
     } else {
       var src=(hiRes && s.order.pageIndex!=null && hiRes[s.order.pageIndex])
@@ -3026,6 +3039,7 @@ async function printSkuSort(){
     +'.divider-count{font-family:Arial,sans-serif;font-size:100px;font-weight:900;color:#000;line-height:1;}'
     +'.divider-unit{font-family:Arial,sans-serif;font-size:24px;font-weight:700;color:#000;letter-spacing:5px;margin-top:10px;}'
     +'.divider-date{font-family:Arial,sans-serif;font-size:14px;font-weight:400;color:#555;margin-top:18px;letter-spacing:0.5px;}'
+    +'.divider-missing-note{background:#000;color:#ffb300;font-family:Arial,sans-serif;font-size:13px;font-weight:700;padding:10px 14px;text-align:center;line-height:1.4;flex-shrink:0;}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;height:6in;margin:0;padding:0;}'
@@ -3115,17 +3129,25 @@ async function printByPacker(){
 
   // Print date for packer dividers
   var _printDate = (function(){
-    var d=new Date();
+    // Use the batch's actual import date, not "right now" — so reprinting
+    // an older batch still shows the date it was actually imported on.
+    var d=window._currentBatchImportDate||new Date();
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var pad=function(n){return n<10?'0'+n:n;};
     return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
            +'  '+pad(d.getHours())+':'+pad(d.getMinutes());
   })();
 
+  var _dividerShown = false;
   function dividerPage(label, _color, count){
     // Monochrome divider — thermal printers can't reproduce colour.
     // Uses solid black header bar (white text) + large count in body.
     var safeLabel=label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var missingCount = (window._skippedPages && window._skippedPages.length) || 0;
+    var missingNote = (!_dividerShown && missingCount > 0)
+      ? '<div class="divider-missing-note">⚠ '+missingCount+' label(s) from this batch failed to parse and are NOT included above — see Missing Labels panel to reprint them separately</div>'
+      : '';
+    _dividerShown = true;
     return '<div class="label-page divider-page">'
       +'<div class="divider-header">'+safeLabel+'</div>'
       +'<div class="divider-body">'
@@ -3133,6 +3155,7 @@ async function printByPacker(){
         +'<div class="divider-unit">LABEL'+(count!==1?'S':'')+'</div>'
         +'<div class="divider-date">'+_printDate+'</div>'
       +'</div>'
+      + missingNote
       +'</div>';
   }
 
@@ -3209,6 +3232,7 @@ async function printByPacker(){
       +'font-size:14px;font-weight:400;'
       +'color:#555;margin-top:18px;letter-spacing:0.5px;'
     +'}'
+    +'.divider-missing-note{background:#000;color:#ffb300;font-family:Arial,sans-serif;font-size:13px;font-weight:700;padding:10px 14px;text-align:center;line-height:1.4;flex-shrink:0;}'
     +'@media print{'
       +'@page{size:4in 6in;margin:0;}'
       +'html,body{width:4in;height:6in;margin:0;padding:0;}'
@@ -9667,9 +9691,12 @@ window._appInitFn = async function(){try{
 
   var clearBtn=document.getElementById('clear-btn');
   if(clearBtn) clearBtn.addEventListener('click',function(){
-    if(confirm('Clear ALL orders? This cannot be undone.')){
+    if(confirm('Clear ALL orders — including saved history on the server? This cannot be undone.')){
       orders=[]; ai=0;
       idbClearBatch().catch(function(e){ console.warn('[idbClearBatch]',e); });
+      if(typeof apiCall === 'function'){
+        apiCall('POST', '/api/orders/clear').catch(function(e){ console.warn('[apiCall orders/clear]', e); });
+      }
       pm('Orders cleared.');
       renderAssignPanel(); renderDash(); renderFloor(); renderQueue(); renderActive();
       document.getElementById('debug-log').textContent='';
@@ -11022,9 +11049,14 @@ function aiDoActions(actions){
 
   window.apiSyncOrders = async function(){
     if(!apiReady() || !orders.length) return;
-    // Clear existing orders for this tenant and re-import (matches current session)
-    await apiCall('POST', '/api/orders/clear');
-    var batch = orders.map(function(o){
+    // Only push orders that haven't been synced yet (no apiId) — previously
+    // imported orders are left untouched on the server. This preserves
+    // multi-day history for the Out-of-Stock lookup tool and history stats;
+    // it previously deleted ALL orders on every import, which silently wiped
+    // everything older than "today" each time a new batch was dropped in.
+    var unsynced = orders.filter(function(o){ return !o.apiId; });
+    if(!unsynced.length) return;
+    var batch = unsynced.map(function(o){
       return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[] };
     });
     var result = await apiCall('POST', '/api/orders', { orders: batch });
@@ -11033,7 +11065,7 @@ function aiDoActions(actions){
       var fresh = await apiCall('GET', '/api/orders');
       if(fresh && fresh.orders){
         fresh.orders.forEach(function(apiOrder){
-          var local = orders.find(function(o){ return o.tracking === apiOrder.tracking; });
+          var local = orders.find(function(o){ return o.tracking === apiOrder.tracking && !o.apiId; });
           if(local) local.apiId = apiOrder.id;
         });
       }
