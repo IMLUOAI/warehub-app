@@ -743,12 +743,13 @@ body{
           <div style="font-size:10.5px;color:var(--td);margin-bottom:10px;line-height:1.5;">
             Scan a label that can't be fulfilled — this looks it up directly in the system (even if it's from an older import), so it works even after a page refresh or on a different device.
           </div>
-          <div id="oos-history-range" style="font-size:10px;color:var(--cy);background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:6px;padding:7px 10px;margin-bottom:16px;">Loading data range…</div>
+          <div id="oos-history-range" style="font-size:10px;color:var(--cy);background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:6px;padding:7px 10px;margin-bottom:6px;">Loading data range…</div>
+          <div style="margin-bottom:16px;"><a href="javascript:void(0)" onclick="importHistoryOpen()" style="font-size:10px;color:var(--td);text-decoration:underline;">📅 View day-by-day breakdown</a></div>
 
           <input id="oos-scan-in" type="text" placeholder="Scan or type tracking number…" autocomplete="off"
             style="width:100%;padding:10px 12px;font-size:13px;border-radius:7px;margin-bottom:10px;
                    background:var(--bg,#0a0f18);border:2px solid var(--am,#fbbf24);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-            onkeydown="if(event.key==='Enter'){oosLookup(this.value.trim());}"/>
+            onkeydown="if(event.key==='Enter'){if(window._oosScanTimer)clearTimeout(window._oosScanTimer);var v=this.value.trim();if(v)oosLookup(v);}else{if(window._oosScanTimer)clearTimeout(window._oosScanTimer);window._oosScanTimer=setTimeout(function(){var v=document.getElementById('oos-scan-in').value.trim();if(v&&v.length>=4&&!/\s/.test(v))oosLookup(v);},150);}"/>
 
           <div id="oos-lookup-result" style="display:none;background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:14px;">
             <div id="oos-lookup-found" style="display:none;">
@@ -772,6 +773,27 @@ body{
             <button onclick="oosExportExcel()" style="font-size:9px;padding:5px 10px;border-radius:6px;cursor:pointer;background:#1D6F4215;border:1px solid #1D6F42;color:#1D6F42;font-family:inherit;">📊 EXPORT EXCEL</button>
           </div>
           <div id="oos-log-list" style="max-height:220px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- Import History modal — day-by-day breakdown of orders on file -->
+      <div id="import-history-modal" style="
+        display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:400px;max-width:92vw;max-height:80vh;overflow-y:auto;padding:22px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:13px;font-weight:800;color:var(--tx);">📅 Import History</div>
+            <button onclick="importHistoryClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
+          </div>
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+            How many labels came in on each day — use this to confirm a specific day's batch is on file, or spot a day with unexpectedly few (or zero) orders.
+          </div>
+          <div id="import-history-list"></div>
         </div>
       </div>
 
@@ -2087,6 +2109,32 @@ async function parsePdf(file){
   }
 }
 
+// Extracts a ship/print date embedded on the label itself, when a known,
+// reliable format is present. Deliberately conservative — only matches
+// specific confirmed patterns (not a generic "any number that looks like
+// a date") to avoid misreading a zip code, weight, or tracking fragment
+// as a date. Returns an ISO 'YYYY-MM-DD' string, or null if not found.
+var _MONTH_ABBR = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+function matchLabelDate(words){
+  for(var i=0;i<words.length;i++){
+    var t = words[i].text;
+    // FedEx: "SHIP DATE: 10SEP26" — the date itself renders as one token, e.g. "10SEP26"
+    var m1 = t.match(/^(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})$/i);
+    if(m1){
+      var day=parseInt(m1[1],10), mon=_MONTH_ABBR[m1[2].toUpperCase()], yr=2000+parseInt(m1[3],10);
+      if(day>=1&&day<=31&&mon) return yr+'-'+String(mon).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    }
+    // SpeedX and similar: "TM 09/10/2026" — a plain MM/DD/YYYY token, usually
+    // immediately preceded by a "TM" marker word.
+    var m2 = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(m2 && words[i-1] && /^TM$/i.test(words[i-1].text)){
+      var mo=parseInt(m2[1],10), da=parseInt(m2[2],10), y=parseInt(m2[3],10);
+      if(mo>=1&&mo<=12&&da>=1&&da<=31) return y+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0');
+    }
+  }
+  return null;
+}
+
 function extractOrder(words, pageH){
   function near(target,tol){
     tol=tol||8;
@@ -2150,9 +2198,17 @@ function extractOrder(words, pageH){
   var shelfW = words.filter(function(w){return w.top >= shelfTopMin && w.x > Math.max(H*0.45, 120);});
 
   shelfW = shelfW.filter(function(w){return !/^\d{10,}$/.test(w.text) && w.text!==tracking;});
+  // Exclude a "TM MM/DD/YYYY" print-timestamp some carriers (SpeedX) place in
+  // this same zone — it was previously leaking into the shelf value, e.g.
+  // "shelf=TM 09/10/2026 W-1-5" instead of just "shelf=W-1-5".
+  shelfW = shelfW.filter(function(w){
+    return !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(w.text) && !/^TM$/i.test(w.text);
+  });
 
   var shelfPat=shelfW.filter(function(w){return /^[A-Z]{1,3}[-.]\d{1,2}[-.]\d{1,3}$/i.test(w.text);});
   var shelf=(shelfPat.length?shelfPat:shelfW).map(function(w){return w.text;}).join(' ');
+
+  var labelDate = matchLabelDate(words);
 
 
 
@@ -2222,16 +2278,23 @@ function extractOrder(words, pageH){
 
   return{tracking:tracking, carrier:carrier, hub:hubW?hubW.text:'',
     dest:dest, recipient:recipient, city:city, weight:weight, ref:ref, shelf:shelf,
-    skus:skus, status:'pending', completedAt:null,
+    skus:skus, status:'pending', completedAt:null, labelDate:labelDate,
     assignedTo:null, packedBy:null, orderStartTime:null, orderEndTime:null};
 }
 
 function initOrders(parsed){
   orders=parsed; ai=0;
-  // Stamp once, at import time — used on print divider pages so reprinting
-  // this batch later in the day (or after a refresh) still shows the date
-  // it actually came in on, not whatever moment the print button is clicked.
-  window._currentBatchImportDate = new Date();
+  // Fallback date for labels with no readable date of their own (GOFO, USPS,
+  // Uniuni today) — align them with the EARLIEST date actually found among
+  // any OTHER label in this same batch (e.g. from FedEx/SpeedX), rather than
+  // "right now" or the newest date seen. This matters most when re-importing
+  // an older PDF: undated labels in that batch should line up with their
+  // batch-mates' real date, not get stamped as today or as the latest date.
+  var foundDates = parsed.map(function(o){ return o.labelDate; }).filter(function(d){ return d; }).sort();
+  window._batchFallbackDateISO = foundDates.length ? foundDates[0] : null;
+  window._currentBatchImportDate = window._batchFallbackDateISO
+    ? new Date(window._batchFallbackDateISO + 'T12:00:00')
+    : new Date();
   document.getElementById('dot').classList.add('live');
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
@@ -2851,6 +2914,38 @@ function showMissingLabels(droppedDups, skippedPages){
   document.body.appendChild(el.firstChild);
 }
 
+// Formats the date(s) actually found on a group of labels (e.g. one
+// carrier's batch) — a single date if they all agree, or a short range
+// like "Sep 9–10, 2026" if the underlying labels genuinely span more than
+// one day (common when a PDF batch is imported a bit after midnight, or
+// combines a couple of days' worth of orders). Falls back to the date the
+// batch was imported on if no label in the group had a readable date.
+var _MONTHS_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function formatGroupDateLabel(ordersInGroup){
+  var found = (ordersInGroup||[])
+    .map(function(o){ return o.labelDate; })
+    .filter(function(d){ return d; });
+  var unique = found.filter(function(d,i){ return found.indexOf(d)===i; }).sort();
+
+  function fmt(iso){
+    var parts = iso.split('-').map(Number);
+    return _MONTHS_SHORT[parts[1]-1]+' '+parts[2]+', '+parts[0];
+  }
+  function fmtShort(iso){
+    var parts = iso.split('-').map(Number);
+    return _MONTHS_SHORT[parts[1]-1]+' '+parts[2];
+  }
+
+  if(!unique.length){
+    // No date read from any label in this group — fall back to when the
+    // batch was actually imported (not "right now" at print time).
+    var d = window._currentBatchImportDate || new Date();
+    return _MONTHS_SHORT[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+  }
+  if(unique.length === 1) return fmt(unique[0]);
+  return fmtShort(unique[0])+'–'+fmt(unique[unique.length-1]);
+}
+
 async function printSkuSort(){
   if(!orders.length){pm('Nothing to print — import a PDF batch first.');return;}
   var withImg=orders.filter(function(o){return o.pageImg||o.pageIndex!=null;});
@@ -2954,14 +3049,15 @@ async function printSkuSort(){
     var skuMap  = carrierBuckets[car];
     var skuKeys = Object.keys(skuMap).sort();
     var carrierCount = 0;
+    var carrierOrdersList = [];
     // Count deduplicated labels for this carrier
     var tempSeen={};
     skuKeys.forEach(function(sku){
       skuMap[sku].forEach(function(o){
-        if(!tempSeen[o.tracking]){ tempSeen[o.tracking]=true; carrierCount++; }
+        if(!tempSeen[o.tracking]){ tempSeen[o.tracking]=true; carrierCount++; carrierOrdersList.push(o); }
       });
     });
-    sections.push({type:'carrier', carrier:car, count:carrierCount});
+    sections.push({type:'carrier', carrier:car, count:carrierCount, groupOrders:carrierOrdersList});
     skuKeys.forEach(function(sku){
       skuMap[sku]
         .filter(function(o){ return !printed[o.tracking]; })
@@ -2987,17 +3083,6 @@ async function printSkuSort(){
   }
 
   // ── Build HTML with carrier divider pages ───────────────────────────────────
-  // Print date — shown on every divider page
-  var _printDate = (function(){
-    // Use the batch's actual import date, not "right now" — so reprinting
-    // an older batch still shows the date it was actually imported on.
-    var d=window._currentBatchImportDate||new Date();
-    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var pad=function(n){return n<10?'0'+n:n;};
-    return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
-           +'  '+pad(d.getHours())+':'+pad(d.getMinutes());
-  })();
-
   var bodyHtml='';
   var isFirstDivider = true;
   var missingCount = (window._skippedPages && window._skippedPages.length) || 0;
@@ -3005,6 +3090,10 @@ async function printSkuSort(){
     if(s.type==='carrier'){
       // Full 4"×6" monochrome carrier divider (same style as packer dividers)
       var safeCarrier = s.carrier.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      // Use the date(s) actually printed on this carrier's labels, not the
+      // moment the print button happened to be clicked — a batch reprinted
+      // later, or one that spans more than one day, still shows correctly.
+      var groupDate = formatGroupDateLabel(s.groupOrders);
       var missingNote = (isFirstDivider && missingCount > 0)
         ? '<div class="divider-missing-note">⚠ '+missingCount+' label(s) from this batch failed to parse and are NOT included above — see Missing Labels panel to reprint them separately</div>'
         : '';
@@ -3015,7 +3104,7 @@ async function printSkuSort(){
         +'<div class="divider-body">'
           +'<div class="divider-count">'+s.count+'</div>'
           +'<div class="divider-unit">LABEL'+(s.count!==1?'S':'')+'</div>'
-          +'<div class="divider-date">'+_printDate+'</div>'
+          +'<div class="divider-date">'+groupDate+'</div>'
         +'</div>'
         + missingNote
         +'</div>';
@@ -3127,19 +3216,8 @@ async function printByPacker(){
   // ── Build HTML ──────────────────────────────────────────────────────────────
   var bodyHtml='';
 
-  // Print date for packer dividers
-  var _printDate = (function(){
-    // Use the batch's actual import date, not "right now" — so reprinting
-    // an older batch still shows the date it was actually imported on.
-    var d=window._currentBatchImportDate||new Date();
-    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var pad=function(n){return n<10?'0'+n:n;};
-    return months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
-           +'  '+pad(d.getHours())+':'+pad(d.getMinutes());
-  })();
-
   var _dividerShown = false;
-  function dividerPage(label, _color, count){
+  function dividerPage(label, _color, count, groupOrders){
     // Monochrome divider — thermal printers can't reproduce colour.
     // Uses solid black header bar (white text) + large count in body.
     var safeLabel=label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -3148,12 +3226,15 @@ async function printByPacker(){
       ? '<div class="divider-missing-note">⚠ '+missingCount+' label(s) from this batch failed to parse and are NOT included above — see Missing Labels panel to reprint them separately</div>'
       : '';
     _dividerShown = true;
+    // Use the date(s) actually printed on this packer's assigned labels,
+    // not the moment the print button happened to be clicked.
+    var groupDate = formatGroupDateLabel(groupOrders);
     return '<div class="label-page divider-page">'
       +'<div class="divider-header">'+safeLabel+'</div>'
       +'<div class="divider-body">'
         +'<div class="divider-count">'+count+'</div>'
         +'<div class="divider-unit">LABEL'+(count!==1?'S':'')+'</div>'
-        +'<div class="divider-date">'+_printDate+'</div>'
+        +'<div class="divider-date">'+groupDate+'</div>'
       +'</div>'
       + missingNote
       +'</div>';
@@ -3161,7 +3242,7 @@ async function printByPacker(){
 
   packerIds.forEach(function(pid){
     var grp=packerGroups[pid];
-    bodyHtml+=dividerPage(grp.name, grp.color, grp.orders.length);
+    bodyHtml+=dividerPage(grp.name, grp.color, grp.orders.length, grp.orders);
     grp.orders.forEach(function(o){
       var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
       bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
@@ -4126,9 +4207,51 @@ async function oosRenderHistoryRange(){
     + ' — any label from this range can be scanned above.';
 }
 
+// ── Import History (day-by-day breakdown) ──────────────────────────
+function importHistoryOpen(){
+  var m = document.getElementById('import-history-modal');
+  if(!m) return;
+  m.style.display = 'flex';
+  importHistoryRender();
+}
+function importHistoryClose(){
+  var m = document.getElementById('import-history-modal');
+  if(m) m.style.display = 'none';
+}
+async function importHistoryRender(){
+  var list = document.getElementById('import-history-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/orders/history').catch(function(){ return null; });
+  var days = (result && result.days) || [];
+  if(!days.length){
+    list.innerHTML = '<div style="font-size:11px;color:var(--td);">No import history yet.</div>';
+    return;
+  }
+  var todayStr = new Date().toISOString().slice(0,10);
+  var html = '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:9px;letter-spacing:1px;color:var(--td);">'
+    + '<div>DATE</div><div>ORDERS IMPORTED</div></div>';
+  days.forEach(function(d){
+    var isToday = d.day === todayStr;
+    var dateLabel = d.day;
+    try{
+      var parts = d.day.split('-').map(Number);
+      var dt = new Date(parts[0], parts[1]-1, parts[2]);
+      dateLabel = dt.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+    }catch(e){}
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="font-size:11.5px;color:var(--tx);">'+dateLabel+(isToday?' <span style="color:var(--cy);font-size:9px;">(today)</span>':'')+'</div>'
+      + '<div style="font-size:12px;font-weight:700;color:var(--tx);">'+d.count.toLocaleString()+'</div>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+
 async function oosLookup(tracking){
   tracking = (tracking||'').trim();
   if(!tracking) return;
+  var input = document.getElementById('oos-scan-in');
+  if(input) input.value = '';
   var result = await window.warehubApi('GET', '/api/orders/lookup?tracking='+encodeURIComponent(tracking)).catch(function(){ return null; });
   var panel = document.getElementById('oos-lookup-result');
   var foundEl = document.getElementById('oos-lookup-found');
@@ -11057,7 +11180,8 @@ function aiDoActions(actions){
     var unsynced = orders.filter(function(o){ return !o.apiId; });
     if(!unsynced.length) return;
     var batch = unsynced.map(function(o){
-      return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[] };
+      return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[],
+               labelDate: o.labelDate || window._batchFallbackDateISO || null };
     });
     var result = await apiCall('POST', '/api/orders', { orders: batch });
     if(result && result.inserted){
