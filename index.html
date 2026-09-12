@@ -1347,9 +1347,22 @@ function gv(name){
 function dzUpdateNeonDate(){
   var el = document.getElementById('dz-neon-date');
   if(!el) return;
-  var d = new Date();
+  var d = window._currentBatchImportDate || new Date();
   var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  el.textContent = months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+  var today = new Date();
+  var isToday = d.getFullYear()===today.getFullYear() && d.getMonth()===today.getMonth() && d.getDate()===today.getDate();
+  el.textContent = months[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear() + (isToday ? '' : '  ⚠ NOT TODAY');
+  // Flip to a warning colour (amber/red) instead of cyan when the imported
+  // batch's date doesn't match today — this is the whole point: catching a
+  // wrong-day import (e.g. an old PDF re-imported by mistake) before it
+  // causes confusion on the floor.
+  if(isToday){
+    el.style.color = '#0ff';
+    el.style.textShadow = '0 0 6px #0ff,0 0 16px #0ff,0 0 32px #0ff8';
+  } else {
+    el.style.color = '#ff3b3b';
+    el.style.textShadow = '0 0 6px #ff3b3b,0 0 16px #ff3b3b,0 0 32px #ff3b3b88';
+  }
 }
 function dzSetParsingGlow(isParsing){
   var el = document.getElementById('dz-neon-date');
@@ -2295,6 +2308,7 @@ function initOrders(parsed){
   window._currentBatchImportDate = window._batchFallbackDateISO
     ? new Date(window._batchFallbackDateISO + 'T12:00:00')
     : new Date();
+  dzUpdateNeonDate();
   document.getElementById('dot').classList.add('live');
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
@@ -4211,12 +4225,25 @@ async function oosRenderHistoryRange(){
 function importHistoryOpen(){
   var m = document.getElementById('import-history-modal');
   if(!m) return;
+  // Hide the Out-of-Stock modal underneath while this is open — otherwise
+  // its full-screen backdrop silently blocks clicks/typing reaching the
+  // scan field underneath, even though it's still visible through the gaps.
+  var oos = document.getElementById('oos-modal');
+  if(oos && oos.style.display === 'flex'){
+    oos.dataset.reopenAfterHistory = '1';
+    oos.style.display = 'none';
+  }
   m.style.display = 'flex';
   importHistoryRender();
 }
 function importHistoryClose(){
   var m = document.getElementById('import-history-modal');
   if(m) m.style.display = 'none';
+  var oos = document.getElementById('oos-modal');
+  if(oos && oos.dataset.reopenAfterHistory){
+    oos.style.display = 'flex';
+    delete oos.dataset.reopenAfterHistory;
+  }
 }
 async function importHistoryRender(){
   var list = document.getElementById('import-history-list');
