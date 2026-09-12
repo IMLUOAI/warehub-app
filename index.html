@@ -712,6 +712,54 @@ body{
         </div>
       </div>
 
+      <!-- Out of Stock modal -->
+      <div id="oos-modal" style="
+        display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:520px;max-width:92vw;max-height:85vh;overflow-y:auto;padding:22px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:13px;font-weight:800;color:var(--tx);">⚠ Out of Stock</div>
+            <button onclick="oosClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
+          </div>
+          <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+            Scan a label that can't be fulfilled — this looks it up directly in the system (even if it's from an older import), so it works even after a page refresh or on a different device.
+          </div>
+
+          <input id="oos-scan-in" type="text" placeholder="Scan or type tracking number…" autocomplete="off"
+            style="width:100%;padding:10px 12px;font-size:13px;border-radius:7px;margin-bottom:10px;
+                   background:var(--bg,#0a0f18);border:2px solid var(--am,#fbbf24);color:var(--tx);font-family:inherit;letter-spacing:1px;"
+            onkeydown="if(event.key==='Enter'){oosLookup(this.value.trim());}"/>
+
+          <div id="oos-lookup-result" style="display:none;background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:14px;">
+            <div id="oos-lookup-found" style="display:none;">
+              <div style="font-size:10px;color:#4caf80;font-weight:700;margin-bottom:6px;">✓ Found in system</div>
+              <div style="font-size:11px;color:var(--tx);margin-bottom:2px;">Carrier: <span id="oos-found-carrier"></span></div>
+              <div style="font-size:11px;color:var(--tx);margin-bottom:8px;">SKU(s): <span id="oos-found-skus"></span></div>
+            </div>
+            <div id="oos-lookup-notfound" style="display:none;margin-bottom:8px;">
+              <div style="font-size:10px;color:#fbbf24;font-weight:700;margin-bottom:8px;">⚠ Not found in system — you can still log it manually below</div>
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <input id="oos-manual-sku" type="text" placeholder="SKU" style="flex:1;padding:7px 9px;font-size:11px;border-radius:6px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>
+                <input id="oos-manual-carrier" type="text" placeholder="Carrier" style="flex:1;padding:7px 9px;font-size:11px;border-radius:6px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>
+              </div>
+            </div>
+            <input id="oos-notes" type="text" placeholder="Notes (optional)" style="width:100%;padding:7px 9px;font-size:11px;border-radius:6px;margin-bottom:10px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>
+            <button onclick="oosLogEntry()" style="width:100%;padding:10px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;background:var(--am,#fbbf24);border:none;color:#1a1200;font-family:inherit;">Log as Out of Stock</button>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;border-top:1px solid var(--bdr);padding-top:14px;">
+            <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);">RECENTLY LOGGED</div>
+            <button onclick="oosExportExcel()" style="font-size:9px;padding:5px 10px;border-radius:6px;cursor:pointer;background:#1D6F4215;border:1px solid #1D6F42;color:#1D6F42;font-family:inherit;">📊 EXPORT EXCEL</button>
+          </div>
+          <div id="oos-log-list" style="max-height:220px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
       <!-- Upgrade prompt modal (shown when clicking a plan-locked feature) -->
       <div id="upgrade-modal" style="
         display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);
@@ -928,7 +976,10 @@ body{
     <!-- Pack layout -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PACK STATION — 2-STEP VERIFY</div>
-      <span id="pp" style="font-size:10px;color:var(--td);"></span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button onclick="oosOpen()" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--am,#fbbf24);color:var(--am,#fbbf24);cursor:pointer;font-family:inherit;white-space:nowrap;border-radius:4px;">⚠ OUT OF STOCK</button>
+        <span id="pp" style="font-size:10px;color:var(--td);"></span>
+      </div>
     </div>
     <!-- Step indicator -->
     <div id="step-bar" style="display:flex;gap:0;flex-shrink:0;">
@@ -2765,6 +2816,8 @@ async function printSkuSort(){
     return;
   }
 
+  if(!checkDuplicatePrintBatch(withImg, 'SKU Group')) return;
+
   // ── Open print window NOW (still inside the user-gesture call frame) ────────
   // window.open() is blocked as a "popup" if called after any await. Opening it
   // here — synchronously — keeps it in the same gesture event and the browser
@@ -2975,6 +3028,8 @@ async function printByPacker(){
     return;
   }
 
+  if(!checkDuplicatePrintBatch(withImg, 'By Packer')) return;
+
   // Open print window synchronously (before any await) to avoid popup block
   var printWin = window.open('', '_blank', 'width=800,height=600');
   if(!printWin){
@@ -3147,122 +3202,8 @@ async function printByPacker(){
   printViaIframe(css, bodyHtml, printWin);
 }
 
-function printPickLists(){
-  if(!packers.length){alert('No packers added.');return;}
-  var assigned=orders.filter(function(o){return o.assignedTo&&o.status==='pending';});
-  if(!assigned.length){alert('No assigned orders. Run Auto-Assign first.');return;}
+// (removed dead/unreachable duplicate of printPickLists — see the active implementation later in this file)
 
-  var html='';
-  packers.forEach(function(p){
-    var myOrders=assigned.filter(function(o){return o.assignedTo===p.id;});
-    if(!myOrders.length) return;
-    var col=packerColor(p);
-
-
-    var skuMap={};
-    myOrders.forEach(function(o){
-      o.skus.forEach(function(s){
-        var key=s.sku;
-        if(!skuMap[key]) skuMap[key]={sku:s.sku,shelf:o.shelf||'',totalQty:0,orderCount:0};
-        skuMap[key].totalQty+=s.qty;
-        skuMap[key].orderCount++;
-      });
-    });
-
-
-    var skuRows=Object.values(skuMap).sort(function(a,b){
-      return (a.shelf||'').localeCompare(b.shelf||'');
-    });
-
-    var totalItems=skuRows.reduce(function(s,r){return s+r.totalQty;},0);
-
-    html+='<div class="pl-card">'
-      +'<div class="pl-header" style="background:'+col+';">'
-        +'<div class="pl-name">'+p.name+'</div>'
-        +'<div class="pl-meta">'+myOrders.length+' orders · '+totalItems+' items</div>'
-      +'</div>'
-      +'<table class="pl-table">'
-        +'<thead><tr><th>SHELF</th><th>SKU</th><th>QTY TOTAL</th><th>ORDERS</th></tr></thead>'
-        +'<tbody>'
-        +skuRows.map(function(r){
-          return '<tr><td>'+r.shelf+'</td><td style="font-weight:700;">'+r.sku+'</td><td>'+r.totalQty+'</td><td>'+r.orderCount+'</td></tr>';
-        }).join('')
-        +'</tbody>'
-      +'</table>'
-      +'<div class="pl-footer">WAREHUB &nbsp;·&nbsp; '+shiftDate+'</div>'
-      +'</div>';
-  });
-
-  var existing=document.getElementById('picklist-overlay');
-  if(existing) existing.remove();
-
-  var ov=document.createElement('div');
-  ov.id='picklist-overlay';
-  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow-y:auto;padding:28px 20px;';
-
-  ov.innerHTML=
-    '<div style="width:100%;max-width:900px;">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
-        +'<div>'
-          +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">WAREHUB — PICK LISTS</div>'
-          +'<div style="font-size:9px;color:#666;margin-top:2px;">Sorted by shelf · One sheet per packer</div>'
-        +'</div>'
-        +'<div style="display:flex;gap:8px;">'
-          +'<button id="pl-print" style="padding:7px 18px;font-size:10px;letter-spacing:2px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;border-radius:3px;">🖨  PRINT</button>'
-          +'<button id="pl-close" style="padding:7px 14px;font-size:10px;letter-spacing:2px;background:transparent;color:#aaa;border:1px solid #444;cursor:pointer;font-family:inherit;border-radius:3px;">✕ CLOSE</button>'
-        +'</div>'
-      +'</div>'
-      +'<div id="pl-area">'+html+'</div>'
-    +'</div>';
-
-  var style=document.createElement('style');
-  style.id='pl-style';
-  style.textContent=
-    '.pl-card{background:#fff;border-radius:8px;margin-bottom:20px;overflow:hidden;page-break-inside:avoid;}'
-    +'.pl-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}'
-    +'.pl-name{font-family:Arial,sans-serif;font-weight:900;font-size:22px;color:#fff;letter-spacing:2px;}'
-    +'.pl-meta{font-family:Arial,sans-serif;font-size:11px;color:rgba(255,255,255,.85);letter-spacing:1px;}'
-    +'.pl-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;}'
-    +'.pl-table th{background:#f0f0f0;padding:8px 14px;font-size:10px;letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;}'
-    +'.pl-table td{padding:9px 14px;font-size:12px;border-bottom:1px solid #eee;}'
-    +'.pl-table tr:nth-child(even) td{background:#fafafa;}'
-    +'.pl-footer{padding:8px 14px;font-size:9px;color:#999;letter-spacing:1px;border-top:1px solid #eee;text-align:right;}'
-    +'@media print{'
-      +'body>*{display:none!important;}'
-      +'#picklist-overlay{display:block!important;position:static!important;background:#fff!important;padding:0!important;overflow:visible!important;}'
-      +'#pl-print,#pl-close,#picklist-overlay>div>div:first-child{display:none!important;}'
-      +'.pl-card{margin-bottom:0;page-break-after:always;border-radius:0;}'
-      +'.pl-table th,.pl-table td{font-size:11pt;padding:6pt 10pt;}'
-    +'}';
-  document.head.appendChild(style);
-  document.body.appendChild(ov);
-
-  document.getElementById('pl-close').addEventListener('click',function(){
-    ov.remove(); var s=document.getElementById('pl-style'); if(s) s.remove();
-  });
-  document.getElementById('pl-print').addEventListener('click',function(){
-    var area=document.getElementById('pl-area');
-    if(!area||!area.innerHTML.trim()){alert('Nothing to print.');return;}
-    var css=`
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{background:#fff;font-family:Arial,sans-serif;}
-      .pl-card{page-break-after:always;overflow:hidden;}
-      .pl-card:last-child{page-break-after:auto;}
-      .pl-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
-      .pl-name{font-weight:900;font-size:20px;color:#fff;letter-spacing:2px;}
-      .pl-meta{font-size:10px;color:rgba(255,255,255,.85);letter-spacing:1px;}
-      .pl-table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;}
-      .pl-table th{background:#f0f0f0;padding:7px 12px;font-size:9px;
-          letter-spacing:2px;text-align:left;border-bottom:2px solid #ddd;}
-      .pl-table td{padding:8px 12px;font-size:11px;border-bottom:1px solid #eee;}
-      .pl-table tr:nth-child(even) td{background:#fafafa;}
-      .pl-footer{padding:6px 12px;font-size:8px;color:#999;
-          letter-spacing:1px;border-top:1px solid #eee;text-align:right;}
-      @page{margin:8mm;size:A4;}
-    `;
-    printViaIframe(css, area.innerHTML);
-  });
-}
 
 function showLoginOrPack(){
 
@@ -3521,45 +3462,9 @@ function doScan(raw){
   var scannedNorm = norm(scannedExtracted);
   var rawNorm = norm(scanned); // keep original for fallback matching
 
-  // ── RACK SCAN MODE ──────────────────────────────
-  if(packState==='rack-scan'){
-    if(!rackScanState) rackScanState = {};
-    if(!rackScanState.sku){
-      rackScanState.sku = scanned;
-      bpOk(); flash('ok');
-      setFb('✓ SKU: '+scanned+' — now scan LOCATION (e.g. R1-05)','var(--am)');
-      setErr('Scan the rack location label now');
-    } else {
-      var loc = scanned.toUpperCase().replace(/\s/g,'');
-      var validLoc = document.getElementById('spot-'+loc);
-      if(!validLoc){
-        bpErr(); flash('err');
-        setErr('✗ "'+loc+'" is not a valid rack location. Try R1-01, B-1-05, etc.');
-        setFb('✗ INVALID LOCATION','var(--rd)');
-        focusScan(); return;
-      }
-      if(!window._inventoryData) window._inventoryData = {};
-      if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
-      var invLoc = window._inventoryData[loc];
-      var existing = (invLoc.skus||[]).find(function(s){return s.sku===rackScanState.sku;});
-      if(existing){ existing.qty = (parseInt(existing.qty)||0) + 1; }
-      else { invLoc.skus.push({sku:rackScanState.sku, name:'', qty:1, unit:'PCS'}); }
-      invLoc.lastUpdated = new Date().toLocaleDateString();
-      rackHighlightInventory();
-      var spotEl = document.getElementById('spot-'+loc);
-      if(spotEl){
-        spotEl.classList.remove('active'); void spotEl.offsetWidth;
-        spotEl.classList.add('active');
-        setTimeout(function(){if(spotEl) spotEl.classList.remove('active');}, 2000);
-      }
-      bpOk(); flash('ok');
-      setFb('✓ '+rackScanState.sku+' → '+loc+' saved! Scan next SKU','var(--gn)');
-      setErr('');
-      try{ localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); }catch(e){}
-      rackScanState = {};
-    }
-    focusScan(); return;
-  }
+  // NOTE: rack scanning is handled entirely by its own dedicated input in the
+  // Rack Map tab (see rackScanState/rack-scan-input) — nothing here ever sets
+  // packState to 'rack-scan', so that branch was removed as dead code.
 
   // ── SHIPPING LABEL SCAN — completes order immediately ──
   var order = null;
@@ -3697,6 +3602,42 @@ function setErr(m){ var b=document.getElementById('err-bar'); b.textContent=m; b
 function clearErr(){ document.getElementById('err-bar').classList.remove('show'); }
 function setFb(t,c){ var el=document.getElementById('scan-fb'); el.textContent=t; el.style.color=c; }
 function pm(m){ document.getElementById('pmsg').textContent=m; }
+
+// ── Duplicate-batch print guard ──────────────────────────────────
+// Catches accidentally re-clicking a print button and reprinting the
+// exact same batch of labels within a short window (wastes thermal
+// paper). Scoped to this browser/device via localStorage — doesn't
+// catch the same batch printed from a different device.
+function _simpleHash(str){
+  var h=0;
+  for(var i=0;i<str.length;i++){ h=((h<<5)-h+str.charCodeAt(i))|0; }
+  return h.toString(36);
+}
+function checkDuplicatePrintBatch(withImg, label){
+  try{
+    var sig = _simpleHash(withImg.map(function(o){return o.tracking||'';}).sort().join('|'));
+    var key = 'warehub_print_history';
+    var now = Date.now();
+    var THIRTY_MIN = 30*60*1000;
+    var history = JSON.parse(localStorage.getItem(key) || '[]')
+      .filter(function(h){ return now - h.ts < 24*3600*1000; }); // keep 24h max
+    var match = history.find(function(h){ return h.sig===sig && now - h.ts < THIRTY_MIN; });
+    if(match){
+      var minsAgo = Math.max(1, Math.round((now-match.ts)/60000));
+      var ok = confirm(
+        '⚠ This exact batch of '+withImg.length+' label(s) looks like it was already printed '
+        +minsAgo+' minute'+(minsAgo===1?'':'s')+' ago ('+match.label+').\n\n'
+        +'Print it again anyway? This will use more thermal paper.'
+      );
+      if(!ok) return false;
+    }
+    history.push({ sig: sig, ts: now, label: label, count: withImg.length });
+    localStorage.setItem(key, JSON.stringify(history));
+    return true;
+  }catch(e){
+    return true; // never block printing just because storage failed
+  }
+}
 
 // ── Button click sound (short snappy tap, no external files) ──
 function playClickSound(){
@@ -4071,6 +4012,121 @@ async function webhookDelete(id){
   if(!confirm('Remove this webhook?')) return;
   await window.warehubApi('DELETE', '/api/integrations/webhooks/'+id).catch(function(){});
   webhooksRender();
+}
+
+// ── Out of Stock ───────────────────────────────────────────────────
+var oosLookupResult = null;
+var oosLogItems = [];
+
+function oosOpen(){
+  var m = document.getElementById('oos-modal');
+  if(!m) return;
+  document.getElementById('oos-scan-in').value = '';
+  document.getElementById('oos-lookup-result').style.display = 'none';
+  document.getElementById('oos-lookup-found').style.display = 'none';
+  document.getElementById('oos-lookup-notfound').style.display = 'none';
+  oosLookupResult = null;
+  m.style.display = 'flex';
+  oosRenderLog();
+  setTimeout(function(){ var el=document.getElementById('oos-scan-in'); if(el) el.focus(); }, 50);
+}
+function oosClose(){
+  var m = document.getElementById('oos-modal');
+  if(m) m.style.display = 'none';
+}
+
+async function oosLookup(tracking){
+  tracking = (tracking||'').trim();
+  if(!tracking) return;
+  var result = await window.warehubApi('GET', '/api/orders/lookup?tracking='+encodeURIComponent(tracking)).catch(function(){ return null; });
+  var panel = document.getElementById('oos-lookup-result');
+  var foundEl = document.getElementById('oos-lookup-found');
+  var notFoundEl = document.getElementById('oos-lookup-notfound');
+  panel.style.display = 'block';
+  if(result && result.order){
+    oosLookupResult = { tracking: tracking, order: result.order };
+    foundEl.style.display = 'block';
+    notFoundEl.style.display = 'none';
+    document.getElementById('oos-found-carrier').textContent = result.order.carrier || '—';
+    document.getElementById('oos-found-skus').textContent = (result.order.skus||[]).map(function(s){return s.sku+' (x'+s.qty+')';}).join(', ') || '—';
+  } else {
+    oosLookupResult = { tracking: tracking, order: null };
+    foundEl.style.display = 'none';
+    notFoundEl.style.display = 'block';
+    document.getElementById('oos-manual-sku').value = '';
+    document.getElementById('oos-manual-carrier').value = '';
+  }
+}
+
+async function oosLogEntry(){
+  if(!oosLookupResult){ alert('Scan a tracking number first.'); return; }
+  var body = {
+    tracking: oosLookupResult.tracking,
+    notes: document.getElementById('oos-notes').value.trim(),
+    reported_by: (typeof currentPacker !== 'undefined' && currentPacker) ? currentPacker.name : ''
+  };
+  if(oosLookupResult.order){
+    body.sku = (oosLookupResult.order.skus||[]).map(function(s){return s.sku;}).join(', ');
+    body.carrier = oosLookupResult.order.carrier || '';
+    body.order_id = oosLookupResult.order.id;
+  } else {
+    body.sku = document.getElementById('oos-manual-sku').value.trim();
+    body.carrier = document.getElementById('oos-manual-carrier').value.trim();
+  }
+  var result = await window.warehubApi('POST', '/api/out-of-stock', body).catch(function(e){ return {error: e.message}; });
+  if(!result || result.error){ alert((result && result.error) || 'Could not log entry.'); return; }
+  document.getElementById('oos-scan-in').value = '';
+  document.getElementById('oos-notes').value = '';
+  document.getElementById('oos-lookup-result').style.display = 'none';
+  oosLookupResult = null;
+  oosRenderLog();
+  setTimeout(function(){ var el=document.getElementById('oos-scan-in'); if(el) el.focus(); }, 50);
+}
+
+async function oosRenderLog(){
+  var list = document.getElementById('oos-log-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/out-of-stock').catch(function(){ return null; });
+  oosLogItems = (result && result.items) || [];
+  if(!oosLogItems.length){ list.innerHTML = '<div style="font-size:11px;color:var(--td);">Nothing logged yet.</div>'; return; }
+  var html = '';
+  oosLogItems.forEach(function(item){
+    var when = item.created_at ? new Date(item.created_at*1000).toLocaleString() : '';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:11px;font-weight:600;color:var(--tx);">'+item.tracking+' <span style="color:var(--td);font-weight:400;">— '+(item.sku||'—')+'</span></div>'
+      +   '<div style="font-size:9.5px;color:var(--td);">'+(item.carrier||'')+' · '+when+(item.reported_by?' · '+item.reported_by:'')+'</div>'
+      + '</div>'
+      + '<button onclick="oosDeleteEntry(\''+item.id+'\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">✕</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+
+async function oosDeleteEntry(id){
+  if(!confirm('Remove this entry?')) return;
+  await window.warehubApi('DELETE', '/api/out-of-stock/'+id).catch(function(){});
+  oosRenderLog();
+}
+
+function oosExportExcel(){
+  if(!oosLogItems.length){ alert('Nothing to export.'); return; }
+  ensureSheetJS().then(function(){
+    var headers = ['Tracking','SKU','Carrier','Reported By','Notes','Logged At'];
+    var rows = oosLogItems.map(function(i){
+      return [i.tracking||'', i.sku||'', i.carrier||'', i.reported_by||'', i.notes||'',
+              i.created_at ? new Date(i.created_at*1000).toLocaleString() : ''];
+    });
+    var buf = buildXlsxBuffer([{ name:'Out of Stock', headers: headers, rows: rows }]);
+    var blob = new Blob([buf], { type:'application/octet-stream' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'out-of-stock-'+new Date().toISOString().slice(0,10)+'.xlsx';
+    a.click();
+  }).catch(function(e){
+    alert('Could not load Excel export library: ' + e.message);
+  });
 }
 
 // ── xlwms sync (owner only) ───────────────────────────────────────
@@ -7739,6 +7795,8 @@ function vehicleDeleteTrip(id){
 // FBA OUTBOUND — data, form, log, export, Excel
 // ── Outbound Items Grid (spreadsheet-style quick entry) ────────────
 var fbaGridRows = [];
+var fbaCurrentBatchId = null;
+var fbaViewingBatchId = null; // null = current/live batch; set when viewing history
 var FBA_GRID_COLS = [
   { key:'ship_date',          type:'date',   w:110 },
   { key:'shipment_id',        type:'text',   w:130 },
@@ -7755,9 +7813,24 @@ var FBA_GRID_COLS = [
 ];
 
 async function fbaGridLoad(){
-  var result = await window.warehubApi('GET', '/api/fba-grid').catch(function(){ return null; });
+  var path = '/api/fba-grid' + (fbaViewingBatchId ? ('?batchId='+encodeURIComponent(fbaViewingBatchId)) : '');
+  var result = await window.warehubApi('GET', path).catch(function(){ return null; });
   fbaGridRows = (result && result.rows) || [];
+  if(result && result.batchId && !fbaViewingBatchId) fbaCurrentBatchId = result.batchId;
   fbaGridRender();
+  fbaUpdateBatchLabel();
+}
+
+function fbaUpdateBatchLabel(){
+  var el = document.getElementById('fba-batch-label');
+  if(!el) return;
+  if(fbaViewingBatchId && fbaViewingBatchId !== fbaCurrentBatchId){
+    el.textContent = 'Viewing past batch (read-only export)';
+    el.style.color = 'var(--am,#fbbf24)';
+  } else {
+    el.textContent = 'Current batch';
+    el.style.color = 'var(--cy)';
+  }
 }
 
 function fbaGridRender(){
@@ -7770,6 +7843,7 @@ function fbaGridRender(){
     return;
   }
   if(empty) empty.style.display = 'none';
+  var readOnly = fbaViewingBatchId && fbaViewingBatchId !== fbaCurrentBatchId;
   var html = '';
   fbaGridRows.forEach(function(row){
     html += '<tr data-row-id="'+row.id+'" style="border-bottom:1px solid var(--bdr);">';
@@ -7778,18 +7852,22 @@ function fbaGridRender(){
       html += '<td style="padding:3px 4px;">'
         + '<input type="'+col.type+'" value="'+String(val).replace(/"/g,'&quot;')+'" '
         + (col.placeholder ? 'placeholder="'+col.placeholder+'" ' : '')
-        + 'onchange="fbaGridUpdateCell(\''+row.id+'\',\''+col.key+'\',this.value)" '
+        + (readOnly ? 'readonly ' : 'onchange="fbaGridUpdateCell(\''+row.id+'\',\''+col.key+'\',this.value)" ')
         + 'style="width:'+col.w+'px;background:transparent;border:1px solid transparent;color:var(--tx);padding:4px 5px;font-size:10.5px;font-family:inherit;border-radius:4px;" '
         + 'onfocus="this.style.borderColor=\'var(--cy)\'" onblur="this.style.borderColor=\'transparent\'"/>'
         + '</td>';
     });
-    html += '<td style="padding:3px 4px;"><button onclick="fbaGridDeleteRow(\''+row.id+'\')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;">✕</button></td>';
+    html += '<td style="padding:3px 4px;">'+(readOnly ? '' : '<button onclick="fbaGridDeleteRow(\''+row.id+'\')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:13px;">✕</button>')+'</td>';
     html += '</tr>';
   });
   body.innerHTML = html;
 }
 
 async function fbaGridAddRow(){
+  if(fbaViewingBatchId && fbaViewingBatchId !== fbaCurrentBatchId){
+    alert('You\'re viewing a past batch. Click "Batch History" and return to the current batch to add rows.');
+    return;
+  }
   var result = await window.warehubApi('POST', '/api/fba-grid', { ship_date: new Date().toISOString().slice(0,10) })
     .catch(function(){ return null; });
   if(!result || !result.id){ alert('Could not add row.'); return; }
@@ -7831,6 +7909,51 @@ function fbaGridExportExcel(){
   }).catch(function(e){
     alert('Could not load Excel export library: ' + e.message);
   });
+}
+
+// ── FBA batches ──────────────────────────────────────────────────
+async function fbaBatchStartNew(){
+  if(!confirm('Start a new batch? Your current rows stay saved and exportable under "Batch History" — this just clears the grid to start fresh.')) return;
+  var result = await window.warehubApi('POST', '/api/fba-grid/batches', {}).catch(function(){ return null; });
+  if(!result || !result.id){ alert('Could not start a new batch.'); return; }
+  fbaCurrentBatchId = result.id;
+  fbaViewingBatchId = null;
+  fbaGridRows = [];
+  fbaGridRender();
+  fbaUpdateBatchLabel();
+  var hist = document.getElementById('fba-batch-history');
+  if(hist) hist.style.display = 'none';
+}
+
+async function fbaBatchHistoryToggle(){
+  var panel = document.getElementById('fba-batch-history');
+  if(!panel) return;
+  if(panel.style.display === 'block'){ panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/fba-grid/batches').catch(function(){ return null; });
+  var batches = (result && result.batches) || [];
+  if(!batches.length){ panel.innerHTML = '<div style="font-size:11px;color:var(--td);">No batches yet.</div>'; return; }
+  var html = '';
+  batches.forEach(function(b){
+    var when = b.created_at ? new Date(b.created_at*1000).toLocaleString() : '';
+    var isCurrent = b.id === fbaCurrentBatchId;
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div>'
+      +   '<div style="font-size:11px;font-weight:600;color:var(--tx);">'+b.label+(isCurrent?' <span style="color:var(--cy);font-weight:400;">(current)</span>':'')+'</div>'
+      +   '<div style="font-size:9.5px;color:var(--td);">'+b.item_count+' item(s) · '+when+'</div>'
+      + '</div>'
+      + '<button onclick="fbaBatchView(\''+b.id+'\')" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--bdr);color:var(--tx);cursor:pointer;font-family:inherit;border-radius:4px;">View / Export</button>'
+      + '</div>';
+  });
+  panel.innerHTML = html;
+}
+
+async function fbaBatchView(batchId){
+  fbaViewingBatchId = batchId;
+  await fbaGridLoad();
+  var hist = document.getElementById('fba-batch-history');
+  if(hist) hist.style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════
@@ -9750,13 +9873,16 @@ document.addEventListener('DOMContentLoaded', function(){
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
           <div>
             <div style="font-size:10px;letter-spacing:3px;color:var(--td);">OUTBOUND ITEMS</div>
-            <div style="font-size:13px;font-weight:700;">Quick-entry grid</div>
+            <div style="font-size:13px;font-weight:700;">Quick-entry grid — <span id="fba-batch-label" style="color:var(--cy);">Batch 1</span></div>
           </div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn" onclick="fbaBatchHistoryToggle()" style="font-size:9px;white-space:nowrap;">📜 BATCH HISTORY</button>
+            <button class="btn" onclick="fbaBatchStartNew()" style="border-color:var(--am,#fbbf24);color:var(--am,#fbbf24);background:#fbbf2415;font-size:9px;white-space:nowrap;">🆕 START NEW BATCH</button>
             <button class="btn" onclick="fbaGridAddRow()" style="font-size:9px;white-space:nowrap;">+ ADD ROW</button>
             <button class="btn" onclick="fbaGridExportExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 EXPORT EXCEL</button>
           </div>
         </div>
+        <div id="fba-batch-history" style="display:none;background:var(--sur2,#1a2030);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:12px;"></div>
         <div style="overflow-x:auto;border:1px solid var(--bdr);border-radius:8px;">
           <table style="width:100%;border-collapse:collapse;font-size:10.5px;min-width:960px;">
             <thead>
