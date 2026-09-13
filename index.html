@@ -749,7 +749,7 @@ body{
           <input id="oos-scan-in" type="text" placeholder="Scan or type tracking number…" autocomplete="off"
             style="width:100%;padding:10px 12px;font-size:13px;border-radius:7px;margin-bottom:10px;
                    background:var(--bg,#0a0f18);border:2px solid var(--am,#fbbf24);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-            onkeydown="if(event.key==='Enter'){if(window._oosScanTimer)clearTimeout(window._oosScanTimer);var v=this.value.trim();if(v)oosLookup(v);}else{if(window._oosScanTimer)clearTimeout(window._oosScanTimer);window._oosScanTimer=setTimeout(function(){var v=document.getElementById('oos-scan-in').value.trim();if(v&&v.length>=10&&!/\s/.test(v))oosLookup(v);},300);}"/>
+            onkeydown="oosScanKeyHandler(event)"/>
 
           <div id="oos-lookup-result" style="display:none;background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:14px;">
             <div id="oos-lookup-found" style="display:none;">
@@ -1051,7 +1051,7 @@ body{
         <div id="err-bar"></div>
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
-          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="if(event.key==='Enter'){if(window._scanTimer)clearTimeout(window._scanTimer);var v=this.value.trim();if(v)doScan(v);}else{if(window._scanTimer)clearTimeout(window._scanTimer);window._scanTimer=setTimeout(function(){var v=document.getElementById('scan-in').value.trim();if(v&&v.length>=10&&!/\s/.test(v))doScan(v);},300);}"/>
+          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
           <div id="scan-fb">ready…</div>
         </div>
       </div>
@@ -1996,44 +1996,50 @@ async function parsePdf(file){
 
       var o = extractOrder(words, H);
       if(o){
-        // ── FedEx shared-barcode dedup fix ────────────────────────────────────
+        // ── Shared/duplicate tracking-ID fix ────────────────────────────────────
         // FedEx SmartPost / Ground batch PDFs print the same GS1 barcode prefix
-        // on every label in the batch.  When the parser extracts a FedEx tracking
-        // that already exists in out[], try alternative unique identifiers first:
-        //   1. "Tracking ID#" text row (printed uniquely per label on SmartPost)
-        //   2. CUST REF / PK- reference printed on the label
-        //   3. Page-suffix fallback so at least the label image gets a unique slot
+        // on every label. Uniuni synthetic IDs (built from the first long text
+        // token on the page — see below) can also collide if several labels
+        // share the same boilerplate text in that position. Either way, two
+        // DIFFERENT physical labels ending up with the SAME tracking value is
+        // dangerous: it silently collapses them into one order downstream (the
+        // duplicate-prevention check on sync would treat the 2nd as "already
+        // exists" and drop it entirely) — so this always assigns a genuinely
+        // unique ID once a collision is detected, for any carrier.
         var alreadyUsed = out.some(function(x){ return x.tracking === o.tracking; });
-        if(alreadyUsed && /^(96|61|74|75|FX-|FEDEX-)/.test(o.tracking)){
+        if(alreadyUsed){
           var altId = null;
           function cleanW(s){ return s.replace(/[^A-Z0-9]/gi,''); }
-          // Tier 1: "Tracking ID" text row
-          var tidW = words.filter(function(w){ return /Tracking/i.test(w.text) && /ID/i.test(w.text); });
-          if(tidW.length){
-            var tidTop = tidW[0].top;
-            var tidDigits = words.filter(function(w){ return Math.abs(w.top-tidTop)<10; })
-                                 .map(function(w){ return cleanW(w.text); }).join('')
-                                 .replace(/[^0-9]/g,'');
-            if(tidDigits.length >= 8) altId = 'FEDEX-'+tidDigits;
-          }
-          // Tier 2: CUST REF / PK- row
-          if(!altId){
-            var refW = words.filter(function(w){ return /CUST\s*REF/i.test(w.text) || /^PK-/.test(w.text); });
-            if(refW.length){
-              var refTop = refW[0].top;
-              var refRow = words.filter(function(w){ return Math.abs(w.top-refTop)<8; })
-                               .sort(function(a,b){ return a.x-b.x; });
-              var refToken = refRow.filter(function(w){
-                return /^PK-/.test(w.text) || cleanW(w.text).length >= 6;
-              });
-              if(refToken.length) altId = 'FX-'+cleanW(refToken[refToken.length-1].text).slice(0,20);
+          if(/^(96|61|74|75|FX-|FEDEX-)/.test(o.tracking)){
+            // Tier 1: "Tracking ID" text row (FedEx SmartPost-specific)
+            var tidW = words.filter(function(w){ return /Tracking/i.test(w.text) && /ID/i.test(w.text); });
+            if(tidW.length){
+              var tidTop = tidW[0].top;
+              var tidDigits = words.filter(function(w){ return Math.abs(w.top-tidTop)<10; })
+                                   .map(function(w){ return cleanW(w.text); }).join('')
+                                   .replace(/[^0-9]/g,'');
+              if(tidDigits.length >= 8) altId = 'FEDEX-'+tidDigits;
+            }
+            // Tier 2: CUST REF / PK- row
+            if(!altId){
+              var refW = words.filter(function(w){ return /CUST\s*REF/i.test(w.text) || /^PK-/.test(w.text); });
+              if(refW.length){
+                var refTop = refW[0].top;
+                var refRow = words.filter(function(w){ return Math.abs(w.top-refTop)<8; })
+                                 .sort(function(a,b){ return a.x-b.x; });
+                var refToken = refRow.filter(function(w){
+                  return /^PK-/.test(w.text) || cleanW(w.text).length >= 6;
+                });
+                if(refToken.length) altId = 'FX-'+cleanW(refToken[refToken.length-1].text).slice(0,20);
+              }
             }
           }
-          // Tier 3: fall back to page-suffixed ID so we keep the label image
+          // Fallback for every carrier (and FedEx if tiers 1/2 found nothing):
+          // page-suffixed ID so this label still gets its own unique record.
           if(!altId || out.some(function(x){ return x.tracking === altId; })){
             altId = o.tracking+'_p'+p;
           }
-          dbg('  FedEx dup on p'+p+': '+o.tracking+' → '+altId);
+          dbg('  Duplicate tracking on p'+p+': '+o.tracking+' → '+altId);
           o.tracking = altId;
           o.carrier  = dc(altId) !== 'Unknown' ? dc(altId) : o.carrier;
         }
@@ -2298,13 +2304,19 @@ function extractOrder(words, pageH){
 function initOrders(parsed){
   orders=parsed; ai=0;
   // Fallback date for labels with no readable date of their own (GOFO, USPS,
-  // Uniuni today) — align them with the EARLIEST date actually found among
-  // any OTHER label in this same batch (e.g. from FedEx/SpeedX), rather than
-  // "right now" or the newest date seen. This matters most when re-importing
-  // an older PDF: undated labels in that batch should line up with their
-  // batch-mates' real date, not get stamped as today or as the latest date.
-  var foundDates = parsed.map(function(o){ return o.labelDate; }).filter(function(d){ return d; }).sort();
-  window._batchFallbackDateISO = foundDates.length ? foundDates[0] : null;
+  // Uniuni today) — align them with the date actually found on MOST OTHER
+  // labels in this same batch (e.g. from FedEx/SpeedX), not "right now" or
+  // the newest date seen. Uses the most COMMON date, not just the earliest —
+  // a single mis-read/false-positive date match elsewhere in a big batch
+  // shouldn't be able to drag the whole batch's displayed date off by itself.
+  // Ties (equally common dates) break toward the earlier one.
+  var foundDates = parsed.map(function(o){ return o.labelDate; }).filter(function(d){ return d; });
+  var dateCounts = {};
+  foundDates.forEach(function(d){ dateCounts[d] = (dateCounts[d]||0) + 1; });
+  var sortedByFreq = Object.keys(dateCounts).sort(function(a,b){
+    return dateCounts[b]-dateCounts[a] || (a<b?-1:1);
+  });
+  window._batchFallbackDateISO = sortedByFreq.length ? sortedByFreq[0] : null;
   window._currentBatchImportDate = window._batchFallbackDateISO
     ? new Date(window._batchFallbackDateISO + 'T12:00:00')
     : new Date();
@@ -3557,6 +3569,29 @@ function setLoginMsg(msg,col){
 
 function focusScan(){ var f=document.getElementById('scan-in'); if(f) f.focus(); }
 
+// Same speed-aware fix as the Out-of-Stock scan field: only auto-trigger on
+// a fast, scanner-like burst (whole string entered in well under a second).
+// Manual typing has natural pauses between digits that could otherwise
+// trigger on an incomplete number mid-entry, wiping out what was typed so
+// far — manual typing relies on Enter instead, which always works reliably.
+var _mainScanTypeStart = 0;
+function mainScanKeyHandler(e){
+  var el = e.target;
+  if(e.key === 'Enter'){
+    if(window._scanTimer) clearTimeout(window._scanTimer);
+    var v = el.value.trim();
+    if(v) doScan(v);
+    return;
+  }
+  if(el.value.length <= 1) _mainScanTypeStart = Date.now();
+  if(window._scanTimer) clearTimeout(window._scanTimer);
+  window._scanTimer = setTimeout(function(){
+    var v = el.value.trim();
+    var elapsedMs = Date.now() - _mainScanTypeStart;
+    if(v && v.length>=10 && !/\s/.test(v) && elapsedMs < 600) doScan(v);
+  }, 300);
+}
+
 var packState = 'idle';
 var activeOrder = null;
 var verifySkus = [];
@@ -4278,6 +4313,31 @@ async function importHistoryRender(){
       + '</div>';
   });
   list.innerHTML = html;
+}
+
+// Distinguishes a scanner's rapid character burst from a human typing
+// manually. A scanner sends an entire tracking number in well under a
+// second; a person typing has natural pauses between digits that can
+// easily exceed a short debounce window while still mid-entry. Auto-
+// triggering on those pauses previously wiped out whatever had been typed
+// so far — so it now only auto-fires when the WHOLE string arrived fast
+// (scanner-like). Manual typing relies on Enter instead, which always works.
+var _oosTypeStart = 0;
+function oosScanKeyHandler(e){
+  var el = e.target;
+  if(e.key === 'Enter'){
+    if(window._oosScanTimer) clearTimeout(window._oosScanTimer);
+    var v = el.value.trim();
+    if(v) oosLookup(v);
+    return;
+  }
+  if(el.value.length <= 1) _oosTypeStart = Date.now(); // first char of this attempt
+  if(window._oosScanTimer) clearTimeout(window._oosScanTimer);
+  window._oosScanTimer = setTimeout(function(){
+    var v = el.value.trim();
+    var elapsedMs = Date.now() - _oosTypeStart;
+    if(v && v.length>=10 && !/\s/.test(v) && elapsedMs < 600) oosLookup(v);
+  }, 300);
 }
 
 async function oosLookup(tracking){
@@ -9781,16 +9841,10 @@ window._appInitFn = async function(){try{
     if(e.key==='Enter'){ var v=this.value.trim().toUpperCase(); if(v) loginPacker(v); }
   });
 
-
-  var scanIn=document.getElementById('scan-in');
-  if(scanIn){
-    var scanTimer=null;
-    scanIn.addEventListener('keydown',function(e){
-      if(e.key==='Enter'){ clearTimeout(scanTimer); var v=this.value.trim(); if(v) doScan(v); return; }
-      clearTimeout(scanTimer);
-      scanTimer=setTimeout(function(){ var v=scanIn.value.trim(); if(v&&v.length>=10&&!/\s/.test(v)) doScan(v); },300);
-    });
-  }
+  // (scan-in's keydown handling now lives in the single global
+  // mainScanKeyHandler function, wired via its inline onkeydown attribute —
+  // this used to be duplicated here as a second, separate listener, which
+  // meant both fired independently on every keystroke.)
 
 
   var cpSwitch=document.getElementById('cp-switch');
