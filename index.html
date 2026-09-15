@@ -871,6 +871,7 @@ body{
       <div style="color:var(--cy);font-size:13px;margin-bottom:4px;">Drop PDF here or click to browse</div>
       <div style="color:var(--td);font-size:10px;">GOFO · FedEx · UPS · USPS · SWIFT · SpeedX · Uniuni</div>
       <div id="pmsg"></div>
+      <div id="sync-status" style="font-size:10px;color:var(--td);margin-top:4px;"></div>
     </div>
     <input id="fi" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]) parsePdf(this.files[0]);this.value='';">
 
@@ -3168,6 +3169,7 @@ async function printSkuSort(){
     return c+': '+Object.values(carrierBuckets[c]).reduce(function(n,arr){ return n+arr.length; },0);
   }).join(' · ');
   pm('✓ '+orderedOrders.length+' label(s) across '+carrierNames.length+' carrier(s) — '+carrierSummary);
+  warnBeforePrintDialog();
   printLabelsViaHiddenIframe(css, bodyHtml);
 
   // Show missing labels overlay if anything was skipped or dropped
@@ -3350,6 +3352,7 @@ async function printByPacker(){
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
   pm('✓ '+total+' label(s) ready — opening print dialog…');
+  warnBeforePrintDialog();
   printLabelsViaHiddenIframe(css, bodyHtml);
 }
 
@@ -5037,6 +5040,23 @@ function printViaIframe(css, bodyHtml, existingWin){
 // appear to hang indefinitely, only "unsticking" when the user manually
 // switched focus back. A same-tab hidden iframe never loses focus, so
 // this class of bug can't happen at all — no popup-blocking risk either.
+// Shown right before the print dialog opens — the last thing on screen
+// before the one risk moment we genuinely can't protect against in code:
+// once this hands off to the browser's own print window, a second click on
+// ITS "Print" button (not our app) is completely invisible to us — no web
+// app can detect or block that. This is the real, direct mitigation: making
+// sure "printer seems unresponsive" leads to checking the queue, not an
+// instinctive re-click, since that specific sequence is what caused a full
+// batch to print twice before.
+function warnBeforePrintDialog(){
+  alert(
+    '⚠ Before you click Print:\n\n'
+    + 'If the printer doesn\'t respond right away, do NOT click Print again — '
+    + 'check your print queue/printer status first.\n\n'
+    + 'Clicking Print a second time will print this entire batch twice.'
+  );
+}
+
 function printLabelsViaHiddenIframe(css, bodyHtml){
   var old = document.getElementById('warehub-print-iframe');
   if(old) old.remove();
@@ -11281,12 +11301,18 @@ function aiDoActions(actions){
     // everything older than "today" each time a new batch was dropped in.
     var unsynced = orders.filter(function(o){ return !o.apiId; });
     if(!unsynced.length) return;
+    var statusEl = document.getElementById('sync-status');
+    if(statusEl) statusEl.textContent = '⟳ Syncing '+unsynced.length+' order(s) to cloud — labels aren\'t searchable in Out-of-Stock until this finishes…';
     var batch = unsynced.map(function(o){
       return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[],
                labelDate: o.labelDate || window._batchFallbackDateISO || null };
     });
-    var result = await apiCall('POST', '/api/orders', { orders: batch });
-    if(result && result.inserted){
+    var result = await apiCall('POST', '/api/orders', { orders: batch }).catch(function(e){ return { error: e.message }; });
+    if(result && result.error){
+      if(statusEl){ statusEl.textContent = '✗ Cloud sync failed: '+result.error+' — Out-of-Stock lookups for this batch may not work yet.'; statusEl.style.color = '#f87171'; }
+      return;
+    }
+    if(result && result.inserted != null){
       // Fetch back with API IDs so we can PATCH on complete
       var fresh = await apiCall('GET', '/api/orders');
       if(fresh && fresh.orders){
@@ -11294,6 +11320,11 @@ function aiDoActions(actions){
           var local = orders.find(function(o){ return o.tracking === apiOrder.tracking && !o.apiId; });
           if(local) local.apiId = apiOrder.id;
         });
+      }
+      if(statusEl){
+        statusEl.textContent = '✓ Synced — this batch is now searchable in Out-of-Stock.';
+        statusEl.style.color = '#4caf80';
+        setTimeout(function(){ if(statusEl.textContent.indexOf('✓')===0) statusEl.textContent = ''; }, 8000);
       }
     }
   };
