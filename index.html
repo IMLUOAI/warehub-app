@@ -1363,7 +1363,7 @@ function gv(name){
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='floor')  { renderFloor(); floorPoll(); }
-  if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
+  if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
   if(name==='import'){ dzUpdateNeonDate(); }
 }
@@ -4917,7 +4917,8 @@ async function floorRenderRackMap(){
         var sx=z.x+ZPPAD+c*(cellW+SGAP);
         var sy=z.y+ZPPAD+ZHDR+r*(cellH+SGAP);
         var posLabel = c + 1;
-        var spotId=prefix+'-'+rowLabel+'-'+(posLabel<10?'0':'')+posLabel;
+        var posStr = (posLabel<10?'0':'')+posLabel;
+        var spotId = (rowSizes.length===1) ? (prefix+'-'+posStr) : (prefix+'-'+rowLabel+'-'+posStr);
         html += '<g id="floor-spot-'+spotId+'" class="rack-spot">';
         html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'" rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
         html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'" text-anchor="middle" font-size="6.5" fill="'+col+'" font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
@@ -6281,7 +6282,8 @@ function rackBuildSVG(cfg){
         var sx = z.x + ZPPAD + c*(cellW+SGAP);
         var sy = z.y + ZPPAD + ZHDR + r*(cellH+SGAP);
         var posLabel = c + 1;
-        var spotId = prefix + '-' + rowLabel + '-' + (posLabel<10?'0':'')+posLabel;
+        var posStr = (posLabel<10?'0':'')+posLabel;
+        var spotId = (rowSizes.length===1) ? (prefix+'-'+posStr) : (prefix+'-'+rowLabel+'-'+posStr);
         html += '<g id="spot-'+spotId+'" class="rack-spot"'
               + (_rackEditMode ? '' : ' onclick="spotClick(\''+spotId+'\')" style="cursor:pointer;"')
               + '>';
@@ -6337,7 +6339,8 @@ async function rackPrintLocationLabels(){
       var rowLen = rowSizes[r];
       for(var c=0; c<rowLen; c++){
         var posLabel = c + 1;
-        var spotId = prefix + '-' + rowLabel + '-' + (posLabel<10?'0':'')+posLabel;
+        var posStr = (posLabel<10?'0':'')+posLabel;
+        var spotId = (rowSizes.length===1) ? (prefix+'-'+posStr) : (prefix+'-'+rowLabel+'-'+posStr);
         spots.push({ id: spotId, zoneName: z.name||'', color: z.color||'#4a9eff' });
       }
     }
@@ -6515,6 +6518,41 @@ function rackGetRowSizes(z){
   return Array(rows).fill(cols);
 }
 
+// Every valid spot ID across all configured zones, in the exact same
+// format the map itself generates — used to give other parts of the app
+// (like the Returns location field) real, guaranteed-to-match suggestions
+// instead of accepting arbitrary freeform text that can silently mismatch.
+function rackGetAllSpotIds(){
+  if(!_rackConfig || !_rackConfig.zones) return [];
+  var ids = [];
+  _rackConfig.zones.forEach(function(z){
+    var prefix = (z.prefix||'').toUpperCase().replace(/\s/g,'');
+    if(!prefix) return;
+    var rowSizes = rackGetRowSizes(z);
+    for(var r=0; r<rowSizes.length; r++){
+      var rowLabel = z.reverse ? (rowSizes.length - r) : (r + 1);
+      for(var c=0; c<rowSizes[r]; c++){
+        var posStr = ((c+1)<10?'0':'')+(c+1);
+        ids.push(rowSizes.length===1 ? (prefix+'-'+posStr) : (prefix+'-'+rowLabel+'-'+posStr));
+      }
+    }
+  });
+  return ids;
+}
+
+// Populates the Returns location field's autocomplete with real spot IDs —
+// loads the rack config first if this session hasn't fetched it yet (e.g.
+// someone opening Returns without ever visiting Rack Map first).
+async function returnsPopulateLocationList(){
+  var list = document.getElementById('return-location-list');
+  if(!list) return;
+  if(!_rackConfig && typeof rackConfigLoad==='function'){
+    await rackConfigLoad();
+  }
+  var ids = rackGetAllSpotIds();
+  list.innerHTML = ids.map(function(id){ return '<option value="'+id+'">'; }).join('');
+}
+
 function rackCloseConfig(){
   document.getElementById('rack-config-modal').style.display = 'none';
 }
@@ -6680,7 +6718,19 @@ function spotClick(spotId){
   if(el) el.classList.add('active');
 
 
-  var zoneId   = spotId.replace(/-\d+$/, '');
+  // Find which configured zone this spot belongs to by matching against the
+  // REAL prefixes on file (longest match wins) — a regex that just strips a
+  // trailing "-digits" segment breaks for prefixes that themselves contain
+  // a hyphen, like "R-1", "R-2", "R-3" each being their own complete zone.
+  var zoneId = spotId.replace(/-\d+$/, ''); // fallback if no config loaded yet
+  if(_rackConfig && _rackConfig.zones){
+    var bestMatch = '';
+    _rackConfig.zones.forEach(function(z){
+      var p = (z.prefix||'').toUpperCase();
+      if(p && spotId.toUpperCase().indexOf(p+'-')===0 && p.length>bestMatch.length) bestMatch = p;
+    });
+    if(bestMatch) zoneId = bestMatch;
+  }
   var zoneInfo = RACK_INFO[zoneId] || {type:'STORAGE', color:'var(--cy)'};
   var color    = zoneInfo.color;
 
@@ -7922,7 +7972,7 @@ function returnsEditFormHtml(r){
       + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">SKU</div><input id="ret-edit-sku" value="'+(r.sku||'')+'" style="'+inputStyle+'"/></div>'
       + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">QTY</div><input id="ret-edit-qty" type="number" min="1" value="'+(r.qty||1)+'" style="'+inputStyle+'"/></div>'
     + '</div>'
-    + '<div style="margin-bottom:8px;"><div style="font-size:8px;color:var(--td);margin-bottom:3px;">LOCATION</div><input id="ret-edit-location" value="'+(r.location||'')+'" placeholder="e.g. R1-05 (leave blank for return pile)" style="'+inputStyle+'"/></div>'
+    + '<div style="margin-bottom:8px;"><div style="font-size:8px;color:var(--td);margin-bottom:3px;">LOCATION</div><input id="ret-edit-location" value="'+(r.location||'')+'" placeholder="e.g. R1-05 (leave blank for return pile)" list="return-location-list" style="'+inputStyle+'"/></div>'
     + '<div style="margin-bottom:10px;"><div style="font-size:8px;color:var(--td);margin-bottom:3px;">NOTES</div><input id="ret-edit-notes" value="'+(r.notes||'')+'" style="'+inputStyle+'"/></div>'
     + '<div style="display:flex;gap:8px;">'
       + '<button onclick="returnsEditSave(\''+r.id+'\')" style="font-size:9px;padding:6px 14px;background:var(--gn);border:none;color:#0a1a0f;font-weight:700;cursor:pointer;border-radius:4px;font-family:inherit;">💾 SAVE</button>'
@@ -10719,9 +10769,10 @@ document.addEventListener('DOMContentLoaded', function(){
           <div>
             <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RESTOCK LOCATION</div>
             <input id="return-location" placeholder="e.g. R1-05 (leave blank for return pile)"
-              autocomplete="off"
+              autocomplete="off" list="return-location-list"
               style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;"
             />
+            <datalist id="return-location-list"></datalist>
           </div>
           <!-- Pile assignment -->
           <div>
