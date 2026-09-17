@@ -7885,7 +7885,7 @@ function returnsSubmit(){
   var type      = document.getElementById('return-type').value;
   var sku       = document.getElementById('return-sku').value.trim().toUpperCase();
   var qty       = parseInt(document.getElementById('return-qty').value)||1;
-  var location  = document.getElementById('return-location').value.trim().toUpperCase();
+  var location  = rackNormalise(document.getElementById('return-location').value.trim());
   var notes     = document.getElementById('return-notes').value.trim();
   var pile      = document.getElementById('return-pile').value;
   var carrierSel = document.getElementById('return-carrier-sel');
@@ -8111,14 +8111,44 @@ function returnsEditCancel(){
 function returnsEditSave(id){
   var r = returnsList.find(function(x){ return x.id===id; });
   if(!r) return;
+
+  var oldLocation = r.location;
+  var oldSku      = r.sku;
+  var oldQty      = r.qty;
+
   r.type      = document.getElementById('ret-edit-type').value;
   r.condition = document.getElementById('ret-edit-condition').value;
   r.pile      = document.getElementById('ret-edit-pile').value.trim();
   r.sku       = document.getElementById('ret-edit-sku').value.trim();
   r.qty       = Math.max(1, parseInt(document.getElementById('ret-edit-qty').value)||1);
-  r.location  = document.getElementById('ret-edit-location').value.trim().toUpperCase();
+  r.location  = rackNormalise(document.getElementById('ret-edit-location').value.trim());
   r.notes     = document.getElementById('ret-edit-notes').value.trim();
   r.mgrReview = MGR_REVIEW_CONDITIONS.indexOf(r.condition) !== -1;
+
+  // Reconcile the rack map's tracked inventory — editing a return here
+  // previously only changed how it looked in the returns list, with ZERO
+  // effect on _inventoryData (what the Rack Map actually reads). Remove
+  // this return's old contribution from its old location (if any), then
+  // add its new contribution at the new location.
+  if(oldLocation && oldSku && window._inventoryData && window._inventoryData[oldLocation]){
+    var oldInv = window._inventoryData[oldLocation];
+    var oldItem = (oldInv.skus||[]).find(function(s){ return s.sku===oldSku; });
+    if(oldItem){
+      oldItem.qty = Math.max(0, (parseInt(oldItem.qty)||0) - (parseInt(oldQty)||0));
+      if(oldItem.qty === 0){
+        oldInv.skus = oldInv.skus.filter(function(s){ return s.sku!==oldSku; });
+      }
+    }
+  }
+  if(r.location && r.sku){
+    if(!window._inventoryData) window._inventoryData = {};
+    if(!window._inventoryData[r.location]) window._inventoryData[r.location] = {skus:[]};
+    var inv = window._inventoryData[r.location];
+    var existing = inv.skus.find(function(s){ return s.sku===r.sku; });
+    if(existing){ existing.qty = (parseInt(existing.qty)||0) + r.qty; }
+    else { inv.skus.push({sku:r.sku, name:'RETURN', qty:r.qty, unit:'PCS'}); }
+  }
+  inventorySync();
 
   _returnsEditingId = null;
   returnsSave();
