@@ -311,6 +311,12 @@ body{
 .rack-spot.active{filter:drop-shadow(0 0 5px #818cf866);}
 .rack-spot.has-orders rect{fill:rgba(255,200,0,0.32)!important;stroke:#ffd700!important;}
 .rack-spot.done rect{fill:rgba(56,161,105,0.35)!important;stroke:#68d391!important;}
+.rack-spot.recent-activity rect{stroke-width:2.5!important;}
+.rack-spot.recent-activity{animation:rackPulse 1.6s ease-in-out infinite;}
+@keyframes rackPulse{
+  0%,100%{filter:drop-shadow(0 0 2px currentColor);}
+  50%{filter:drop-shadow(0 0 9px currentColor) drop-shadow(0 0 4px currentColor);}
+}
 .rack-spot.active text{fill:#818cf8!important;font-weight:900!important;}
 #ai-btn{position:fixed!important;bottom:20px!important;right:20px!important;z-index:9999!important;width:44px!important;height:44px!important;border-radius:50%!important;background:#6366f1!important;color:#fff!important;font-size:20px!important;border:none!important;cursor:pointer!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 2px 16px #6366f166;transition:transform .15s;padding:0!important;}
 #ai-btn:hover{transform:scale(1.08)!important;}
@@ -882,7 +888,10 @@ body{
         <div id="xlwms-sync-status" style="font-size:11px;color:var(--tx);margin-top:2px;">Pull today's outbound orders directly from xlwms.</div>
       </div>
       <button class="btn" id="xlwms-sync-btn" onclick="xlwmsSyncNow()" style="font-size:9px;white-space:nowrap;border-color:var(--cy);color:var(--cy);background:#00e5ff10;">🔄 SYNC FROM XLWMS</button>
+      <button class="btn" id="xlwms-inv-sync-btn" onclick="xlwmsSyncInventoryNow()" style="font-size:9px;white-space:nowrap;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);background:#c77dff10;">📍 SYNC BIN LOCATIONS</button>
     </div>
+
+    <div id="xlwms-inv-sync-status" style="display:none;font-size:10px;color:var(--td);margin:-6px 0 14px 2px;"></div>
 
     <!-- ── Missing Labels Panel — populated by renderSkippedPanel() after parse ── -->
     <div id="import-skipped-panel" style="display:none;background:var(--sur);border:1px solid var(--rd);margin-bottom:14px;">
@@ -1225,6 +1234,21 @@ body{
       <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-top:4px;">PACKER BOARD</div>
       <div class="frow" id="f-packers"></div>
     </div>
+
+    <!-- Live rack map + activity ticker -->
+    <div style="display:flex;gap:16px;flex:1;min-height:0;margin-top:12px;flex-wrap:wrap;">
+      <div style="flex:2;min-width:320px;display:flex;flex-direction:column;min-height:0;">
+        <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">LIVE PICKING ACTIVITY</div>
+        <div style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);padding:8px;">
+          <svg id="floor-rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
+          <div id="floor-rack-empty" style="display:none;text-align:center;padding:30px;color:var(--td);font-size:11px;">No rack layout configured yet — set one up in Rack Map.</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;min-height:0;">
+        <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
+        <div id="floor-ticker" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+      </div>
+    </div>
   </div>
 
 </div><!-- #app -->
@@ -1338,7 +1362,7 @@ function gv(name){
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
-  if(name==='floor')  renderFloor();
+  if(name==='floor')  { renderFloor(); floorPoll(); }
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
   if(name==='import'){ dzUpdateNeonDate(); }
@@ -4464,6 +4488,36 @@ async function xlwmsSyncNow(){
   status.style.color = '#4caf80';
 }
 
+// Pulls bin/shelf location data from xlwms's own WMS inventory ledger, so
+// Rack Map's SKU search reflects the real ERP-tracked locations instead of
+// relying solely on manually-logged return put-aways.
+async function xlwmsSyncInventoryNow(){
+  var btn = document.getElementById('xlwms-inv-sync-btn');
+  var status = document.getElementById('xlwms-inv-sync-status');
+  btn.disabled = true;
+  btn.textContent = '⟳ Syncing…';
+  status.style.display = 'block';
+  status.textContent = 'Pulling bin-level inventory from xlwms (last 180 days of stock movement, deriving current locations)…';
+  status.style.color = 'var(--td)';
+  var result = await window.warehubApi('POST', '/api/integrations/xlwms/sync-inventory', {})
+    .catch(function(e){ return { error: e.message }; });
+  btn.disabled = false;
+  btn.textContent = '📍 SYNC BIN LOCATIONS';
+  if(!result || result.error){
+    var detail = (result && result.error) || 'Sync failed — check console/Worker logs.';
+    if(result && result.code) detail += ' (code: ' + result.code + ')';
+    if(result && result.raw) detail += ' — ' + result.raw;
+    status.textContent = '✗ ' + detail;
+    status.style.color = '#f87171';
+    return;
+  }
+  status.textContent = '✓ Synced ' + (result.locations||0) + ' location(s), ' + (result.skus||0) + ' SKU record(s) from xlwms. Rack Map\'s SKU search now reflects this.';
+  status.style.color = '#4caf80';
+  // Refresh the cached copy immediately if Rack Map has already loaded one
+  // this session, so the new data is usable without a page reload.
+  if(typeof rackConfigLoad === 'function') rackConfigLoad();
+}
+
 // Close menu when clicking outside
 document.addEventListener('click', function(e){
   var wrap = document.getElementById('user-menu-wrap');
@@ -4756,6 +4810,144 @@ function exportPayrollCSV(){
   pm('✓ Payroll CSV exported.');
 }
 
+// Re-fetches current order/packer state from the server and merges it into
+// the local view — unlike apiLoadOrders (which only restores once, into an
+// empty session), this is meant to run repeatedly on a interval so a
+// dedicated, passive wall-monitor device (never scanning anything itself)
+// still reflects what packers are actually doing on OTHER devices in real
+// time, instead of showing whatever was true the moment the page loaded.
+async function floorPoll(){
+  if(typeof apiReady !== 'function' || !apiReady()) return;
+  var result = await apiCall('GET', '/api/orders').catch(function(){ return null; });
+  if(!result || !result.orders) return;
+  var byTracking = {};
+  orders.forEach(function(o){ byTracking[o.tracking] = o; });
+  result.orders.forEach(function(apiOrder){
+    var local = byTracking[apiOrder.tracking];
+    if(local){
+      local.status      = apiOrder.status || local.status;
+      local.packedBy    = apiOrder.packed_by || local.packedBy;
+      local.assignedTo  = apiOrder.assigned_to || local.assignedTo;
+      local.completedAt = apiOrder.completed_at || local.completedAt;
+    } else {
+      // On the server but not in this device's local session — e.g. this
+      // is a dedicated monitor that never imported today's PDF itself.
+      orders.push({
+        tracking: apiOrder.tracking, carrier: apiOrder.carrier, shelf: apiOrder.shelf||'',
+        skus: apiOrder.skus||[], status: apiOrder.status||'pending',
+        assignedTo: apiOrder.assigned_to||null, packedBy: apiOrder.packed_by||null,
+        completedAt: apiOrder.completed_at||null, apiId: apiOrder.id,
+        orderStartTime: null, orderEndTime: null
+      });
+    }
+  });
+  renderFloor();
+}
+
+// ── Floor Display: live rack map + activity ticker ──────────────────
+async function floorRenderRackMap(){
+  var svg = document.getElementById('floor-rack-svg');
+  var emptyEl = document.getElementById('floor-rack-empty');
+  if(!svg) return;
+
+  if(!_rackConfig && typeof rackConfigLoad==='function'){
+    await rackConfigLoad(); // loads from localStorage, then reconciles with cloud
+  }
+
+  if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length){
+    svg.style.display = 'none';
+    if(emptyEl) emptyEl.style.display = 'block';
+    return;
+  }
+  svg.style.display = 'block';
+  if(emptyEl) emptyEl.style.display = 'none';
+
+  var zones = _rackConfig.zones.filter(function(z){ return z.x!=null && z.y!=null && z.w!=null && z.h!=null; });
+  if(!zones.length) return; // configured but never opened Rack Map to get a layout
+
+  var totalW = Math.max.apply(null, zones.map(function(z){ return z.x+z.w; }).concat([300])) + 18;
+  var totalH = Math.max.apply(null, zones.map(function(z){ return z.y+z.h; }).concat([200])) + 18;
+  svg.setAttribute('viewBox', '0 0 '+totalW+' '+totalH);
+
+  var ZHDR=20, ZPPAD=8, SGAP=3;
+  var html='';
+  zones.forEach(function(z, zi){
+    var col = z.color || '#4a9eff';
+    var colFaint = col+'22';
+    var prefix = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
+    var rows = Math.max(1, parseInt(z.rows)||4);
+    var cols = Math.max(1, parseInt(z.cols)||5);
+    var cellW = (z.w - ZPPAD*2 + SGAP)/cols - SGAP;
+    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP)/rows - SGAP;
+
+    html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+z.h+'" rx="6" fill="'+colFaint+'" stroke="'+col+'" stroke-width="1.5" fill-opacity="0.85"/>';
+    html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'" rx="4" fill="'+col+'" opacity="0.85"/>';
+    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
+
+    var spotNum=1;
+    for(var r=0;r<rows;r++){
+      for(var c=0;c<cols;c++){
+        var sx=z.x+ZPPAD+c*(cellW+SGAP);
+        var sy=z.y+ZPPAD+ZHDR+r*(cellH+SGAP);
+        var spotId=prefix+'-'+(spotNum<10?'0':'')+spotNum;
+        html += '<g id="floor-spot-'+spotId+'" class="rack-spot">';
+        html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'" rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
+        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'" text-anchor="middle" font-size="7" fill="'+col+'" font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
+        html += '</g>';
+        spotNum++;
+      }
+    }
+  });
+  svg.innerHTML = html;
+  floorHighlightRackActivity();
+}
+
+function floorHighlightRackActivity(){
+  document.querySelectorAll('#floor-rack-svg .rack-spot').forEach(function(el){
+    el.classList.remove('has-orders','done','recent-activity');
+  });
+  var now = Date.now();
+  orders.forEach(function(o){
+    var shelf = (o.shelf||'').trim().toUpperCase();
+    if(!shelf) return;
+    var el = document.getElementById('floor-spot-'+shelf);
+    if(!el) return;
+    if(o.status==='done'){
+      el.classList.add('done');
+      if(o.completedAt){
+        var t = new Date(o.completedAt).getTime();
+        if(!isNaN(t) && (now - t) < 5*60*1000) el.classList.add('recent-activity');
+      }
+    } else {
+      el.classList.add('has-orders');
+    }
+  });
+}
+
+function floorRenderTicker(){
+  var el = document.getElementById('floor-ticker');
+  if(!el) return;
+  var recent = orders.filter(function(o){ return o.status==='done' && o.completedAt; })
+    .sort(function(a,b){ return new Date(b.completedAt) - new Date(a.completedAt); })
+    .slice(0, 25);
+  if(!recent.length){
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:11px;">No completions yet today.</div>';
+    return;
+  }
+  el.innerHTML = recent.map(function(o){
+    var packer = o.packedBy ? packers.find(function(p){ return p.id===o.packedBy || p.name===o.packedBy; }) : null;
+    var name = packer ? packer.name : (o.packedBy || 'Someone');
+    var col = packer ? packerColor(packer) : 'var(--cy)';
+    var mins = Math.max(0, Math.round((Date.now() - new Date(o.completedAt).getTime())/60000));
+    var ago = mins < 1 ? 'just now' : (mins+'m ago');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
+      +'<span style="color:'+col+';font-weight:700;white-space:nowrap;">'+name+'</span>'
+      +'<span style="color:var(--td);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(o.shelf||o.carrier||'')+'</span>'
+      +'<span style="color:var(--td);font-size:9px;white-space:nowrap;">'+ago+'</span>'
+      +'</div>';
+  }).join('');
+}
+
 function renderFloor(){
   var rem=orders.filter(function(o){return o.status==='pending';}).length;
   var don=orders.filter(function(o){return o.status==='done';}).length;
@@ -4779,6 +4971,9 @@ function renderFloor(){
         +'</div>';
     }).join('');
   }
+
+  floorRenderRackMap();
+  floorRenderTicker();
 }
 
 function printPackerCards(){
@@ -5850,19 +6045,14 @@ var RACK_INFO = {
    RACK MAP — CLIENT-CONFIGURABLE LAYOUT SYSTEM
    ───────────────────────────────────────────── */
 
-var _rackConfig = null; // loaded from localStorage
+var _rackConfig = null; // loaded from localStorage (fast local cache), then reconciled with the server
 
 function _rackStorageKey(){
   var uid = (window._clerkUser && window._clerkUser.id) ? window._clerkUser.id : 'default';
   return 'warehub_rack_cfg_' + uid;
 }
 
-function rackConfigLoad(){
-  try {
-    var raw = localStorage.getItem(_rackStorageKey());
-    _rackConfig = raw ? JSON.parse(raw) : null;
-  } catch(e){ _rackConfig = null; }
-
+function rackRenderConfig(){
   var prompt = document.getElementById('rack-setup-prompt');
   var svgWrap = document.getElementById('rack-svg-wrap');
 
@@ -5890,9 +6080,50 @@ function rackConfigLoad(){
   if(addrEl) addrEl.textContent = [_rackConfig.name, _rackConfig.addr].filter(Boolean).join(' · ') || '—';
 }
 
-function rackConfigSave(cfg){
+async function rackConfigLoad(){
+  // Render immediately from the local cache so the screen isn't blank while
+  // we check the server — then reconcile with the server's copy, which is
+  // the shared source of truth across every device on this account (the
+  // rack layout is one physical warehouse, so it shouldn't differ by device
+  // or by which packer happens to be logged in).
+  try {
+    var raw = localStorage.getItem(_rackStorageKey());
+    _rackConfig = raw ? JSON.parse(raw) : null;
+  } catch(e){ _rackConfig = null; }
+  rackRenderConfig();
+
+  if(typeof window.warehubApi !== 'function') return;
+  var result = await window.warehubApi('GET', '/api/settings').catch(function(){ return null; });
+  var serverCfg = result && result.settings && result.settings.rack_config;
+  if(serverCfg && JSON.stringify(serverCfg) !== JSON.stringify(_rackConfig)){
+    _rackConfig = serverCfg;
+    try { localStorage.setItem(_rackStorageKey(), JSON.stringify(serverCfg)); } catch(e){}
+    rackRenderConfig();
+  }
+
+  // Same reconciliation for put-away inventory (e.g. return locations) —
+  // this was previously localStorage-only, so a return logged with a rack
+  // location on one device never showed up on another (including a
+  // dedicated Floor Display monitor).
+  var serverInv = result && result.settings && result.settings.rack_inventory;
+  if(serverInv && JSON.stringify(serverInv) !== JSON.stringify(window._inventoryData)){
+    window._inventoryData = serverInv;
+    try { localStorage.setItem('warehub_inventory', JSON.stringify(serverInv)); } catch(e){}
+    if(typeof rackHighlightInventory === 'function') rackHighlightInventory();
+  }
+}
+
+async function rackConfigSave(cfg){
   try { localStorage.setItem(_rackStorageKey(), JSON.stringify(cfg)); } catch(e){}
   _rackConfig = cfg;
+  // Push to the tenant-wide settings store so every other device on this
+  // account picks up the change next time it loads Rack Map.
+  if(typeof window.warehubApi === 'function'){
+    await window.warehubApi('POST', '/api/settings', { rack_config: cfg }).catch(function(e){
+      console.error('[rack config] cloud save failed:', e);
+      pm('⚠ Rack layout saved locally, but cloud sync failed — other devices won\'t see this update yet.');
+    });
+  }
 }
 
 /* ── Build SVG from zone config ── */
@@ -5903,40 +6134,37 @@ function rackBuildSVG(cfg){
   var zones = cfg.zones || [];
   if(!zones.length){ svg.innerHTML=''; return; }
 
-  // Layout: arrange zones in a flow grid
-  // Each zone is a block: header rect + grid of spots
   var PAD   = 18;   // outer padding
-  var ZGAP  = 14;   // gap between zones
-  var COLS  = 2;    // max zone columns
-  var SZ    = 24;   // spot cell size
+  var ZGAP  = 14;   // gap between auto-placed zones (first-time layout only)
+  var SZ    = 24;   // default spot cell size (used to size a zone the FIRST time, before it has a saved w/h)
   var SGAP  = 3;    // gap between spots
   var ZHDR  = 20;   // zone header height
   var ZPPAD = 8;    // padding inside zone block
 
-  // Compute zone dimensions
-  var zoneSizes = zones.map(function(z){
-    var cols = Math.max(1, parseInt(z.cols)||5);
-    var rows = Math.max(1, parseInt(z.rows)||4);
-    var w = ZPPAD*2 + cols*(SZ+SGAP) - SGAP;
-    var h = ZPPAD*2 + ZHDR + rows*(SZ+SGAP) - SGAP;
-    return {w:w, h:h, cols:cols, rows:rows};
-  });
+  // Any zone missing a saved position/size gets one computed now, using the
+  // same flow-grid layout this always used — but only ONCE. From then on
+  // the value is stored on the zone itself and persists (draggable/
+  // resizable in edit mode) instead of being recomputed from rows/cols
+  // every time the map renders.
+  var needsAutoLayout = zones.some(function(z){ return z.x==null || z.y==null || z.w==null || z.h==null; });
+  if(needsAutoLayout){
+    var colH = [PAD, PAD];
+    zones.forEach(function(z){
+      if(z.x!=null && z.y!=null && z.w!=null && z.h!=null) return;
+      var cols = Math.max(1, parseInt(z.cols)||5);
+      var rows = Math.max(1, parseInt(z.rows)||4);
+      var w = ZPPAD*2 + cols*(SZ+SGAP) - SGAP;
+      var h = ZPPAD*2 + ZHDR + rows*(SZ+SGAP) - SGAP;
+      var col = (colH[0] <= colH[1]) ? 0 : 1;
+      z.x = PAD + col*(220);
+      z.y = colH[col];
+      z.w = w; z.h = h;
+      colH[col] += h + ZGAP;
+    });
+  }
 
-  // Place zones in a 2-column layout
-  var colW = [0,0]; var colH = [PAD, PAD];
-  var positions = zones.map(function(z, i){
-    var sz = zoneSizes[i];
-    // pick shorter column
-    var col = (colH[0] <= colH[1]) ? 0 : 1;
-    var x   = PAD + col*(Math.max(zoneSizes.reduce(function(m,s){return Math.max(m,s.w);},0),200) + ZGAP);
-    var y   = colH[col];
-    colH[col] += sz.h + ZGAP;
-    colW[col]  = Math.max(colW[col]||0, x + sz.w);
-    return {x:x, y:y, col:col};
-  });
-
-  var totalW = Math.max(colW[0]||0, colW[1]||0) + PAD;
-  var totalH = Math.max(colH[0], colH[1]) + PAD;
+  var totalW = Math.max.apply(null, zones.map(function(z){ return z.x+z.w; }).concat([300])) + PAD;
+  var totalH = Math.max.apply(null, zones.map(function(z){ return z.y+z.h; }).concat([200])) + PAD;
 
   svg.setAttribute('viewBox', '0 0 '+totalW+' '+totalH);
 
@@ -5946,41 +6174,54 @@ function rackBuildSVG(cfg){
     + '</marker>'
     + '</defs>';
   zones.forEach(function(z, zi){
-    var pos = positions[zi];
-    var sz  = zoneSizes[zi];
     var col = z.color || '#4a9eff';
     var colFaint = col + '22';
     var prefix  = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
+    var rows = Math.max(1, parseInt(z.rows)||4);
+    var cols = Math.max(1, parseInt(z.cols)||5);
+    // Spot cell size SCALES to fit the zone's actual (possibly resized) box,
+    // rather than a fixed size — dragging a zone bigger/smaller resizes its
+    // spot grid to match, instead of changing how many spots it has.
+    var cellW = (z.w - ZPPAD*2 + SGAP) / cols - SGAP;
+    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP) / rows - SGAP;
 
-    // Zone group
-    html += '<g id="zone-'+prefix+'" class="rack-zone" onclick="rackClick(\''+prefix+'\')" style="cursor:pointer;">';
+    var editCursor = _rackEditMode ? 'cursor:move;' : 'cursor:pointer;';
+    html += '<g id="zone-'+prefix+'" class="rack-zone" data-zi="'+zi+'"'
+          + (_rackEditMode ? ' onmousedown="rackZoneDragStart(event,'+zi+')"' : ' onclick="rackClick(\''+prefix+'\')"')
+          + ' style="'+editCursor+'">';
 
-    // Zone background
-    html += '<rect x="'+pos.x+'" y="'+pos.y+'" width="'+sz.w+'" height="'+sz.h+'"'
+    html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+z.h+'"'
           + ' rx="6" fill="'+colFaint+'" stroke="'+col+'" stroke-width="1.5" fill-opacity="0.85"/>';
 
-    // Zone header
-    html += '<rect x="'+pos.x+'" y="'+pos.y+'" width="'+sz.w+'" height="'+ZHDR+'"'
+    html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'"'
           + ' rx="4" fill="'+col+'" opacity="0.85"/>';
-    html += '<text x="'+(pos.x+sz.w/2)+'" y="'+(pos.y+13)+'"'
+    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'"'
           + ' text-anchor="middle" font-size="9" font-weight="700"'
           + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
 
-    html += '</g>'; // close zone group (spots go outside so they layer on top)
+    html += '</g>';
 
-    // Spot grid
-    var rows = parseInt(z.rows)||4;
-    var cols = parseInt(z.cols)||5;
+    if(_rackEditMode){
+      // Resize handle — small square in the bottom-right corner
+      var hs = 10;
+      html += '<rect class="rack-resize-handle" data-zi="'+zi+'" x="'+(z.x+z.w-hs)+'" y="'+(z.y+z.h-hs)+'" width="'+hs+'" height="'+hs+'"'
+            + ' fill="'+col+'" stroke="#fff" stroke-width="1" rx="2" style="cursor:nwse-resize;"'
+            + ' onmousedown="rackZoneResizeStart(event,'+zi+')"/>';
+    }
+
+    // Spot grid — scaled to fit the zone's current box
     var spotNum = 1;
     for(var r=0; r<rows; r++){
       for(var c=0; c<cols; c++){
-        var sx = pos.x + ZPPAD + c*(SZ+SGAP);
-        var sy = pos.y + ZPPAD + ZHDR + r*(SZ+SGAP);
+        var sx = z.x + ZPPAD + c*(cellW+SGAP);
+        var sy = z.y + ZPPAD + ZHDR + r*(cellH+SGAP);
         var spotId = prefix + '-' + (spotNum<10?'0':'')+spotNum;
-        html += '<g id="spot-'+spotId+'" class="rack-spot" onclick="spotClick(\''+spotId+'\')" style="cursor:pointer;">';
-        html += '<rect x="'+sx+'" y="'+sy+'" width="'+SZ+'" height="'+SZ+'"'
+        html += '<g id="spot-'+spotId+'" class="rack-spot"'
+              + (_rackEditMode ? '' : ' onclick="spotClick(\''+spotId+'\')" style="cursor:pointer;"')
+              + '>';
+        html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'"'
               + ' rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
-        html += '<text x="'+(sx+SZ/2)+'" y="'+(sy+SZ/2+4)+'"'
+        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'"'
               + ' text-anchor="middle" font-size="7" fill="'+col+'"'
               + ' font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
         html += '</g>';
@@ -5998,15 +6239,89 @@ function rackBuildSVG(cfg){
   // Dynamically populate RACK_CENTERS from computed spot midpoints for pick route
   RACK_CENTERS = {};
   zones.forEach(function(z, zi){
-    var pos = positions[zi];
-    var sz  = zoneSizes[zi];
     var prefix = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
-    // Center = middle of the zone block
     RACK_CENTERS[prefix] = {
-      x: Math.round(pos.x + sz.w/2),
-      y: Math.round(pos.y + sz.h/2)
+      x: z.x + z.w/2,
+      y: z.y + z.h/2
     };
   });
+}
+
+// ── Drag-to-move / drag-to-resize zone editing ──────────────────────
+var _rackEditMode = false;
+var _rackDrag = null; // { zi, mode:'move'|'resize', startX, startY, origX, origY, origW, origH }
+
+function rackToggleEditMode(){
+  _rackEditMode = !_rackEditMode;
+  var btn = document.getElementById('rack-edit-toggle');
+  var hint = document.getElementById('rack-edit-hint');
+  if(btn){
+    btn.style.background = _rackEditMode ? 'var(--pu,#c77dff)' : 'transparent';
+    btn.style.color = _rackEditMode ? '#1a1030' : 'var(--pu,#c77dff)';
+  }
+  if(hint) hint.style.display = _rackEditMode ? 'block' : 'none';
+  if(_rackConfig) rackBuildSVG(_rackConfig);
+}
+
+// Converts a mouse event's screen coordinates into the SVG's own viewBox
+// coordinate system — required because the SVG scales responsively
+// (width:100%), so raw clientX/clientY don't line up with zone x/y/w/h.
+function rackSvgPoint(evt){
+  var svg = document.getElementById('rack-svg');
+  var pt = svg.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  var ctm = svg.getScreenCTM();
+  if(!ctm) return {x:0,y:0};
+  var loc = pt.matrixTransform(ctm.inverse());
+  return {x:loc.x, y:loc.y};
+}
+
+function rackZoneDragStart(evt, zi){
+  if(!_rackEditMode) return;
+  evt.preventDefault();
+  evt.stopPropagation();
+  var z = _rackConfig.zones[zi];
+  var p = rackSvgPoint(evt);
+  _rackDrag = { zi:zi, mode:'move', startX:p.x, startY:p.y, origX:z.x, origY:z.y };
+  document.addEventListener('mousemove', rackZoneDragMove);
+  document.addEventListener('mouseup', rackZoneDragEnd);
+}
+
+function rackZoneResizeStart(evt, zi){
+  if(!_rackEditMode) return;
+  evt.preventDefault();
+  evt.stopPropagation();
+  var z = _rackConfig.zones[zi];
+  var p = rackSvgPoint(evt);
+  _rackDrag = { zi:zi, mode:'resize', startX:p.x, startY:p.y, origW:z.w, origH:z.h };
+  document.addEventListener('mousemove', rackZoneDragMove);
+  document.addEventListener('mouseup', rackZoneDragEnd);
+}
+
+function rackZoneDragMove(evt){
+  if(!_rackDrag) return;
+  var p = rackSvgPoint(evt);
+  var z = _rackConfig.zones[_rackDrag.zi];
+  var dx = p.x - _rackDrag.startX;
+  var dy = p.y - _rackDrag.startY;
+  if(_rackDrag.mode==='move'){
+    z.x = Math.max(0, _rackDrag.origX + dx);
+    z.y = Math.max(0, _rackDrag.origY + dy);
+  } else {
+    var MIN = 60; // don't let a zone get so small the header/spots break
+    z.w = Math.max(MIN, _rackDrag.origW + dx);
+    z.h = Math.max(MIN, _rackDrag.origH + dy);
+  }
+  rackBuildSVG(_rackConfig);
+}
+
+function rackZoneDragEnd(){
+  document.removeEventListener('mousemove', rackZoneDragMove);
+  document.removeEventListener('mouseup', rackZoneDragEnd);
+  if(_rackDrag && _rackConfig){
+    rackConfigSave(_rackConfig); // persists locally + syncs to the cloud
+  }
+  _rackDrag = null;
 }
 
 /* ── Build legend ── */
@@ -6365,6 +6680,52 @@ function rackClearHighlight(){
   if(ra)  ra.style.display='none';
 }
 
+// Finds every rack location currently tracked as holding a given SKU (built
+// up from returns put-away + rack-scan inventory mode) and highlights ALL
+// of them at once — a SKU can live in more than one spot. This is what lets
+// a packer who can't find an item scan/search its SKU and see exactly
+// where it actually is, separate from the shipping label's own "shelf"
+// field (which is the sorting/staging destination, not where the physical
+// item currently sits).
+function rackFindSku(skuRaw){
+  var sku = (skuRaw||'').trim().toUpperCase();
+  if(!sku) return false;
+  var inv = window._inventoryData || {};
+  var matches = [];
+  Object.keys(inv).forEach(function(loc){
+    var item = ((inv[loc]||{}).skus||[]).find(function(s){ return (s.sku||'').toUpperCase()===sku; });
+    if(item) matches.push({ location: loc, qty: item.qty||0, name: item.name||'' });
+  });
+  if(!matches.length) return false;
+
+  rackClearHighlight();
+  matches.forEach(function(m){
+    var el = document.getElementById('spot-'+m.location.toUpperCase());
+    if(el) el.classList.add('active');
+  });
+
+  var panel = document.getElementById('rack-info-panel');
+  var title = document.getElementById('rack-info-title');
+  var type  = document.getElementById('rack-info-type');
+  var body  = document.getElementById('rack-info-orders');
+  if(panel){
+    panel.style.display = 'block';
+    panel.style.borderColor = 'var(--cy)';
+    if(title){ title.style.color = 'var(--cy)'; title.textContent = 'SKU: '+sku; }
+    if(type) type.textContent = 'FOUND AT '+matches.length+' LOCATION'+(matches.length!==1?'S':'');
+    if(body) body.innerHTML = matches.map(function(m){
+      return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);">'
+        + '<span style="color:var(--cy);font-weight:700;">'+m.location+'</span>'
+        + '<span style="color:var(--td);">Qty: '+m.qty+'</span>'
+        + '</div>';
+    }).join('');
+  }
+
+  var firstEl = document.getElementById('spot-'+matches[0].location.toUpperCase());
+  if(firstEl) firstEl.scrollIntoView({behavior:'smooth', block:'center'});
+  return true;
+}
+
 function rackSearch(val){
   rackClearHighlight();
   if(!val.trim()) return;
@@ -6383,11 +6744,17 @@ function rackSearch(val){
   var found = RACK_CENTERS[norm];
   if(found){
     rackClick(norm);
-  } else {
-    var keys = Object.keys(RACK_CENTERS);
-    var match = keys.find(function(k){ return k.startsWith(norm)||norm.startsWith(k); });
-    if(match) rackClick(match);
+    return;
   }
+  var keys = Object.keys(RACK_CENTERS);
+  var match = keys.find(function(k){ return k.startsWith(norm)||norm.startsWith(k); });
+  if(match){ rackClick(match); return; }
+
+  // Not a spot or zone — try it as a SKU instead, so a packer who can't
+  // find an item can search its SKU here and see where it actually is.
+  if(rackFindSku(val.trim())) return;
+
+  pm('⚠ "'+val.trim()+'" not found as a spot, zone, or tracked SKU.');
 }
 
 function rackShowPickRoute(){
@@ -7173,6 +7540,11 @@ function returnsSubmit(){
     if(ex){ ex.qty=(parseInt(ex.qty)||0)+qty; }
     else { inv.skus.push({sku:sku,name:'RETURN',qty:qty,unit:'PCS'}); }
     try{ localStorage.setItem('warehub_inventory',JSON.stringify(window._inventoryData)); }catch(e){}
+    if(typeof window.warehubApi === 'function'){
+      window.warehubApi('POST', '/api/settings', { rack_inventory: window._inventoryData }).catch(function(e){
+        console.error('[inventory] cloud save failed:', e);
+      });
+    }
   }
 
   // Manager notification
@@ -9909,6 +10281,7 @@ window._appInitFn = async function(){try{
     if(document.getElementById('view-dash').classList.contains('on')) renderDash();
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
     if(document.getElementById('view-payroll').classList.contains('on')) renderProductivity();
+    if(document.getElementById('view-floor').classList.contains('on')) floorPoll();
   },10000);
 
 
@@ -10520,12 +10893,17 @@ document.addEventListener('DOMContentLoaded', function(){
           <div id="rack-address-display" style="font-size:10px;color:var(--td);margin-top:2px;">—</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="rack-search" placeholder="Search spot (e.g. A-01, R1-05)…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:180px;"/>
+          <input id="rack-search" placeholder="Search spot or SKU…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:180px;"/>
           <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
           <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
           <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
           <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
+          <button class="btn" id="rack-edit-toggle" onclick="rackToggleEditMode()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">✏️ EDIT POSITIONS</button>
         </div>
+      </div>
+
+      <div id="rack-edit-hint" style="display:none;font-size:10px;color:var(--pu,#c77dff);background:#c77dff15;border:1px solid var(--pu,#c77dff);border-radius:6px;padding:8px 12px;margin-bottom:12px;">
+        ✏️ Edit mode on — drag a zone to move it, or drag its bottom-right corner to resize it. Changes save automatically and sync to every device on this account.
       </div>
 
       <!-- Dynamic legend -->
