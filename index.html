@@ -4901,18 +4901,19 @@ async function floorRenderRackMap(){
     var col = z.color || '#4a9eff';
     var colFaint = col+'22';
     var prefix = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
-    var rows = Math.max(1, parseInt(z.rows)||4);
-    var cols = Math.max(1, parseInt(z.cols)||5);
-    var cellW = (z.w - ZPPAD*2 + SGAP)/cols - SGAP;
-    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP)/rows - SGAP;
+    var rowSizes = rackGetRowSizes(z);
+    var maxRow = Math.max.apply(null, rowSizes);
+    var cellW = (z.w - ZPPAD*2 + SGAP)/maxRow - SGAP;
+    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP)/rowSizes.length - SGAP;
 
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+z.h+'" rx="6" fill="'+colFaint+'" stroke="'+col+'" stroke-width="1.5" fill-opacity="0.85"/>';
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'" rx="4" fill="'+col+'" opacity="0.85"/>';
     html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
 
-    for(var r=0;r<rows;r++){
-      var rowLabel = z.reverse ? (rows - r) : (r + 1);
-      for(var c=0;c<cols;c++){
+    for(var r=0;r<rowSizes.length;r++){
+      var rowLabel = z.reverse ? (rowSizes.length - r) : (r + 1);
+      var rowLen = rowSizes[r];
+      for(var c=0;c<rowLen;c++){
         var sx=z.x+ZPPAD+c*(cellW+SGAP);
         var sy=z.y+ZPPAD+ZHDR+r*(cellH+SGAP);
         var posLabel = c + 1;
@@ -5329,6 +5330,31 @@ function ensureSheetJS(){
     s.onload=res; s.onerror=function(){ rej(new Error('Failed to load SheetJS')); };
     document.head.appendChild(s);
   });
+}
+
+function ensureJsBarcode(){
+  if(window.JsBarcode) return Promise.resolve();
+  return new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js';
+    s.onload=res; s.onerror=function(){ rej(new Error('Failed to load JsBarcode')); };
+    document.head.appendChild(s);
+  });
+}
+
+// Renders a Code128 barcode for the given text as an SVG markup string,
+// using a detached (never-attached-to-the-page) SVG element as scratch
+// space — safe to call in a loop for many labels at once.
+function barcodeSvgFor(text){
+  var svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  JsBarcode(svgEl, text, {
+    format: 'CODE128',
+    displayValue: false, // the label already shows the ID as large text
+    height: 46,
+    width: 2,
+    margin: 0
+  });
+  return new XMLSerializer().serializeToString(svgEl);
 }
 
 // Build a proper XLSX ArrayBuffer from an array of sheet descriptors.
@@ -6189,10 +6215,10 @@ function rackBuildSVG(cfg){
     var colH = [PAD, PAD];
     zones.forEach(function(z){
       if(z.x!=null && z.y!=null && z.w!=null && z.h!=null) return;
-      var cols = Math.max(1, parseInt(z.cols)||5);
-      var rows = Math.max(1, parseInt(z.rows)||4);
-      var w = ZPPAD*2 + cols*(SZ+SGAP) - SGAP;
-      var h = ZPPAD*2 + ZHDR + rows*(SZ+SGAP) - SGAP;
+      var rowSizes = rackGetRowSizes(z);
+      var maxRow = Math.max.apply(null, rowSizes);
+      var w = ZPPAD*2 + maxRow*(SZ+SGAP) - SGAP;
+      var h = ZPPAD*2 + ZHDR + rowSizes.length*(SZ+SGAP) - SGAP;
       var col = (colH[0] <= colH[1]) ? 0 : 1;
       z.x = PAD + col*(220);
       z.y = colH[col];
@@ -6215,13 +6241,13 @@ function rackBuildSVG(cfg){
     var col = z.color || '#4a9eff';
     var colFaint = col + '22';
     var prefix  = (z.prefix||('Z'+zi)).toUpperCase().replace(/\s/g,'');
-    var rows = Math.max(1, parseInt(z.rows)||4);
-    var cols = Math.max(1, parseInt(z.cols)||5);
-    // Spot cell size SCALES to fit the zone's actual (possibly resized) box,
-    // rather than a fixed size — dragging a zone bigger/smaller resizes its
-    // spot grid to match, instead of changing how many spots it has.
-    var cellW = (z.w - ZPPAD*2 + SGAP) / cols - SGAP;
-    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP) / rows - SGAP;
+    var rowSizes = rackGetRowSizes(z);
+    var maxRow = Math.max.apply(null, rowSizes);
+    // Cell size SCALES to fit the zone's actual (possibly resized) box —
+    // width is based on the LONGEST row, so every cell across every row is
+    // the same size; shorter rows just don't reach the full zone width.
+    var cellW = (z.w - ZPPAD*2 + SGAP) / maxRow - SGAP;
+    var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP) / rowSizes.length - SGAP;
 
     var editCursor = _rackEditMode ? 'cursor:move;' : 'cursor:pointer;';
     html += '<g id="zone-'+prefix+'" class="rack-zone" data-zi="'+zi+'"'
@@ -6247,10 +6273,11 @@ function rackBuildSVG(cfg){
             + ' onmousedown="rackZoneResizeStart(event,'+zi+')"/>';
     }
 
-    // Spot grid — scaled to fit the zone's current box
-    for(var r=0; r<rows; r++){
-      var rowLabel = z.reverse ? (rows - r) : (r + 1);
-      for(var c=0; c<cols; c++){
+    // Spot grid — each row can have a different number of spots
+    for(var r=0; r<rowSizes.length; r++){
+      var rowLabel = z.reverse ? (rowSizes.length - r) : (r + 1);
+      var rowLen = rowSizes[r];
+      for(var c=0; c<rowLen; c++){
         var sx = z.x + ZPPAD + c*(cellW+SGAP);
         var sy = z.y + ZPPAD + ZHDR + r*(cellH+SGAP);
         var posLabel = c + 1;
@@ -6290,10 +6317,11 @@ var _rackEditMode = false;
 var _rackDrag = null; // { zi, mode:'move'|'resize', startX, startY, origX, origY, origW, origH }
 
 // Prints a 4"×6" label for every configured rack spot — the physical
-// location ID in large text, meant to be taped up at each spot in the
-// warehouse. Reuses the same hidden-iframe print mechanism as shipping
-// labels (no popup window, no background-tab throttling risk).
-function rackPrintLocationLabels(){
+// location ID in large text plus a scannable Code128 barcode, meant to be
+// taped up at each spot in the warehouse. Reuses the same hidden-iframe
+// print mechanism as shipping labels (no popup window, no background-tab
+// throttling risk).
+async function rackPrintLocationLabels(){
   if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length){
     alert('No rack layout configured yet — set one up first in Configure Layout.');
     return;
@@ -6303,11 +6331,11 @@ function rackPrintLocationLabels(){
   _rackConfig.zones.forEach(function(z){
     if(z.x==null||z.y==null||z.w==null||z.h==null) return; // not yet laid out
     var prefix = (z.prefix||'').toUpperCase().replace(/\s/g,'');
-    var rows = Math.max(1, parseInt(z.rows)||4);
-    var cols = Math.max(1, parseInt(z.cols)||5);
-    for(var r=0; r<rows; r++){
-      var rowLabel = z.reverse ? (rows - r) : (r + 1);
-      for(var c=0; c<cols; c++){
+    var rowSizes = rackGetRowSizes(z);
+    for(var r=0; r<rowSizes.length; r++){
+      var rowLabel = z.reverse ? (rowSizes.length - r) : (r + 1);
+      var rowLen = rowSizes[r];
+      for(var c=0; c<rowLen; c++){
         var posLabel = c + 1;
         var spotId = prefix + '-' + rowLabel + '-' + (posLabel<10?'0':'')+posLabel;
         spots.push({ id: spotId, zoneName: z.name||'', color: z.color||'#4a9eff' });
@@ -6319,14 +6347,30 @@ function rackPrintLocationLabels(){
     alert('No spots found to print.');
     return;
   }
-  if(!confirm('This will print '+spots.length+' location label(s), one per 4"×6" page. Continue?')) return;
+  if(!confirm('This will print '+spots.length+' location label(s) with barcodes, one per 4"×6" page. Continue?')) return;
+
+  pm('⟳ Generating barcodes for '+spots.length+' location(s)…');
+  try{
+    await ensureJsBarcode();
+  }catch(e){
+    alert('Could not load the barcode library — check your internet connection and try again.');
+    pm('');
+    return;
+  }
+  spots.forEach(function(s){
+    try{ s.barcodeSvg = barcodeSvgFor(s.id); }
+    catch(e){ console.error('[rack print] barcode generation failed for', s.id, e); s.barcodeSvg = ''; }
+  });
+  pm('');
 
   var css = ''
     + 'body{margin:0;background:#111;}'
     + '.label-page{width:4in;height:6in;display:flex;flex-direction:column;align-items:center;justify-content:center;'
     +   'background:#fff;box-sizing:border-box;padding:0.3in;}'
-    + '.loc-id{font-family:Arial,sans-serif;font-weight:900;font-size:72px;color:#000;letter-spacing:2px;text-align:center;line-height:1.05;}'
-    + '.loc-zone{font-family:Arial,sans-serif;font-weight:700;font-size:18px;letter-spacing:3px;text-transform:uppercase;margin-top:14px;padding:6px 18px;border-radius:6px;color:#fff;}'
+    + '.loc-id{font-family:Arial,sans-serif;font-weight:900;font-size:64px;color:#000;letter-spacing:2px;text-align:center;line-height:1.05;}'
+    + '.loc-zone{font-family:Arial,sans-serif;font-weight:700;font-size:18px;letter-spacing:3px;text-transform:uppercase;margin-top:12px;padding:6px 18px;border-radius:6px;color:#fff;}'
+    + '.loc-barcode{margin-top:20px;}'
+    + '.loc-barcode svg{max-width:3.2in;height:auto;}'
     + '@media print{'
     +   '@page{size:4in 6in;margin:0;}'
     +   'html,body{width:4in;height:6in;margin:0;padding:0;}'
@@ -6338,6 +6382,7 @@ function rackPrintLocationLabels(){
     return '<div class="label-page">'
       + '<div class="loc-id">'+s.id+'</div>'
       + (s.zoneName ? '<div class="loc-zone" style="background:'+s.color+';">'+s.zoneName+'</div>' : '')
+      + (s.barcodeSvg ? '<div class="loc-barcode">'+s.barcodeSvg+'</div>' : '')
       + '</div>';
   }).join('');
 
@@ -6450,11 +6495,24 @@ function rackOpenConfig(){
   if(!zones.length){
     // Add 2 default zones to get started
     zones = [
-      {prefix:'A', name:'Zone A', color:'#4a9eff', rows:'4', cols:'5'},
-      {prefix:'B', name:'Zone B', color:'#38a169', rows:'4', cols:'5'}
+      {prefix:'A', name:'Zone A', color:'#4a9eff', rowSizes:'20'},
+      {prefix:'B', name:'Zone B', color:'#38a169', rowSizes:'20'}
     ];
   }
   zones.forEach(function(z){ rackCfgAddZone(z); });
+}
+
+// Returns a zone's row sizes as an array of position-counts, one per row —
+// e.g. [15,6,6] means row 1 has 15 spots, row 2 has 6, row 3 has 6. Falls
+// back to the old uniform rows×cols scheme for zones saved before this.
+function rackGetRowSizes(z){
+  if(z.rowSizes){
+    if(Array.isArray(z.rowSizes)) return z.rowSizes;
+    return String(z.rowSizes).split(',').map(function(s){ return Math.max(1, parseInt(s.trim())||1); }).filter(Boolean);
+  }
+  var rows = Math.max(1, parseInt(z.rows)||4);
+  var cols = Math.max(1, parseInt(z.cols)||5);
+  return Array(rows).fill(cols);
 }
 
 function rackCloseConfig(){
@@ -6471,7 +6529,8 @@ function rackCfgAddZone(z){
   var defColor = z.color || defaultColors[idx % defaultColors.length];
 
   var row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 40px 60px 60px 54px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
+  row.style.cssText = 'display:grid;grid-template-columns:70px 1fr 40px 1fr 54px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
+  var rowSizesStr = rackGetRowSizes(z).join(',');
   row.innerHTML =
     '<div>'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">PREFIX/ID</div>'
@@ -6486,12 +6545,8 @@ function rackCfgAddZone(z){
       +'<input type="color" class="rack-cfg-color" value="'+(defColor)+'" style="width:30px;height:28px;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;padding:0;background:var(--sur);"/>'
     +'</div>'
     +'<div>'
-      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">ROWS</div>'
-      +'<input type="number" class="rack-cfg-rows" value="'+(z.rows||4)+'" min="1" max="20" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
-    +'</div>'
-    +'<div>'
-      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">SPOTS/ROW</div>'
-      +'<input type="number" class="rack-cfg-cols" value="'+(z.cols||5)+'" min="1" max="20" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;" title="One number per row, comma-separated. e.g. 15,6,6 means row 1 has 15 spots, row 2 has 6, row 3 has 6. Just \'30\' means a single row of 30.">SPOTS PER ROW (comma-sep)</div>'
+      +'<input class="rack-cfg-rowsizes" value="'+rowSizesStr+'" placeholder="e.g. 15,6,6" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
     +'</div>'
     +'<div style="text-align:center;">'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;" title="Row 1 counts from the bottom of this zone\'s shape instead of the top">BTM=1</div>'
@@ -6518,13 +6573,14 @@ function rackCfgSave(){
     var prefix = (row.querySelector('.rack-cfg-prefix').value||'').trim().toUpperCase().replace(/\s/g,'');
     var name   = (row.querySelector('.rack-cfg-zname').value||'').trim();
     var color  = row.querySelector('.rack-cfg-color').value;
-    var rows   = parseInt(row.querySelector('.rack-cfg-rows').value)||4;
-    var cols   = parseInt(row.querySelector('.rack-cfg-cols').value)||5;
+    var rowSizesRaw = (row.querySelector('.rack-cfg-rowsizes').value||'').trim();
+    var rowSizes = rowSizesRaw.split(',').map(function(s){ return Math.max(1, parseInt(s.trim())||0); }).filter(function(n){ return n>0; });
+    if(!rowSizes.length) rowSizes = [5]; // sensible fallback if left blank
     var reverse = !!(row.querySelector('.rack-cfg-reverse')||{}).checked;
     if(!prefix || !name) return; // skip blank rows
     var existing = existingByPrefix[prefix] || {};
     zones.push({
-      prefix:prefix, name:name, color:color, rows:String(rows), cols:String(cols), reverse:reverse,
+      prefix:prefix, name:name, color:color, rowSizes:rowSizes, reverse:reverse,
       x:existing.x, y:existing.y, w:existing.w, h:existing.h
     });
   });
@@ -7809,6 +7865,11 @@ function renderReturnsList(){
       }
       photos+='</div>';
     }
+
+    if(_returnsEditingId === r.id){
+      return returnsEditFormHtml(r);
+    }
+
     return '<div style="background:var(--sur);border:1px solid '+(r.mgrReview&&!r.mgrCleared?'var(--am)':'var(--bdr)')+';padding:10px 14px;">'
       +'<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">'
         +'<div style="flex:1;min-width:120px;">'
@@ -7820,6 +7881,7 @@ function renderReturnsList(){
         +'<div style="font-size:9px;color:var(--td);white-space:nowrap;">Pile '+r.pile+'</div>'
         +(r.sku?'<div style="font-size:9px;font-family:monospace;color:var(--tx);">'+r.sku+(r.qty>1?' ×'+r.qty:'')+'</div>':'')
         +(r.location?'<div style="font-size:9px;color:var(--gn);font-family:monospace;">📍 '+r.location+'</div>':'')
+        +'<button data-redit="'+r.id+'" class="btn" style="font-size:8px;padding:2px 6px;flex-shrink:0;border-color:var(--cy);color:var(--cy);">✏️</button>'
         +'<button data-rdel="'+r.id+'" class="btn btn-r" style="font-size:8px;padding:2px 6px;flex-shrink:0;">✕</button>'
       +'</div>'
       +(r.notes?'<div style="font-size:9px;color:var(--td);margin-top:6px;border-top:1px solid var(--bdr);padding-top:6px;">'+r.notes+'</div>':'')
@@ -7830,9 +7892,67 @@ function renderReturnsList(){
   el.querySelectorAll('[data-rdel]').forEach(function(b){
     b.onclick=function(){returnsDelete(b.dataset.rdel);};
   });
+  el.querySelectorAll('[data-redit]').forEach(function(b){
+    b.onclick=function(){ _returnsEditingId = b.dataset.redit; renderReturnsList(); };
+  });
   el.querySelectorAll('[data-photoret]').forEach(function(b){
     b.onclick=function(){returnsViewPhoto(parseInt(b.dataset.photoret));};
   });
+}
+
+// ── Inline editing of a logged return ────────────────────────────────
+var _returnsEditingId = null; // id of the return currently being edited, or null
+
+function returnsEditFormHtml(r){
+  var typeOpts = Object.keys(RETURN_TYPES).map(function(k){
+    return '<option value="'+k+'"'+(r.type===k?' selected':'')+'>'+RETURN_TYPES[k]+'</option>';
+  }).join('');
+  var condOpts = Object.keys(RETURN_CONDITIONS).map(function(k){
+    return '<option value="'+k+'"'+(r.condition===k?' selected':'')+'>'+RETURN_CONDITIONS[k]+'</option>';
+  }).join('');
+  var inputStyle = 'width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 7px;font-size:10.5px;font-family:inherit;outline:none;border-radius:3px;';
+  return '<div style="background:var(--bg);border:1px solid var(--cy);padding:12px 14px;">'
+    + '<div style="font-family:monospace;font-size:10.5px;color:var(--td);margin-bottom:8px;">Editing return for: <span style="color:var(--cy);">'+r.tracking+'</span></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+      + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">TYPE</div><select id="ret-edit-type" style="'+inputStyle+'">'+typeOpts+'</select></div>'
+      + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">CONDITION</div><select id="ret-edit-condition" style="'+inputStyle+'">'+condOpts+'</select></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:8px;margin-bottom:8px;">'
+      + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">PILE</div><input id="ret-edit-pile" value="'+(r.pile||'')+'" style="'+inputStyle+'"/></div>'
+      + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">SKU</div><input id="ret-edit-sku" value="'+(r.sku||'')+'" style="'+inputStyle+'"/></div>'
+      + '<div><div style="font-size:8px;color:var(--td);margin-bottom:3px;">QTY</div><input id="ret-edit-qty" type="number" min="1" value="'+(r.qty||1)+'" style="'+inputStyle+'"/></div>'
+    + '</div>'
+    + '<div style="margin-bottom:8px;"><div style="font-size:8px;color:var(--td);margin-bottom:3px;">LOCATION</div><input id="ret-edit-location" value="'+(r.location||'')+'" placeholder="e.g. R1-05 (leave blank for return pile)" style="'+inputStyle+'"/></div>'
+    + '<div style="margin-bottom:10px;"><div style="font-size:8px;color:var(--td);margin-bottom:3px;">NOTES</div><input id="ret-edit-notes" value="'+(r.notes||'')+'" style="'+inputStyle+'"/></div>'
+    + '<div style="display:flex;gap:8px;">'
+      + '<button onclick="returnsEditSave(\''+r.id+'\')" style="font-size:9px;padding:6px 14px;background:var(--gn);border:none;color:#0a1a0f;font-weight:700;cursor:pointer;border-radius:4px;font-family:inherit;">💾 SAVE</button>'
+      + '<button onclick="returnsEditCancel()" style="font-size:9px;padding:6px 14px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;border-radius:4px;font-family:inherit;">CANCEL</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function returnsEditCancel(){
+  _returnsEditingId = null;
+  renderReturnsList();
+}
+
+function returnsEditSave(id){
+  var r = returnsList.find(function(x){ return x.id===id; });
+  if(!r) return;
+  r.type      = document.getElementById('ret-edit-type').value;
+  r.condition = document.getElementById('ret-edit-condition').value;
+  r.pile      = document.getElementById('ret-edit-pile').value.trim();
+  r.sku       = document.getElementById('ret-edit-sku').value.trim();
+  r.qty       = Math.max(1, parseInt(document.getElementById('ret-edit-qty').value)||1);
+  r.location  = document.getElementById('ret-edit-location').value.trim().toUpperCase();
+  r.notes     = document.getElementById('ret-edit-notes').value.trim();
+  r.mgrReview = MGR_REVIEW_CONDITIONS.indexOf(r.condition) !== -1;
+
+  _returnsEditingId = null;
+  returnsSave();
+  renderReturnsList();
+  renderReturnsStats();
+  pm('✓ Return updated.');
 }
 
 function returnsViewPhoto(ri){
