@@ -566,6 +566,20 @@ body{
             <span style="font-size:13px;">💳</span> Billing &amp; Plan
           </a>
           <div style="height:1px;background:var(--bdr);margin:0 16px;"></div>
+          <div style="padding:9px 16px;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--tx);">
+              <span style="font-size:13px;">🌐</span>
+              <select id="lang-select" onchange="i18nSetLang(this.value)" style="
+                flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);
+                padding:5px 6px;font-size:10.5px;font-family:inherit;border-radius:4px;outline:none;cursor:pointer;
+              ">
+                <option value="en">English</option>
+                <option value="zh">繁體中文</option>
+                <option value="es">Español</option>
+              </select>
+            </div>
+          </div>
+          <div style="height:1px;background:var(--bdr);margin:0 16px;"></div>
           <button onclick="userSignOut()" style="
             width:100%;display:flex;align-items:center;gap:10px;padding:11px 16px;
             font-size:11px;color:#f87171;background:transparent;border:none;
@@ -847,16 +861,16 @@ body{
     </div>
   </div>
   <div class="tabs">
-    <button class="tab on"  data-view="import"   onclick="gv('import')">Import</button>
-    <button class="tab"     data-view="manager"  onclick="gv('manager')">Packers</button>
-    <button class="tab"     data-view="pack"     onclick="gv('pack')">Pack Station</button>
-    <button class="tab"     data-view="dash"     onclick="gv('dash')">Dashboard</button>
-    <button class="tab"     data-view="payroll"  onclick="gv('payroll')">📊 Stats</button>
-    <button class="tab"     data-view="floor"    onclick="gv('floor')">Floor Display</button>
-    <button class="tab"     data-view="returns"  onclick="gv('returns')">📦 Returns</button>
-    <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')">🚗 Vehicle</button>
-    <button class="tab" data-view="rackmap" onclick="gv('rackmap')">🗺 Rack Map</button>
-    <button class="tab" data-view="fba" onclick="gv('fba')">📤 FBA Outbound</button>
+    <button class="tab on"  data-view="import"   onclick="gv('import')" data-i18n="nav_import">Import</button>
+    <button class="tab"     data-view="manager"  onclick="gv('manager')" data-i18n="nav_packers">Packers</button>
+    <button class="tab"     data-view="pack"     onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
+    <button class="tab"     data-view="dash"     onclick="gv('dash')" data-i18n="nav_dash">Dashboard</button>
+    <button class="tab"     data-view="payroll"  onclick="gv('payroll')" data-i18n="nav_stats">📊 Stats</button>
+    <button class="tab"     data-view="floor"    onclick="gv('floor')" data-i18n="nav_floor">Floor Display</button>
+    <button class="tab"     data-view="returns"  onclick="gv('returns')" data-i18n="nav_returns">📦 Returns</button>
+    <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')" data-i18n="nav_vehicle">🚗 Vehicle</button>
+    <button class="tab" data-view="rackmap" onclick="gv('rackmap')" data-i18n="nav_rackmap">🗺 Rack Map</button>
+    <button class="tab" data-view="fba" onclick="gv('fba')" data-i18n="nav_fba">📤 FBA Outbound</button>
   </div>
 </div>
 
@@ -1018,7 +1032,7 @@ body{
       <div id="cp-avatar"></div>
       <div id="cp-name"></div>
       <div id="cp-stats"></div>
-      <button id="cp-switch" onclick="currentPacker=null;saveStaff();var ld=document.getElementById('packer-login'),bd=document.getElementById('current-packer-bar');if(ld)ld.classList.remove('hide');if(bd)bd.style.display='none';renderQuickLoginBtns();setTimeout(function(){var el=document.getElementById('login-scan-in');if(el){el.value='';el.focus();}},50);">SWITCH PACKER</button>
+      <button id="cp-switch" data-i18n="pack_switch_packer" onclick="currentPacker=null;saveStaff();var ld=document.getElementById('packer-login'),bd=document.getElementById('current-packer-bar');if(ld)ld.classList.remove('hide');if(bd)bd.style.display='none';renderQuickLoginBtns();setTimeout(function(){var el=document.getElementById('login-scan-in');if(el){el.value='';el.focus();}},50);">SWITCH PACKER</button>
     </div>
     <!-- SCANNING AS selector — shown when 2+ packers are clocked in -->
     <div id="cp-selector-bar" style="display:none;flex-shrink:0;padding:6px 12px;background:var(--sur);border-bottom:1px solid var(--bdr);align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1027,9 +1041,9 @@ body{
     </div>
     <!-- Pack layout -->
     <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-      <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);">PACK STATION — 2-STEP VERIFY</div>
+      <div class="lbl" style="margin:0;font-size:11px;color:var(--cy);" data-i18n="pack_title">PACK STATION — 2-STEP VERIFY</div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button onclick="oosOpen()" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--am,#fbbf24);color:var(--am,#fbbf24);cursor:pointer;font-family:inherit;white-space:nowrap;border-radius:4px;">⚠ OUT OF STOCK</button>
+        <button onclick="oosOpen()" data-i18n="pack_out_of_stock" style="font-size:9px;padding:5px 10px;background:transparent;border:1px solid var(--am,#fbbf24);color:var(--am,#fbbf24);cursor:pointer;font-family:inherit;white-space:nowrap;border-radius:4px;">⚠ OUT OF STOCK</button>
         <span id="pp" style="font-size:10px;color:var(--td);"></span>
       </div>
     </div>
@@ -1037,12 +1051,12 @@ body{
     <div id="step-bar" style="display:flex;gap:0;flex-shrink:0;">
       <div id="step1" class="step-btn active-step">
         <span class="step-num">1</span>
-        <span class="step-lbl">SCAN LABEL</span>
+        <span class="step-lbl" data-i18n="pack_scan_step1">SCAN LABEL</span>
       </div>
       <div style="width:0;height:0;border-top:18px solid transparent;border-bottom:18px solid transparent;border-left:12px solid var(--bg);z-index:2;flex-shrink:0;"></div>
       <div id="step2" class="step-btn" style="display:none;">
         <span class="step-num">2</span>
-        <span class="step-lbl">SCAN LABEL</span>
+        <span class="step-lbl" data-i18n="pack_scan_step1">SCAN LABEL</span>
       </div>
     </div>
     <div id="pack-wrap">
@@ -1061,7 +1075,7 @@ body{
         <div id="err-bar"></div>
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
-          <input id="scan-in" placeholder="Scan shipping label to begin…" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
+          <input id="scan-in" placeholder="Scan shipping label to begin…" data-i18n-placeholder="pack_scan_placeholder" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
           <div id="scan-fb">ready…</div>
         </div>
       </div>
@@ -1394,6 +1408,97 @@ function dzSetParsingGlow(isParsing){
   if(!el) return;
   el.classList.toggle('parsing', !!isParsing);
   el.classList.toggle('idle', !isParsing);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  i18n — language support (English / Traditional Chinese / Spanish)
+//  Personal preference, stored per-device in localStorage (not synced
+//  across devices — this is a per-person choice, not shared warehouse
+//  config like the rack layout).
+//
+//  Coverage note: this is a starting foundation covering the main
+//  navigation and Pack Station (the screen floor staff use constantly).
+//  Extending coverage to Returns, Vehicle, Rack Map, FBA, and the various
+//  modals is a much larger follow-up effort — add more keys to each
+//  language object below, then a matching data-i18n attribute (or t('key')
+//  call in JS) wherever that text is rendered.
+// ══════════════════════════════════════════════════════════════════
+var I18N = {
+  en: {
+    nav_import: 'Import', nav_packers: 'Packers', nav_pack: 'Pack Station',
+    nav_dash: 'Dashboard', nav_stats: '📊 Stats', nav_floor: 'Floor Display',
+    nav_returns: '📦 Returns', nav_vehicle: '🚗 Vehicle', nav_rackmap: '🗺 Rack Map',
+    nav_fba: '📤 FBA Outbound',
+
+    pack_title: 'PACK STATION — 2-STEP VERIFY',
+    pack_out_of_stock: '⚠ OUT OF STOCK',
+    pack_switch_packer: 'SWITCH PACKER',
+    pack_scan_step1: 'SCAN LABEL',
+    pack_scan_placeholder: 'Scan shipping label to begin…',
+    pack_scan_sku_placeholder: 'Scan SKU barcode…',
+    pack_done_today: 'done today'
+  },
+  zh: {
+    nav_import: '匯入', nav_packers: '打包員', nav_pack: '打包站',
+    nav_dash: '儀表板', nav_stats: '📊 統計', nav_floor: '現場顯示',
+    nav_returns: '📦 退貨', nav_vehicle: '🚗 車輛', nav_rackmap: '🗺 貨架地圖',
+    nav_fba: '📤 FBA 出貨',
+
+    pack_title: '打包站 — 兩步驟驗證',
+    pack_out_of_stock: '⚠ 缺貨',
+    pack_switch_packer: '切換打包員',
+    pack_scan_step1: '掃描標籤',
+    pack_scan_placeholder: '掃描出貨標籤以開始…',
+    pack_scan_sku_placeholder: '掃描 SKU 條碼…',
+    pack_done_today: '今日已完成'
+  },
+  es: {
+    nav_import: 'Importar', nav_packers: 'Empacadores', nav_pack: 'Estación de Empaque',
+    nav_dash: 'Panel', nav_stats: '📊 Estadísticas', nav_floor: 'Pantalla de Planta',
+    nav_returns: '📦 Devoluciones', nav_vehicle: '🚗 Vehículo', nav_rackmap: '🗺 Mapa de Estantes',
+    nav_fba: '📤 Envío FBA',
+
+    pack_title: 'ESTACIÓN DE EMPAQUE — VERIFICACIÓN EN 2 PASOS',
+    pack_out_of_stock: '⚠ SIN EXISTENCIAS',
+    pack_switch_packer: 'CAMBIAR EMPACADOR',
+    pack_scan_step1: 'ESCANEAR ETIQUETA',
+    pack_scan_placeholder: 'Escanee la etiqueta de envío para comenzar…',
+    pack_scan_sku_placeholder: 'Escanee el código de barras SKU…',
+    pack_done_today: 'completado hoy'
+  }
+};
+
+var _currentLang = (function(){
+  try{ return localStorage.getItem('warehub_lang') || 'en'; }catch(e){ return 'en'; }
+})();
+
+// Looks up a key in the current language, falling back to English, then
+// to the raw key itself if truly missing everywhere (so an un-translated
+// string is at least visible/debuggable rather than blank).
+function t(key){
+  var dict = I18N[_currentLang] || I18N.en;
+  return dict[key] || I18N.en[key] || key;
+}
+
+function i18nSetLang(lang){
+  if(!I18N[lang]) return;
+  _currentLang = lang;
+  try{ localStorage.setItem('warehub_lang', lang); }catch(e){}
+  applyTranslations();
+  var sel = document.getElementById('lang-select');
+  if(sel) sel.value = lang;
+}
+
+// Walks the DOM for data-i18n / data-i18n-placeholder markers and updates
+// them to the current language. Safe to call repeatedly (e.g. after a
+// view re-renders new elements).
+function applyTranslations(){
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+  });
 }
 
 var TPATS=[
@@ -3659,8 +3764,8 @@ function setPackState(state){
   if(state==='idle'){
     if(s1){ s1.className='step-btn'; }
     if(s2){ s2.className='step-btn'; }
-    if(inp) inp.placeholder = 'Scan shipping label barcode…';
-    if(lbl){ lbl.textContent='SCAN LABEL'; lbl.style.color=''; }
+    if(inp) inp.placeholder = t('pack_scan_placeholder');
+    if(lbl){ lbl.textContent=t('pack_scan_step1'); lbl.style.color=''; }
   }
   renderActiveCard();
 }
@@ -4575,8 +4680,8 @@ function renderActiveCard(){
     }
     var done=orders.filter(function(o){return o.status==='done';}).length;
     var total=orders.length;
-    acTop.innerHTML='<span style="color:var(--td);font-size:11px;">'+done+'/'+total+' done today</span>';
-    acTrack.innerHTML='<span style="color:var(--cy);font-size:14px;">Scan a shipping label to begin</span>';
+    acTop.innerHTML='<span style="color:var(--td);font-size:11px;">'+done+'/'+total+' '+t('pack_done_today')+'</span>';
+    acTrack.innerHTML='<span style="color:var(--cy);font-size:14px;">'+t('pack_scan_placeholder').replace('…','')+'</span>';
     acDest.innerHTML='';
     checklist.innerHTML='';
     return;
@@ -10682,6 +10787,9 @@ window._appInitFn = async function(){try{
 }catch(e){console.error("[Warehub init]",e);}};
 // Called by Clerk onSignedIn — or directly if Clerk is not configured
 document.addEventListener('DOMContentLoaded', function(){
+  applyTranslations();
+  var langSel = document.getElementById('lang-select');
+  if(langSel) langSel.value = _currentLang;
   dzUpdateNeonDate();
   // If Clerk hasn't loaded within 3s, init anyway (fallback for dev/offline)
   window._appInitTimer = setTimeout(function(){
