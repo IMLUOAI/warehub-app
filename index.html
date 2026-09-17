@@ -6628,6 +6628,23 @@ function rackCfgSave(){
     return;
   }
 
+  // Catch duplicate prefixes before saving — two zones sharing the same
+  // prefix silently generate colliding spot IDs (this is exactly the "R-1
+  // zone" only shows as "R" prefix" mistake that broke the map before).
+  var seenPrefixes = {};
+  var dupes = [];
+  zones.forEach(function(z){
+    if(seenPrefixes[z.prefix]) dupes.push(z.prefix);
+    seenPrefixes[z.prefix] = true;
+  });
+  if(dupes.length){
+    alert('⚠ Two or more zones are using the same Prefix: '+dupes.join(', ')+'\n\n'
+      + 'Each zone needs its OWN unique prefix (not just a unique Zone Name) — '
+      + 'that\'s what the spot IDs are actually built from. If you meant "R-1", "R-2", "R-3" '
+      + 'as three separate zones, put those exact values in the PREFIX field for each, not just "R".');
+    return;
+  }
+
   var cfg = {
     name: document.getElementById('rack-cfg-name').value.trim(),
     addr: document.getElementById('rack-cfg-addr').value.trim(),
