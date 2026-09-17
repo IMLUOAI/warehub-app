@@ -2346,6 +2346,32 @@ function initOrders(parsed){
     ? new Date(window._batchFallbackDateISO + 'T12:00:00')
     : new Date();
   dzUpdateNeonDate();
+
+  // Auto-collect SKU→location associations straight from this batch's
+  // labels (their own shelf field), instead of relying solely on xlwms sync
+  // or manually-logged returns. Best-effort — each label only tells us "this
+  // SKU passed through this shelf," not an exact, verified stock count, so
+  // this fills in a starting point rather than authoritative quantities.
+  // The Edit button on a spot's info panel is there specifically to correct
+  // or refine these over time.
+  var invChanged = false;
+  parsed.forEach(function(o){
+    if(!o.shelf || !o.skus || !o.skus.length) return;
+    var loc = rackNormalise(o.shelf);
+    if(!loc) return;
+    if(!window._inventoryData) window._inventoryData = {};
+    if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
+    o.skus.forEach(function(s){
+      if(!s.sku) return;
+      var existing = window._inventoryData[loc].skus.find(function(x){ return x.sku===s.sku; });
+      if(!existing){
+        window._inventoryData[loc].skus.push({sku:s.sku, name:'', qty:s.qty||1, unit:'PCS'});
+        invChanged = true;
+      }
+    });
+  });
+  if(invChanged) inventorySync();
+
   document.getElementById('dot').classList.add('live');
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
@@ -4884,17 +4910,17 @@ async function floorRenderRackMap(){
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'" rx="4" fill="'+col+'" opacity="0.85"/>';
     html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
 
-    var spotNum=1;
     for(var r=0;r<rows;r++){
+      var rowLabel = z.reverse ? (rows - r) : (r + 1);
       for(var c=0;c<cols;c++){
         var sx=z.x+ZPPAD+c*(cellW+SGAP);
         var sy=z.y+ZPPAD+ZHDR+r*(cellH+SGAP);
-        var spotId=prefix+'-'+(spotNum<10?'0':'')+spotNum;
+        var posLabel = c + 1;
+        var spotId=prefix+'-'+rowLabel+'-'+(posLabel<10?'0':'')+posLabel;
         html += '<g id="floor-spot-'+spotId+'" class="rack-spot">';
         html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'" rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
-        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'" text-anchor="middle" font-size="7" fill="'+col+'" font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
+        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'" text-anchor="middle" font-size="6.5" fill="'+col+'" font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
         html += '</g>';
-        spotNum++;
       }
     }
   });
@@ -6113,6 +6139,18 @@ async function rackConfigLoad(){
   }
 }
 
+// Shared save point for window._inventoryData — local cache + cloud, used
+// by returns put-away, auto-collection from daily label imports, and
+// manual edits on a spot's info panel, so all three stay consistent.
+function inventorySync(){
+  try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); } catch(e){}
+  if(typeof window.warehubApi === 'function'){
+    window.warehubApi('POST', '/api/settings', { rack_inventory: window._inventoryData }).catch(function(e){
+      console.error('[inventory] cloud save failed:', e);
+    });
+  }
+}
+
 async function rackConfigSave(cfg){
   try { localStorage.setItem(_rackStorageKey(), JSON.stringify(cfg)); } catch(e){}
   _rackConfig = cfg;
@@ -6210,22 +6248,22 @@ function rackBuildSVG(cfg){
     }
 
     // Spot grid — scaled to fit the zone's current box
-    var spotNum = 1;
     for(var r=0; r<rows; r++){
+      var rowLabel = z.reverse ? (rows - r) : (r + 1);
       for(var c=0; c<cols; c++){
         var sx = z.x + ZPPAD + c*(cellW+SGAP);
         var sy = z.y + ZPPAD + ZHDR + r*(cellH+SGAP);
-        var spotId = prefix + '-' + (spotNum<10?'0':'')+spotNum;
+        var posLabel = c + 1;
+        var spotId = prefix + '-' + rowLabel + '-' + (posLabel<10?'0':'')+posLabel;
         html += '<g id="spot-'+spotId+'" class="rack-spot"'
               + (_rackEditMode ? '' : ' onclick="spotClick(\''+spotId+'\')" style="cursor:pointer;"')
               + '>';
         html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'"'
               + ' rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
         html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'"'
-              + ' text-anchor="middle" font-size="7" fill="'+col+'"'
+              + ' text-anchor="middle" font-size="6.5" fill="'+col+'"'
               + ' font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
         html += '</g>';
-        spotNum++;
       }
     }
   });
@@ -6250,6 +6288,62 @@ function rackBuildSVG(cfg){
 // ── Drag-to-move / drag-to-resize zone editing ──────────────────────
 var _rackEditMode = false;
 var _rackDrag = null; // { zi, mode:'move'|'resize', startX, startY, origX, origY, origW, origH }
+
+// Prints a 4"×6" label for every configured rack spot — the physical
+// location ID in large text, meant to be taped up at each spot in the
+// warehouse. Reuses the same hidden-iframe print mechanism as shipping
+// labels (no popup window, no background-tab throttling risk).
+function rackPrintLocationLabels(){
+  if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length){
+    alert('No rack layout configured yet — set one up first in Configure Layout.');
+    return;
+  }
+
+  var spots = [];
+  _rackConfig.zones.forEach(function(z){
+    if(z.x==null||z.y==null||z.w==null||z.h==null) return; // not yet laid out
+    var prefix = (z.prefix||'').toUpperCase().replace(/\s/g,'');
+    var rows = Math.max(1, parseInt(z.rows)||4);
+    var cols = Math.max(1, parseInt(z.cols)||5);
+    for(var r=0; r<rows; r++){
+      var rowLabel = z.reverse ? (rows - r) : (r + 1);
+      for(var c=0; c<cols; c++){
+        var posLabel = c + 1;
+        var spotId = prefix + '-' + rowLabel + '-' + (posLabel<10?'0':'')+posLabel;
+        spots.push({ id: spotId, zoneName: z.name||'', color: z.color||'#4a9eff' });
+      }
+    }
+  });
+
+  if(!spots.length){
+    alert('No spots found to print.');
+    return;
+  }
+  if(!confirm('This will print '+spots.length+' location label(s), one per 4"×6" page. Continue?')) return;
+
+  var css = ''
+    + 'body{margin:0;background:#111;}'
+    + '.label-page{width:4in;height:6in;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    +   'background:#fff;box-sizing:border-box;padding:0.3in;}'
+    + '.loc-id{font-family:Arial,sans-serif;font-weight:900;font-size:72px;color:#000;letter-spacing:2px;text-align:center;line-height:1.05;}'
+    + '.loc-zone{font-family:Arial,sans-serif;font-weight:700;font-size:18px;letter-spacing:3px;text-transform:uppercase;margin-top:14px;padding:6px 18px;border-radius:6px;color:#fff;}'
+    + '@media print{'
+    +   '@page{size:4in 6in;margin:0;}'
+    +   'html,body{width:4in;height:6in;margin:0;padding:0;}'
+    +   '.label-page{page-break-after:always;page-break-inside:avoid;}'
+    +   '.label-page:last-child{page-break-after:avoid;}'
+    + '}';
+
+  var bodyHtml = spots.map(function(s){
+    return '<div class="label-page">'
+      + '<div class="loc-id">'+s.id+'</div>'
+      + (s.zoneName ? '<div class="loc-zone" style="background:'+s.color+';">'+s.zoneName+'</div>' : '')
+      + '</div>';
+  }).join('');
+
+  warnBeforePrintDialog();
+  printLabelsViaHiddenIframe(css, bodyHtml);
+}
 
 function rackToggleEditMode(){
   _rackEditMode = !_rackEditMode;
@@ -6377,7 +6471,7 @@ function rackCfgAddZone(z){
   var defColor = z.color || defaultColors[idx % defaultColors.length];
 
   var row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 40px 60px 60px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
+  row.style.cssText = 'display:grid;grid-template-columns:80px 1fr 40px 60px 60px 54px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
   row.innerHTML =
     '<div>'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">PREFIX/ID</div>'
@@ -6400,6 +6494,10 @@ function rackCfgAddZone(z){
       +'<input type="number" class="rack-cfg-cols" value="'+(z.cols||5)+'" min="1" max="20" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
     +'</div>'
     +'<div style="text-align:center;">'
+      +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;" title="Row 1 counts from the bottom of this zone\'s shape instead of the top">BTM=1</div>'
+      +'<input type="checkbox" class="rack-cfg-reverse" '+(z.reverse?'checked':'')+' style="width:18px;height:18px;cursor:pointer;"/>'
+    +'</div>'
+    +'<div style="text-align:center;">'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">DEL</div>'
       +'<button onclick="this.closest(\'div[style]\').remove()" style="width:24px;height:24px;background:transparent;border:1px solid var(--bdr);color:var(--rd);border-radius:3px;cursor:pointer;font-size:13px;line-height:1;font-family:inherit;">✕</button>'
     +'</div>';
@@ -6409,6 +6507,12 @@ function rackCfgAddZone(z){
 
 /* ── Save config and rebuild map ── */
 function rackCfgSave(){
+  // Preserve any existing drag-positioned x/y/w/h (and other zones' data)
+  // when re-saving via this form — it used to rebuild the zones array from
+  // scratch here, silently discarding anything positioned via drag-to-move.
+  var existingByPrefix = {};
+  ((_rackConfig && _rackConfig.zones) || []).forEach(function(z){ existingByPrefix[z.prefix] = z; });
+
   var zones = [];
   document.querySelectorAll('#rack-cfg-zones > div').forEach(function(row){
     var prefix = (row.querySelector('.rack-cfg-prefix').value||'').trim().toUpperCase().replace(/\s/g,'');
@@ -6416,8 +6520,13 @@ function rackCfgSave(){
     var color  = row.querySelector('.rack-cfg-color').value;
     var rows   = parseInt(row.querySelector('.rack-cfg-rows').value)||4;
     var cols   = parseInt(row.querySelector('.rack-cfg-cols').value)||5;
+    var reverse = !!(row.querySelector('.rack-cfg-reverse')||{}).checked;
     if(!prefix || !name) return; // skip blank rows
-    zones.push({prefix:prefix, name:name, color:color, rows:String(rows), cols:String(cols)});
+    var existing = existingByPrefix[prefix] || {};
+    zones.push({
+      prefix:prefix, name:name, color:color, rows:String(rows), cols:String(cols), reverse:reverse,
+      x:existing.x, y:existing.y, w:existing.w, h:existing.h
+    });
   });
 
   if(!zones.length){
@@ -6460,6 +6569,50 @@ function rackNormalise(shelf){
   return s;
 }
 
+// ── Manual editing of a spot's tracked inventory ────────────────────
+var _rackInvEditingSpot = null; // spotId currently in edit mode, or null
+
+function rackInvToggleEdit(spotId){
+  _rackInvEditingSpot = (_rackInvEditingSpot === spotId) ? null : spotId;
+  spotClick(spotId); // re-render the panel in the new mode
+}
+
+function rackInvUpdateQty(spotId, sku, qty){
+  var loc = spotId.toUpperCase();
+  var inv = window._inventoryData && window._inventoryData[loc];
+  if(!inv) return;
+  var item = (inv.skus||[]).find(function(s){ return s.sku===sku; });
+  if(!item) return;
+  var n = parseInt(qty);
+  item.qty = isNaN(n) ? 0 : Math.max(0, n);
+  inventorySync();
+}
+
+function rackInvDeleteSku(spotId, sku){
+  var loc = spotId.toUpperCase();
+  var inv = window._inventoryData && window._inventoryData[loc];
+  if(!inv) return;
+  inv.skus = (inv.skus||[]).filter(function(s){ return s.sku!==sku; });
+  inventorySync();
+  spotClick(spotId);
+}
+
+function rackInvAddSku(spotId){
+  var skuEl = document.getElementById('rack-inv-new-sku');
+  var qtyEl = document.getElementById('rack-inv-new-qty');
+  var sku = (skuEl.value||'').trim();
+  var qty = parseInt(qtyEl.value) || 0;
+  if(!sku){ skuEl.focus(); return; }
+  var loc = spotId.toUpperCase();
+  if(!window._inventoryData) window._inventoryData = {};
+  if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
+  var existing = window._inventoryData[loc].skus.find(function(s){ return s.sku===sku; });
+  if(existing){ existing.qty = (parseInt(existing.qty)||0) + qty; }
+  else { window._inventoryData[loc].skus.push({sku:sku, name:'', qty:qty, unit:'PCS'}); }
+  inventorySync();
+  spotClick(spotId); // re-render with the new row, still in edit mode
+}
+
 function spotClick(spotId){
 
   document.querySelectorAll('.rack-spot.active').forEach(function(el){
@@ -6490,7 +6643,7 @@ function spotClick(spotId){
 
   var invData = window._inventoryData || {};
   var invItem = invData[spotId.toUpperCase()] || invData[spotId] || null;
-
+  var isEditing = (_rackInvEditingSpot === spotId);
 
   var spotOrders = orders.filter(function(o){
     var shelf = (o.shelf||'').trim().toUpperCase();
@@ -6500,43 +6653,51 @@ function spotClick(spotId){
 
   var html = '';
 
-
-  if(invItem){
-    var skus = invItem.skus||[];
-    html +=
-      '<div style="background:var(--bg);border:1px solid '+color+'33;padding:10px 12px;margin-bottom:12px;border-radius:2px;">'
-      +'<div style="font-size:8px;letter-spacing:2px;color:'+color+';margin-bottom:8px;">INVENTORY AT '+spotId+'</div>';
-    if(skus.length){
-      html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">'
-        +'<tr style="border-bottom:1px solid var(--bdr);">'
-        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">SKU</th>'
-        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">PRODUCT</th>'
-        +'<th style="text-align:right;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">QTY</th>'
-        +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">UNIT</th>'
-        +'</tr>';
-      skus.forEach(function(s){
-        html += '<tr style="border-bottom:1px solid var(--bdr)22;">'
-          +'<td style="padding:4px 6px;color:var(--cy);font-family:monospace;">'+s.sku+'</td>'
-          +'<td style="padding:4px 6px;color:var(--tx);">'+s.name+'</td>'
-          +'<td style="padding:4px 6px;color:var(--tx);text-align:right;font-weight:700;">'+s.qty+'</td>'
-          +'<td style="padding:4px 6px;color:var(--td);">'+s.unit+'</td>'
-          +'</tr>';
-      });
-      html += '</table>';
-    } else {
-      html += '<div style="font-size:10px;color:var(--td);">No SKUs recorded for this location.</div>';
-    }
-    if(invItem.supplier)    html += '<div style="font-size:9px;color:var(--td);margin-top:6px;">Supplier: <span style="color:var(--tx);">'+invItem.supplier+'</span></div>';
-    if(invItem.lastUpdated) html += '<div style="font-size:9px;color:var(--td);">Updated: <span style="color:var(--tx);">'+invItem.lastUpdated+'</span></div>';
-    if(invItem.notes)       html += '<div style="font-size:9px;color:var(--am);margin-top:4px;">📝 '+invItem.notes+'</div>';
-    html += '</div>';
-  } else {
-    html +=
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
-      +'<div style="font-size:8px;letter-spacing:2px;color:var(--td);">INVENTORY</div>'
-      +'<div style="font-size:8px;color:var(--td);opacity:0.6;">— no CSV loaded —</div>'
-      +'</div>';
+  var skus = invItem ? (invItem.skus||[]) : [];
+  html +=
+    '<div style="background:var(--bg);border:1px solid '+color+'33;padding:10px 12px;margin-bottom:12px;border-radius:2px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    +'<div style="font-size:8px;letter-spacing:2px;color:'+color+';">INVENTORY AT '+spotId+'</div>'
+    +'<button onclick="rackInvToggleEdit(\''+spotId+'\')" style="font-size:8px;padding:3px 9px;background:transparent;border:1px solid '+color+';color:'+color+';cursor:pointer;border-radius:3px;font-family:inherit;">'+(isEditing?'✓ DONE':'✏️ EDIT')+'</button>'
+    +'</div>';
+  if(skus.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+      +'<tr style="border-bottom:1px solid var(--bdr);">'
+      +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">SKU</th>'
+      +'<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">PRODUCT</th>'
+      +'<th style="text-align:right;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">QTY</th>'
+      +(isEditing ? '<th></th>' : '<th style="text-align:left;padding:3px 6px;font-size:8px;color:var(--td);font-weight:700;">UNIT</th>')
+      +'</tr>';
+    skus.forEach(function(s){
+      html += '<tr style="border-bottom:1px solid var(--bdr)22;">'
+        +'<td style="padding:4px 6px;color:var(--cy);font-family:monospace;">'+s.sku+'</td>'
+        +'<td style="padding:4px 6px;color:var(--tx);">'+(s.name||'')+'</td>';
+      if(isEditing){
+        html += '<td style="padding:2px 6px;text-align:right;">'
+          + '<input type="number" value="'+s.qty+'" min="0" onchange="rackInvUpdateQty(\''+spotId+'\',\''+s.sku.replace(/'/g,"\\'")+'\',this.value)" style="width:50px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:3px 4px;font-size:10px;font-family:inherit;text-align:right;border-radius:3px;"/>'
+          + '</td>'
+          + '<td style="padding:4px 2px;text-align:center;"><button onclick="rackInvDeleteSku(\''+spotId+'\',\''+s.sku.replace(/'/g,"\\'")+'\')" style="background:transparent;border:none;color:#f87171;cursor:pointer;font-size:12px;">✕</button></td>';
+      } else {
+        html += '<td style="padding:4px 6px;color:var(--tx);text-align:right;font-weight:700;">'+s.qty+'</td>'
+          + '<td style="padding:4px 6px;color:var(--td);">'+(s.unit||'')+'</td>';
+      }
+      html += '</tr>';
+    });
+    html += '</table>';
+  } else if(!isEditing){
+    html += '<div style="font-size:10px;color:var(--td);">No SKUs recorded for this location.</div>';
   }
+  if(isEditing){
+    html += '<div style="display:flex;gap:6px;margin-top:10px;">'
+      + '<input id="rack-inv-new-sku" placeholder="SKU" style="flex:1;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 7px;font-size:10.5px;font-family:inherit;border-radius:3px;outline:none;"/>'
+      + '<input id="rack-inv-new-qty" type="number" placeholder="Qty" value="1" min="0" style="width:56px;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 7px;font-size:10.5px;font-family:inherit;border-radius:3px;outline:none;"/>'
+      + '<button onclick="rackInvAddSku(\''+spotId+'\')" style="font-size:9px;padding:5px 10px;background:'+color+'22;border:1px solid '+color+';color:'+color+';cursor:pointer;border-radius:3px;font-family:inherit;white-space:nowrap;">+ ADD</button>'
+      + '</div>';
+  }
+  if(invItem && invItem.supplier)    html += '<div style="font-size:9px;color:var(--td);margin-top:6px;">Supplier: <span style="color:var(--tx);">'+invItem.supplier+'</span></div>';
+  if(invItem && invItem.lastUpdated) html += '<div style="font-size:9px;color:var(--td);">Updated: <span style="color:var(--tx);">'+invItem.lastUpdated+'</span></div>';
+  if(invItem && invItem.notes)       html += '<div style="font-size:9px;color:var(--am);margin-top:4px;">📝 '+invItem.notes+'</div>';
+  html += '</div>';
 
 
   html += '<div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:6px;">ORDERS AT '+spotId+'</div>';
@@ -7539,12 +7700,7 @@ function returnsSubmit(){
     var ex  = (inv.skus||[]).find(function(s){return s.sku===sku;});
     if(ex){ ex.qty=(parseInt(ex.qty)||0)+qty; }
     else { inv.skus.push({sku:sku,name:'RETURN',qty:qty,unit:'PCS'}); }
-    try{ localStorage.setItem('warehub_inventory',JSON.stringify(window._inventoryData)); }catch(e){}
-    if(typeof window.warehubApi === 'function'){
-      window.warehubApi('POST', '/api/settings', { rack_inventory: window._inventoryData }).catch(function(e){
-        console.error('[inventory] cloud save failed:', e);
-      });
-    }
+    inventorySync();
   }
 
   // Manager notification
@@ -10899,6 +11055,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
           <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
           <button class="btn" id="rack-edit-toggle" onclick="rackToggleEditMode()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">✏️ EDIT POSITIONS</button>
+          <button class="btn" onclick="rackPrintLocationLabels()" style="font-size:9px;border-color:#1D6F42;color:#1D6F42;">🖨 PRINT LOCATION LABELS</button>
         </div>
       </div>
 
