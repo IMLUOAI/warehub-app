@@ -311,6 +311,12 @@ body{
 .rack-spot.active{filter:drop-shadow(0 0 5px #818cf866);}
 .rack-spot.has-orders rect{fill:rgba(255,200,0,0.32)!important;stroke:#ffd700!important;}
 .rack-spot.done rect{fill:rgba(56,161,105,0.35)!important;stroke:#68d391!important;}
+.rack-spot.needs-pick rect{fill:rgba(0,255,255,0.28)!important;stroke:#0ff!important;stroke-width:2.5!important;}
+.rack-spot.needs-pick{animation:pickPulse 1.2s ease-in-out infinite;}
+@keyframes pickPulse{
+  0%,100%{filter:drop-shadow(0 0 3px #0ff);}
+  50%{filter:drop-shadow(0 0 12px #0ff) drop-shadow(0 0 5px #0ff);}
+}
 .rack-spot.recent-activity rect{stroke-width:2.5!important;}
 .rack-spot.recent-activity{animation:rackPulse 1.6s ease-in-out infinite;}
 @keyframes rackPulse{
@@ -1249,18 +1255,31 @@ body{
       <div class="frow" id="f-packers"></div>
     </div>
 
-    <!-- Live rack map + activity ticker -->
+    <!-- Live rack map + pick queue + activity ticker -->
     <div style="display:flex;gap:16px;flex:1;min-height:0;margin-top:12px;flex-wrap:wrap;">
       <div style="flex:2;min-width:320px;display:flex;flex-direction:column;min-height:0;">
-        <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">LIVE PICKING ACTIVITY</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:9px;letter-spacing:4px;color:var(--td);">LIVE PICKING ACTIVITY</div>
+          <div style="display:flex;gap:12px;font-size:9px;color:var(--td);">
+            <span><span style="display:inline-block;width:9px;height:9px;background:#0ff;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Needs picking</span>
+            <span><span style="display:inline-block;width:9px;height:9px;background:#ffd700;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Pending order</span>
+            <span><span style="display:inline-block;width:9px;height:9px;background:#68d391;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Done</span>
+          </div>
+        </div>
         <div style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);padding:8px;">
           <svg id="floor-rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
           <div id="floor-rack-empty" style="display:none;text-align:center;padding:30px;color:var(--td);font-size:11px;">No rack layout configured yet — set one up in Rack Map.</div>
         </div>
       </div>
-      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;min-height:0;">
-        <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
-        <div id="floor-ticker" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;min-height:0;gap:12px;">
+        <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+          <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">🎯 PICK QUEUE — GO GET THESE</div>
+          <div id="floor-pick-queue" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+          <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
+          <div id="floor-ticker" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -5037,7 +5056,7 @@ async function floorRenderRackMap(){
 
 function floorHighlightRackActivity(){
   document.querySelectorAll('#floor-rack-svg .rack-spot').forEach(function(el){
-    el.classList.remove('has-orders','done','recent-activity');
+    el.classList.remove('has-orders','done','recent-activity','needs-pick');
   });
   var now = Date.now();
   orders.forEach(function(o){
@@ -5055,6 +5074,58 @@ function floorHighlightRackActivity(){
       el.classList.add('has-orders');
     }
   });
+
+  // Separately highlight where items actually need to be PULLED FROM —
+  // this is the real inventory location (from _inventoryData), which is
+  // NOT the same thing as a label's shelf field above (that's the packed
+  // box's staging/sort destination, not where the raw item lives).
+  floorComputePickQueue().forEach(function(item){
+    var el = document.getElementById('floor-spot-'+item.location);
+    if(el) el.classList.add('needs-pick');
+  });
+}
+
+// Cross-references every pending order's SKU(s) against tracked inventory
+// locations, returning what needs to be picked and from where — grouped by
+// location so a packer can grab everything from one spot in a single trip.
+function floorComputePickQueue(){
+  var inv = window._inventoryData || {};
+  var needed = {}; // "location||sku" -> { location, sku, qty, trackings:[] }
+
+  orders.filter(function(o){ return o.status!=='done'; }).forEach(function(o){
+    (o.skus||[]).forEach(function(s){
+      if(!s.sku) return;
+      // Find which tracked location(s) currently hold this SKU
+      Object.keys(inv).forEach(function(loc){
+        var item = ((inv[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        if(!item || (parseInt(item.qty)||0) <= 0) return;
+        var key = loc+'||'+s.sku;
+        if(!needed[key]) needed[key] = { location:loc, sku:s.sku, qty:0, trackings:[] };
+        needed[key].qty += (parseInt(s.qty)||1);
+        if(needed[key].trackings.indexOf(o.tracking) === -1) needed[key].trackings.push(o.tracking);
+      });
+    });
+  });
+
+  return Object.values(needed).sort(function(a,b){ return a.location.localeCompare(b.location); });
+}
+
+function floorRenderPickQueue(){
+  var el = document.getElementById('floor-pick-queue');
+  if(!el) return;
+  var queue = floorComputePickQueue();
+  if(!queue.length){
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:11px;">Nothing pending with a known pick location right now.</div>';
+    return;
+  }
+  el.innerHTML = queue.slice(0, 30).map(function(item){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
+      + '<span style="background:#0ff;color:#031014;font-weight:900;padding:2px 7px;border-radius:4px;font-family:monospace;white-space:nowrap;">'+item.location+'</span>'
+      + '<span style="color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;">'+item.sku+'</span>'
+      + '<span style="color:var(--am,#fbbf24);font-weight:700;white-space:nowrap;">×'+item.qty+'</span>'
+      + '<span style="color:var(--td);font-size:9px;white-space:nowrap;">'+item.trackings.length+' order'+(item.trackings.length!==1?'s':'')+'</span>'
+      + '</div>';
+  }).join('');
 }
 
 function floorRenderTicker(){
@@ -5106,6 +5177,7 @@ function renderFloor(){
   }
 
   floorRenderRackMap();
+  floorRenderPickQueue();
   floorRenderTicker();
 }
 
