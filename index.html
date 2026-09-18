@@ -874,6 +874,7 @@ body{
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')" data-i18n="nav_stats">📊 Stats</button>
     <button class="tab"     data-view="floor"    onclick="gv('floor')" data-i18n="nav_floor">Floor Display</button>
     <button class="tab"     data-view="returns"  onclick="gv('returns')" data-i18n="nav_returns">📦 Returns</button>
+    <button class="tab"     data-view="receiving" onclick="gv('receiving')" data-i18n="nav_receiving">📥 Receiving</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')" data-i18n="nav_vehicle">🚗 Vehicle</button>
     <button class="tab" data-view="rackmap" onclick="gv('rackmap')" data-i18n="nav_rackmap">🗺 Rack Map</button>
     <button class="tab" data-view="fba" onclick="gv('fba')" data-i18n="nav_fba">📤 FBA Outbound</button>
@@ -1397,6 +1398,7 @@ function gv(name){
   if(name==='payroll') renderProductivity();
   if(name==='floor')  { renderFloor(); floorPoll(); }
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
+  if(name==='receiving'){ recvInitView(); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
   if(name==='import'){ dzUpdateNeonDate(); }
 }
@@ -1446,7 +1448,7 @@ var I18N = {
   en: {
     nav_import: 'Import', nav_packers: 'Packers', nav_pack: 'Pack Station',
     nav_dash: 'Dashboard', nav_stats: '📊 Stats', nav_floor: 'Floor Display',
-    nav_returns: '📦 Returns', nav_vehicle: '🚗 Vehicle', nav_rackmap: '🗺 Rack Map',
+    nav_returns: '📦 Returns', nav_receiving: '📥 Receiving', nav_vehicle: '🚗 Vehicle', nav_rackmap: '🗺 Rack Map',
     nav_fba: '📤 FBA Outbound',
 
     pack_title: 'PACK STATION — 2-STEP VERIFY',
@@ -1460,7 +1462,7 @@ var I18N = {
   zh: {
     nav_import: '匯入', nav_packers: '打包員', nav_pack: '打包站',
     nav_dash: '儀表板', nav_stats: '📊 統計', nav_floor: '現場顯示',
-    nav_returns: '📦 退貨', nav_vehicle: '🚗 車輛', nav_rackmap: '🗺 貨架地圖',
+    nav_returns: '📦 退貨', nav_receiving: '📥 收貨', nav_vehicle: '🚗 車輛', nav_rackmap: '🗺 貨架地圖',
     nav_fba: '📤 FBA 出貨',
 
     pack_title: '打包站 — 兩步驟驗證',
@@ -1474,7 +1476,7 @@ var I18N = {
   es: {
     nav_import: 'Importar', nav_packers: 'Empacadores', nav_pack: 'Estación de Empaque',
     nav_dash: 'Panel', nav_stats: '📊 Estadísticas', nav_floor: 'Pantalla de Planta',
-    nav_returns: '📦 Devoluciones', nav_vehicle: '🚗 Vehículo', nav_rackmap: '🗺 Mapa de Estantes',
+    nav_returns: '📦 Devoluciones', nav_receiving: '📥 Recepción', nav_vehicle: '🚗 Vehículo', nav_rackmap: '🗺 Mapa de Estantes',
     nav_fba: '📤 Envío FBA',
 
     pack_title: 'ESTACIÓN DE EMPAQUE — VERIFICACIÓN EN 2 PASOS',
@@ -2232,12 +2234,12 @@ async function parsePdf(file){
           tokens:  words.slice(0, 12).map(function(w){ return w.text; }),
           img:     imgSkip
         });
-        if(p <= 3){
-          dbg('✗ SKIP p'+p+' — tokens:');
-          words.forEach(function(w){ dbg('    ['+w.text+']'); });
-        } else {
-          dbg('✗ SKIP p'+p);
-        }
+        // Full word detail for EVERY skipped page (not just the first 3) —
+        // a skip past page 3 used to log nothing but "✗ SKIP pN", which
+        // made it impossible to diagnose what was actually on that page
+        // without reproducing it as one of the first 3 pages.
+        dbg('✗ SKIP p'+p+' — tokens:');
+        words.forEach(function(w){ dbg('    ['+w.text+']'); });
       }
 
       // Update progress every 5 pages
@@ -2331,6 +2333,22 @@ function extractOrder(words, pageH){
       tracking = 'UUS-' + uuSku + (uuShelf ? '-' + uuShelf : '') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
       carrier  = 'UPS';
       dbg('  Uniuni tall-page detected, synthetic ID: ' + tracking);
+    } else {
+      // The page clearly qualifies as Uniuni-like (tall page or explicit
+      // "UNIUNI" text) but didn't have the expected SKU*qty pattern this
+      // path relies on — previously this meant a silent, total skip with
+      // no fallback at all. Fall back to the same "longest usable anchor
+      // token" approach already used elsewhere, so the page still becomes
+      // a real, packable order instead of vanishing from the batch.
+      var anchor='';
+      for(var wi=0; wi<words.length; wi++){
+        var wc=(words[wi].text||'').replace(/[^A-Z0-9]/gi,'');
+        if(wc.length>=8 && !/UNIUNI/i.test(words[wi].text)){ anchor=wc.slice(0,12); break; }
+      }
+      if(!anchor) anchor='PG'+(pageH||0)+Math.random().toString(36).slice(2,8).toUpperCase();
+      tracking = 'UUS-' + anchor.toUpperCase();
+      carrier  = 'UPS';
+      dbg('  Uniuni tall-page fallback (no SKU*qty pattern found), synthetic ID: ' + tracking);
     }
   }
 
@@ -6386,43 +6404,49 @@ function inventorySync(){
   }
 }
 
-// ── Receive Stock — put-away for brand-new incoming inventory ───────
+// ── Receiving — put-away for brand-new incoming inventory ───────────
 // Distinct from Returns (which restocks previously-sold items) and from
 // Out-of-Stock (which flags items that can't be found) — this is for
 // assigning a shelf location to new product as it physically arrives.
-var _receiveLog = []; // this-session only, not persisted — just a quick visual confirmation trail
+// Persisted (localStorage + cloud via inventorySync for the actual stock
+// data; the log itself is localStorage, matching how Returns is stored).
+var recvLog = [];
 
-async function receiveOpen(){
-  var m = document.getElementById('receive-modal');
-  if(!m) return;
-  document.getElementById('receive-sku').value = '';
-  document.getElementById('receive-location').value = '';
-  document.getElementById('receive-qty').value = '1';
-  document.getElementById('receive-status').textContent = '';
-  m.style.display = 'flex';
+function recvLoad(){
+  try{
+    var d = localStorage.getItem('warehub_receiving_log');
+    recvLog = d ? (JSON.parse(d)||[]) : [];
+  }catch(e){ recvLog = []; }
+}
+
+function recvSave(){
+  try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+}
+
+async function recvInitView(){
+  document.getElementById('recv-sku').value = '';
+  document.getElementById('recv-location').value = '';
+  document.getElementById('recv-qty').value = '1';
+  document.getElementById('recv-status').textContent = '';
   if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
-  receiveRenderLog();
-  setTimeout(function(){ var el=document.getElementById('receive-sku'); if(el) el.focus(); }, 50);
+  recvRenderLog();
+  recvRenderStats();
+  setTimeout(function(){ var el=document.getElementById('recv-sku'); if(el) el.focus(); }, 50);
 }
 
-function receiveClose(){
-  var m = document.getElementById('receive-modal');
-  if(m) m.style.display = 'none';
-}
-
-function receiveSkuKeyHandler(e){
+function recvSkuKeyHandler(e){
   if(e.key === 'Enter'){
     e.preventDefault();
-    var loc = document.getElementById('receive-location');
+    var loc = document.getElementById('recv-location');
     loc.focus(); loc.select();
   }
 }
 
-function receiveSubmit(){
-  var skuEl = document.getElementById('receive-sku');
-  var locEl = document.getElementById('receive-location');
-  var qtyEl = document.getElementById('receive-qty');
-  var statusEl = document.getElementById('receive-status');
+function recvSubmit(){
+  var skuEl = document.getElementById('recv-sku');
+  var locEl = document.getElementById('recv-location');
+  var qtyEl = document.getElementById('recv-qty');
+  var statusEl = document.getElementById('recv-status');
 
   var sku = (skuEl.value||'').trim();
   var location = rackNormalise((locEl.value||'').trim());
@@ -6449,8 +6473,14 @@ function receiveSubmit(){
   else { inv.skus.push({sku:sku, name:'', qty:qty, unit:'PCS'}); }
   inventorySync();
 
-  _receiveLog.unshift({ sku:sku, location:location, qty:qty, time:new Date().toLocaleTimeString() });
-  receiveRenderLog();
+  recvLog.unshift({
+    sku:sku, location:location, qty:qty,
+    date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString(),
+    by: (typeof window._clerkUser!=='undefined' && window._clerkUser && window._clerkUser.fullName) || ''
+  });
+  recvSave();
+  recvRenderLog();
+  recvRenderStats();
 
   statusEl.textContent = '✓ '+sku+' ×'+qty+' assigned to '+location;
   statusEl.style.color = '#4caf80';
@@ -6462,21 +6492,48 @@ function receiveSubmit(){
   skuEl.focus();
 }
 
-function receiveRenderLog(){
-  var el = document.getElementById('receive-log');
+function recvRenderLog(){
+  var el = document.getElementById('recv-log');
   if(!el) return;
-  if(!_receiveLog.length){
-    el.innerHTML = '<div style="font-size:11px;color:var(--td);">Nothing received yet this session.</div>';
+  if(!recvLog.length){
+    el.innerHTML = '<div style="color:var(--td);font-size:11px;padding:16px;">Nothing received yet.</div>';
     return;
   }
-  el.innerHTML = _receiveLog.slice(0, 20).map(function(r){
-    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
-      + '<span style="color:var(--cy);font-family:monospace;">'+r.sku+'</span>'
-      + '<span style="color:var(--gn);font-family:monospace;">'+r.location+'</span>'
-      + '<span style="color:var(--tx);">×'+r.qty+'</span>'
-      + '<span style="color:var(--td);font-size:9px;">'+r.time+'</span>'
+  el.innerHTML = recvLog.slice(0, 100).map(function(r){
+    return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:11px;flex-wrap:wrap;">'
+      + '<span style="color:var(--cy);font-family:monospace;font-weight:700;">'+r.sku+'</span>'
+      + '<span style="color:var(--gn);font-family:monospace;">📍 '+r.location+'</span>'
+      + '<span style="color:var(--tx);font-weight:700;">×'+r.qty+'</span>'
+      + '<span style="color:var(--td);font-size:9px;margin-left:auto;">'+r.date+' '+r.time+(r.by?' · '+r.by:'')+'</span>'
       + '</div>';
   }).join('');
+}
+
+function recvRenderStats(){
+  var todayEl = document.getElementById('recv-stat-today');
+  var totalEl = document.getElementById('recv-stat-total');
+  if(!todayEl || !totalEl) return;
+  var today = new Date().toLocaleDateString();
+  totalEl.textContent = recvLog.length;
+  todayEl.textContent = recvLog.filter(function(r){ return r.date===today; }).length;
+}
+
+function recvExportExcel(){
+  if(!recvLog.length){ alert('Nothing to export.'); return; }
+  ensureSheetJS().then(function(){
+    var headers = ['Date','Time','SKU','Location','Qty','Received By'];
+    var rows = recvLog.map(function(r){
+      return [r.date||'', r.time||'', r.sku||'', r.location||'', r.qty||0, r.by||''];
+    });
+    var buf = buildXlsxBuffer([{ name:'Receiving Log', headers: headers, rows: rows }]);
+    var blob = new Blob([buf], { type:'application/octet-stream' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'receiving-log-'+new Date().toISOString().slice(0,10)+'.xlsx';
+    a.click();
+  }).catch(function(e){
+    alert('Could not load Excel export library: ' + e.message);
+  });
 }
 
 async function rackConfigSave(cfg){
@@ -10851,6 +10908,7 @@ window._appInitFn = async function(){try{
   try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
   loadStaff();         // 1. load from localStorage first (instant)
   returnsLoad();
+  recvLoad();
   fbaLoadLocal();
   excelLoadConfig();
   await kvLoadStaff(); // 2. AWAIT KV — overrides localStorage if cloud has newer data
@@ -10941,7 +10999,7 @@ window._appInitFn = async function(){try{
   // main scan field on every keystroke, which made it impossible to type
   // into any of these while Pack Station is the active view underneath.
   var _MODAL_IDS = ['api-access-modal','company-info-modal','import-history-modal',
-                     'oos-modal','rack-config-modal','team-modal','upgrade-modal','receive-modal'];
+                     'oos-modal','rack-config-modal','team-modal','upgrade-modal'];
   window.isAnyModalOpen = function(){
     return _MODAL_IDS.some(function(id){
       var el = document.getElementById(id);
@@ -11210,6 +11268,71 @@ document.addEventListener('DOMContentLoaded', function(){
       <div style="flex-shrink:0;">
         <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">RETURN LOG</div>
         <div id="return-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Receiving — scan new arrivals & assign shelf locations ── -->
+  <div id="view-receiving" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;min-width:0;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
+        <div>
+          <div style="font-size:15px;font-weight:700;">📥 Receiving</div>
+          <div style="font-size:10.5px;color:var(--td);margin-top:2px;">Scan new arrivals in — SKU, shelf location, quantity — built for many boxes in a row.</div>
+        </div>
+        <div style="display:flex;gap:16px;">
+          <div style="text-align:center;">
+            <div id="recv-stat-today" style="font-size:20px;font-weight:800;color:var(--cy);">0</div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">TODAY</div>
+          </div>
+          <div style="text-align:center;">
+            <div id="recv-stat-total" style="font-size:20px;font-weight:800;color:var(--gn);">0</div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">TOTAL LOGGED</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan form -->
+      <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:16px;flex-shrink:0;max-width:480px;">
+        <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU</div>
+            <input id="recv-sku" type="text" placeholder="Scan or type SKU…" autocomplete="off"
+              style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
+                     background:var(--bg,#0a0f18);border:2px solid var(--cy);color:var(--tx);font-family:inherit;letter-spacing:1px;"
+              onkeydown="recvSkuKeyHandler(event)"/>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LOCATION</div>
+            <input id="recv-location" type="text" placeholder="Scan or type shelf location…" autocomplete="off" list="return-location-list"
+              style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
+                     background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;letter-spacing:1px;"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('recv-qty').focus();document.getElementById('recv-qty').select();}"/>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-end;">
+            <div style="flex:1;">
+              <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QUANTITY</div>
+              <input id="recv-qty" type="number" value="1" min="1" autocomplete="off"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
+                       background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();recvSubmit();}"/>
+            </div>
+            <button onclick="recvSubmit()" style="padding:11px 22px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;background:var(--cy);border:none;color:#031014;font-family:inherit;white-space:nowrap;">✓ ASSIGN LOCATION</button>
+          </div>
+        </div>
+        <div id="recv-status" style="font-size:11px;margin-top:10px;min-height:16px;"></div>
+      </div>
+
+      <!-- Receiving log -->
+      <div style="flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:8px;letter-spacing:2px;color:var(--td);">RECEIVING LOG</div>
+          <button onclick="recvExportExcel()" style="font-size:9px;padding:5px 10px;border-radius:6px;cursor:pointer;background:#1D6F4215;border:1px solid #1D6F42;color:#1D6F42;font-family:inherit;">📊 EXPORT EXCEL</button>
+        </div>
+        <div id="recv-log" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
 
     </div>
@@ -11589,7 +11712,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
           <button class="btn" id="rack-edit-toggle" onclick="rackToggleEditMode()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">✏️ EDIT POSITIONS</button>
           <button class="btn" onclick="rackPrintLocationLabels()" style="font-size:9px;border-color:#1D6F42;color:#1D6F42;">🖨 PRINT LOCATION LABELS</button>
-          <button class="btn" onclick="receiveOpen()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
+          <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
         </div>
       </div>
 
@@ -11631,50 +11754,6 @@ document.addEventListener('DOMContentLoaded', function(){
         <div id="rack-route-steps"></div>
       </div>
 
-    </div>
-  </div>
-
-  <!-- ══ RECEIVE STOCK MODAL — put-away for new incoming inventory ══ -->
-  <div id="receive-modal" style="display:none;position:fixed;inset:0;z-index:9991;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
-    <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:22px;width:min(420px,95vw);box-shadow:0 20px 60px #000a;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <div style="font-size:13px;font-weight:800;color:var(--tx);">📥 Receive Stock</div>
-        <button onclick="receiveClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
-      </div>
-      <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
-        Scan a new product box's SKU, then its shelf location, then quantity — built for scanning many boxes in a row. Each one saves and resets automatically.
-      </div>
-
-      <div style="margin-bottom:10px;">
-        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU</div>
-        <input id="receive-sku" type="text" placeholder="Scan or type SKU…" autocomplete="off"
-          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
-                 background:var(--bg,#0a0f18);border:2px solid var(--cy);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-          onkeydown="receiveSkuKeyHandler(event)"/>
-      </div>
-
-      <div style="margin-bottom:10px;">
-        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LOCATION</div>
-        <input id="receive-location" type="text" placeholder="Scan or type shelf location…" autocomplete="off" list="return-location-list"
-          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
-                 background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('receive-qty').focus();document.getElementById('receive-qty').select();}"/>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QUANTITY</div>
-        <input id="receive-qty" type="number" value="1" min="1" autocomplete="off"
-          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
-                 background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();receiveSubmit();}"/>
-      </div>
-
-      <button onclick="receiveSubmit()" style="width:100%;padding:10px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;background:var(--cy);border:none;color:#031014;font-family:inherit;">✓ ASSIGN LOCATION</button>
-
-      <div id="receive-status" style="font-size:10.5px;margin-top:10px;min-height:14px;"></div>
-
-      <div style="margin:16px 0 8px;border-top:1px solid var(--bdr);padding-top:12px;font-size:9px;letter-spacing:1.5px;color:var(--td);">RECENTLY RECEIVED THIS SESSION</div>
-      <div id="receive-log" style="max-height:160px;overflow-y:auto;"></div>
     </div>
   </div>
 
