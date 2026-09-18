@@ -1257,27 +1257,27 @@ body{
 
     <!-- Live rack map + pick queue + activity ticker -->
     <div style="display:flex;gap:16px;flex:1;min-height:0;margin-top:12px;flex-wrap:wrap;">
-      <div style="flex:2;min-width:320px;display:flex;flex-direction:column;min-height:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <div style="font-size:9px;letter-spacing:4px;color:var(--td);">LIVE PICKING ACTIVITY</div>
-          <div style="display:flex;gap:12px;font-size:9px;color:var(--td);">
-            <span><span style="display:inline-block;width:9px;height:9px;background:#0ff;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Needs picking</span>
-            <span><span style="display:inline-block;width:9px;height:9px;background:#ffd700;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Pending order</span>
-            <span><span style="display:inline-block;width:9px;height:9px;background:#68d391;border-radius:2px;margin-right:4px;vertical-align:-1px;"></span>Done</span>
+      <div style="flex:3;min-width:400px;display:flex;flex-direction:column;min-height:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:12px;letter-spacing:4px;color:var(--td);">LIVE PICKING ACTIVITY</div>
+          <div style="display:flex;gap:18px;font-size:13px;color:var(--tx);font-weight:600;">
+            <span><span style="display:inline-block;width:14px;height:14px;background:#0ff;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Needs picking</span>
+            <span><span style="display:inline-block;width:14px;height:14px;background:#ffd700;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Pending order</span>
+            <span><span style="display:inline-block;width:14px;height:14px;background:#68d391;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Done</span>
           </div>
         </div>
-        <div style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);padding:8px;">
+        <div style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);padding:10px;">
           <svg id="floor-rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
           <div id="floor-rack-empty" style="display:none;text-align:center;padding:30px;color:var(--td);font-size:11px;">No rack layout configured yet — set one up in Rack Map.</div>
         </div>
       </div>
-      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;min-height:0;gap:12px;">
+      <div style="flex:1;min-width:280px;display:flex;flex-direction:column;min-height:0;gap:12px;">
         <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
-          <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">🎯 PICK QUEUE — GO GET THESE</div>
+          <div style="font-size:12px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">🎯 PICK QUEUE — GO GET THESE</div>
           <div id="floor-pick-queue" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
-          <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
+          <div style="font-size:12px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
           <div id="floor-ticker" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
         </div>
       </div>
@@ -5019,7 +5019,7 @@ async function floorRenderRackMap(){
   var totalH = Math.max.apply(null, zones.map(function(z){ return z.y+z.h; }).concat([200])) + 18;
   svg.setAttribute('viewBox', '0 0 '+totalW+' '+totalH);
 
-  var ZHDR=20, ZPPAD=8, SGAP=3;
+  var ZHDR=26, ZPPAD=10, SGAP=4;
   var html='';
   zones.forEach(function(z, zi){
     var col = z.color || '#4a9eff';
@@ -5029,10 +5029,15 @@ async function floorRenderRackMap(){
     var maxRow = Math.max.apply(null, rowSizes);
     var cellW = (z.w - ZPPAD*2 + SGAP)/maxRow - SGAP;
     var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP)/rowSizes.length - SGAP;
+    // Scale spot text to the room actually available in THIS zone — a
+    // sparse 3x3 zone gets much bigger, easier-to-read text than a dense
+    // 15-across row, rather than one fixed size too small for some zones
+    // and wasting space in others.
+    var spotFontSize = Math.max(7, Math.min(15, cellW * 0.38, cellH * 0.42));
 
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+z.h+'" rx="6" fill="'+colFaint+'" stroke="'+col+'" stroke-width="1.5" fill-opacity="0.85"/>';
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'" rx="4" fill="'+col+'" opacity="0.85"/>';
-    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
+    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+18)+'" text-anchor="middle" font-size="14" font-weight="800" fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
 
     for(var r=0;r<rowSizes.length;r++){
       var rowLabel = z.reverse ? (rowSizes.length - r) : (r + 1);
@@ -5045,7 +5050,7 @@ async function floorRenderRackMap(){
         var spotId = (rowSizes.length===1) ? (prefix+'-'+posStr) : (prefix+'-'+rowLabel+'-'+posStr);
         html += '<g id="floor-spot-'+spotId+'" class="rack-spot">';
         html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'" rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
-        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'" text-anchor="middle" font-size="6.5" fill="'+col+'" font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
+        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+spotFontSize*0.35)+'" text-anchor="middle" font-size="'+spotFontSize.toFixed(1)+'" fill="'+col+'" font-family="Arial,sans-serif" font-weight="700">'+spotId+'</text>';
         html += '</g>';
       }
     }
@@ -5115,15 +5120,15 @@ function floorRenderPickQueue(){
   if(!el) return;
   var queue = floorComputePickQueue();
   if(!queue.length){
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:11px;">Nothing pending with a known pick location right now.</div>';
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:13px;">Nothing pending with a known pick location right now.</div>';
     return;
   }
   el.innerHTML = queue.slice(0, 30).map(function(item){
-    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
-      + '<span style="background:#0ff;color:#031014;font-weight:900;padding:2px 7px;border-radius:4px;font-family:monospace;white-space:nowrap;">'+item.location+'</span>'
-      + '<span style="color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;">'+item.sku+'</span>'
-      + '<span style="color:var(--am,#fbbf24);font-weight:700;white-space:nowrap;">×'+item.qty+'</span>'
-      + '<span style="color:var(--td);font-size:9px;white-space:nowrap;">'+item.trackings.length+' order'+(item.trackings.length!==1?'s':'')+'</span>'
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--bdr);font-size:14px;">'
+      + '<span style="background:#0ff;color:#031014;font-weight:900;padding:4px 10px;border-radius:5px;font-family:monospace;white-space:nowrap;font-size:15px;">'+item.location+'</span>'
+      + '<span style="color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;font-weight:600;">'+item.sku+'</span>'
+      + '<span style="color:var(--am,#fbbf24);font-weight:800;white-space:nowrap;font-size:15px;">×'+item.qty+'</span>'
+      + '<span style="color:var(--td);font-size:11px;white-space:nowrap;">'+item.trackings.length+' order'+(item.trackings.length!==1?'s':'')+'</span>'
       + '</div>';
   }).join('');
 }
@@ -5135,7 +5140,7 @@ function floorRenderTicker(){
     .sort(function(a,b){ return new Date(b.completedAt) - new Date(a.completedAt); })
     .slice(0, 25);
   if(!recent.length){
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:11px;">No completions yet today.</div>';
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--td);font-size:13px;">No completions yet today.</div>';
     return;
   }
   el.innerHTML = recent.map(function(o){
@@ -5144,10 +5149,10 @@ function floorRenderTicker(){
     var col = packer ? packerColor(packer) : 'var(--cy)';
     var mins = Math.max(0, Math.round((Date.now() - new Date(o.completedAt).getTime())/60000));
     var ago = mins < 1 ? 'just now' : (mins+'m ago');
-    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--bdr);font-size:13px;">'
       +'<span style="color:'+col+';font-weight:700;white-space:nowrap;">'+name+'</span>'
       +'<span style="color:var(--td);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(o.shelf||o.carrier||'')+'</span>'
-      +'<span style="color:var(--td);font-size:9px;white-space:nowrap;">'+ago+'</span>'
+      +'<span style="color:var(--td);font-size:11px;white-space:nowrap;">'+ago+'</span>'
       +'</div>';
   }).join('');
 }
