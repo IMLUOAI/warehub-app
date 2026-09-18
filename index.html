@@ -6283,6 +6283,99 @@ function inventorySync(){
   }
 }
 
+// ── Receive Stock — put-away for brand-new incoming inventory ───────
+// Distinct from Returns (which restocks previously-sold items) and from
+// Out-of-Stock (which flags items that can't be found) — this is for
+// assigning a shelf location to new product as it physically arrives.
+var _receiveLog = []; // this-session only, not persisted — just a quick visual confirmation trail
+
+async function receiveOpen(){
+  var m = document.getElementById('receive-modal');
+  if(!m) return;
+  document.getElementById('receive-sku').value = '';
+  document.getElementById('receive-location').value = '';
+  document.getElementById('receive-qty').value = '1';
+  document.getElementById('receive-status').textContent = '';
+  m.style.display = 'flex';
+  if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
+  receiveRenderLog();
+  setTimeout(function(){ var el=document.getElementById('receive-sku'); if(el) el.focus(); }, 50);
+}
+
+function receiveClose(){
+  var m = document.getElementById('receive-modal');
+  if(m) m.style.display = 'none';
+}
+
+function receiveSkuKeyHandler(e){
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    var loc = document.getElementById('receive-location');
+    loc.focus(); loc.select();
+  }
+}
+
+function receiveSubmit(){
+  var skuEl = document.getElementById('receive-sku');
+  var locEl = document.getElementById('receive-location');
+  var qtyEl = document.getElementById('receive-qty');
+  var statusEl = document.getElementById('receive-status');
+
+  var sku = (skuEl.value||'').trim();
+  var location = rackNormalise((locEl.value||'').trim());
+  var qty = Math.max(1, parseInt(qtyEl.value)||1);
+
+  if(!sku){
+    statusEl.textContent = '⚠ Scan or type a SKU first.';
+    statusEl.style.color = '#fbbf24';
+    skuEl.focus();
+    return;
+  }
+  if(!location){
+    statusEl.textContent = '⚠ Enter a shelf location — this tool is specifically for assigning one.';
+    statusEl.style.color = '#fbbf24';
+    locEl.focus();
+    return;
+  }
+
+  if(!window._inventoryData) window._inventoryData = {};
+  if(!window._inventoryData[location]) window._inventoryData[location] = {skus:[]};
+  var inv = window._inventoryData[location];
+  var existing = inv.skus.find(function(s){ return s.sku===sku; });
+  if(existing){ existing.qty = (parseInt(existing.qty)||0) + qty; }
+  else { inv.skus.push({sku:sku, name:'', qty:qty, unit:'PCS'}); }
+  inventorySync();
+
+  _receiveLog.unshift({ sku:sku, location:location, qty:qty, time:new Date().toLocaleTimeString() });
+  receiveRenderLog();
+
+  statusEl.textContent = '✓ '+sku+' ×'+qty+' assigned to '+location;
+  statusEl.style.color = '#4caf80';
+
+  // Reset for the next box — SKU and location clear, qty stays as a
+  // convenience if the next box happens to be the same quantity.
+  skuEl.value = '';
+  locEl.value = '';
+  skuEl.focus();
+}
+
+function receiveRenderLog(){
+  var el = document.getElementById('receive-log');
+  if(!el) return;
+  if(!_receiveLog.length){
+    el.innerHTML = '<div style="font-size:11px;color:var(--td);">Nothing received yet this session.</div>';
+    return;
+  }
+  el.innerHTML = _receiveLog.slice(0, 20).map(function(r){
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:10.5px;">'
+      + '<span style="color:var(--cy);font-family:monospace;">'+r.sku+'</span>'
+      + '<span style="color:var(--gn);font-family:monospace;">'+r.location+'</span>'
+      + '<span style="color:var(--tx);">×'+r.qty+'</span>'
+      + '<span style="color:var(--td);font-size:9px;">'+r.time+'</span>'
+      + '</div>';
+  }).join('');
+}
+
 async function rackConfigSave(cfg){
   try { localStorage.setItem(_rackStorageKey(), JSON.stringify(cfg)); } catch(e){}
   _rackConfig = cfg;
@@ -10734,7 +10827,7 @@ window._appInitFn = async function(){try{
   // main scan field on every keystroke, which made it impossible to type
   // into any of these while Pack Station is the active view underneath.
   var _MODAL_IDS = ['api-access-modal','company-info-modal','import-history-modal',
-                     'oos-modal','rack-config-modal','team-modal','upgrade-modal'];
+                     'oos-modal','rack-config-modal','team-modal','upgrade-modal','receive-modal'];
   window.isAnyModalOpen = function(){
     return _MODAL_IDS.some(function(id){
       var el = document.getElementById(id);
@@ -11382,6 +11475,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
           <button class="btn" id="rack-edit-toggle" onclick="rackToggleEditMode()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">✏️ EDIT POSITIONS</button>
           <button class="btn" onclick="rackPrintLocationLabels()" style="font-size:9px;border-color:#1D6F42;color:#1D6F42;">🖨 PRINT LOCATION LABELS</button>
+          <button class="btn" onclick="receiveOpen()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
         </div>
       </div>
 
@@ -11423,6 +11517,50 @@ document.addEventListener('DOMContentLoaded', function(){
         <div id="rack-route-steps"></div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ══ RECEIVE STOCK MODAL — put-away for new incoming inventory ══ -->
+  <div id="receive-modal" style="display:none;position:fixed;inset:0;z-index:9991;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:22px;width:min(420px,95vw);box-shadow:0 20px 60px #000a;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:13px;font-weight:800;color:var(--tx);">📥 Receive Stock</div>
+        <button onclick="receiveClose()" style="background:transparent;border:none;color:var(--td);font-size:16px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <div style="font-size:10.5px;color:var(--td);margin-bottom:16px;line-height:1.5;">
+        Scan a new product box's SKU, then its shelf location, then quantity — built for scanning many boxes in a row. Each one saves and resets automatically.
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU</div>
+        <input id="receive-sku" type="text" placeholder="Scan or type SKU…" autocomplete="off"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
+                 background:var(--bg,#0a0f18);border:2px solid var(--cy);color:var(--tx);font-family:inherit;letter-spacing:1px;"
+          onkeydown="receiveSkuKeyHandler(event)"/>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LOCATION</div>
+        <input id="receive-location" type="text" placeholder="Scan or type shelf location…" autocomplete="off" list="return-location-list"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
+                 background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;letter-spacing:1px;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('receive-qty').focus();document.getElementById('receive-qty').select();}"/>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QUANTITY</div>
+        <input id="receive-qty" type="number" value="1" min="1" autocomplete="off"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border-radius:7px;
+                 background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();receiveSubmit();}"/>
+      </div>
+
+      <button onclick="receiveSubmit()" style="width:100%;padding:10px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;background:var(--cy);border:none;color:#031014;font-family:inherit;">✓ ASSIGN LOCATION</button>
+
+      <div id="receive-status" style="font-size:10.5px;margin-top:10px;min-height:14px;"></div>
+
+      <div style="margin:16px 0 8px;border-top:1px solid var(--bdr);padding-top:12px;font-size:9px;letter-spacing:1.5px;color:var(--td);">RECENTLY RECEIVED THIS SESSION</div>
+      <div id="receive-log" style="max-height:160px;overflow-y:auto;"></div>
     </div>
   </div>
 
