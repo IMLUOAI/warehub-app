@@ -3926,6 +3926,32 @@ function completeOrder(order, scannedTracking){
   clearErr(); bpDone(); flash('ok');
   renderCpSelectorBar(); // refresh order counts on selector buttons
 
+  // Deduct what was just packed from tracked inventory — without this, the
+  // rack map's stock numbers only ever grow (Receive Stock, Returns, CSV
+  // import) and never shrink from normal fulfillment, silently drifting
+  // further from reality every single order. If a SKU is tracked at more
+  // than one location, deduct from whichever has the most on hand (the
+  // most likely source, since packers don't currently record exactly
+  // which shelf they physically pulled from).
+  (order.skus||[]).forEach(function(s){
+    if(!s.sku || !window._inventoryData) return;
+    var needed = parseInt(s.qty) || 1;
+    var best = null;
+    Object.keys(window._inventoryData).forEach(function(loc){
+      var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+      if(item && (parseInt(item.qty)||0) > 0 && (!best || (parseInt(item.qty)||0) > (parseInt(best.item.qty)||0))){
+        best = { loc: loc, item: item };
+      }
+    });
+    if(best){
+      best.item.qty = Math.max(0, (parseInt(best.item.qty)||0) - needed);
+      if(best.item.qty === 0){
+        window._inventoryData[best.loc].skus = window._inventoryData[best.loc].skus.filter(function(x){ return x.sku!==s.sku; });
+      }
+    }
+  });
+  if(typeof inventorySync === 'function') inventorySync();
+
   activeOrder=null; verifySkus=[];
   setPackState('idle');
 
@@ -6477,9 +6503,9 @@ function rackBuildSVG(cfg){
   var PAD   = 18;   // outer padding
   var ZGAP  = 14;   // gap between auto-placed zones (first-time layout only)
   var SZ    = 24;   // default spot cell size (used to size a zone the FIRST time, before it has a saved w/h)
-  var SGAP  = 3;    // gap between spots
-  var ZHDR  = 20;   // zone header height
-  var ZPPAD = 8;    // padding inside zone block
+  var SGAP  = 4;    // gap between spots
+  var ZHDR  = 26;   // zone header height
+  var ZPPAD = 10;   // padding inside zone block
 
   // Any zone missing a saved position/size gets one computed now, using the
   // same flow-grid layout this always used — but only ONCE. From then on
@@ -6524,6 +6550,10 @@ function rackBuildSVG(cfg){
     // the same size; shorter rows just don't reach the full zone width.
     var cellW = (z.w - ZPPAD*2 + SGAP) / maxRow - SGAP;
     var cellH = (z.h - ZPPAD*2 - ZHDR + SGAP) / rowSizes.length - SGAP;
+    // Scale spot text to the room actually available in THIS zone — a
+    // sparse zone gets much bigger, easier-to-read text than a dense
+    // many-across row, instead of one fixed size too small everywhere.
+    var spotFontSize = Math.max(7, Math.min(15, cellW * 0.38, cellH * 0.42));
 
     var editCursor = _rackEditMode ? 'cursor:move;' : 'cursor:pointer;';
     html += '<g id="zone-'+prefix+'" class="rack-zone" data-zi="'+zi+'"'
@@ -6535,8 +6565,8 @@ function rackBuildSVG(cfg){
 
     html += '<rect x="'+z.x+'" y="'+z.y+'" width="'+z.w+'" height="'+ZHDR+'"'
           + ' rx="4" fill="'+col+'" opacity="0.85"/>';
-    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+13)+'"'
-          + ' text-anchor="middle" font-size="9" font-weight="700"'
+    html += '<text x="'+(z.x+z.w/2)+'" y="'+(z.y+18)+'"'
+          + ' text-anchor="middle" font-size="14" font-weight="800"'
           + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="1">'+prefix+' — '+(z.name||'Zone')+'</text>';
 
     html += '</g>';
@@ -6564,9 +6594,9 @@ function rackBuildSVG(cfg){
               + '>';
         html += '<rect x="'+sx+'" y="'+sy+'" width="'+cellW+'" height="'+cellH+'"'
               + ' rx="3" fill="#0d1117" stroke="'+col+'" stroke-width="1" opacity="0.9"/>';
-        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+4)+'"'
-              + ' text-anchor="middle" font-size="6.5" fill="'+col+'"'
-              + ' font-family="Arial,sans-serif" font-weight="600">'+spotId+'</text>';
+        html += '<text x="'+(sx+cellW/2)+'" y="'+(sy+cellH/2+spotFontSize*0.35)+'"'
+              + ' text-anchor="middle" font-size="'+spotFontSize.toFixed(1)+'" fill="'+col+'"'
+              + ' font-family="Arial,sans-serif" font-weight="700">'+spotId+'</text>';
         html += '</g>';
       }
     }
@@ -7448,17 +7478,24 @@ function inventoryLoadCSV(text){
       });
     }
 
-    if(loc) data[loc] = item;
+    if(loc) data[rackNormalise(loc)] = item;
   }
-  window._inventoryData = data;
+  // Merge into existing inventory (returns, Receive Stock, and daily
+  // imports may have already built up real data) instead of wiping it out
+  // — and actually persist this, which the CSV import never did before,
+  // so it looked like it "didn't work" once the page was refreshed.
+  if(!window._inventoryData) window._inventoryData = {};
+  Object.keys(data).forEach(function(loc){
+    window._inventoryData[loc] = data[loc];
+  });
   var count = Object.keys(data).length;
-  pm('✓ Inventory loaded — '+count+' locations. Click any spot to view contents.');
+  inventorySync();
+  pm('✓ Inventory loaded — '+count+' locations merged in and saved. Click any spot to view contents.');
   rackHighlightInventory();
 }
 
 function rackHighlightInventory(){
-
-  document.querySelectorAll('.rack-spot').forEach(function(el){
+  document.querySelectorAll('#rack-svg .rack-spot').forEach(function(el){
     var sid = el.id.replace('spot-','').toUpperCase();
     if(window._inventoryData[sid]){
       el.classList.add('has-orders');
