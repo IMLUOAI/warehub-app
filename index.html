@@ -1551,7 +1551,7 @@ function matchTracking(words){
   var allText = words.map(function(w){return w.text;}).join(' ');
 
 
-  var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]|e-VS|E-VS/i.test(allText);
+  var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]|e-VS|E-VS|INTL\s*CONN\s*PLUS|ORIGIN\s*ID\s*:\s*RBDA/i.test(allText);
   var hintUPS    = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(allText);
   var hintUSPS   = /USPS|Postal\s*Service|U\.S\.\s*POST|FIRST[\s-]CLASS|PRIORITY\s*MAIL|MEDIA\s*MAIL/i.test(allText);
   var hintSpeedX = /SpeedX|SPXMIA|SDX|SPX/i.test(allText);
@@ -1629,6 +1629,33 @@ function matchTracking(words){
           var fsub = fDigits.substr(fstart,flen);
           if(/^(96|61|74|75)/.test(fsub)){
             for(var j=0;j<TPATS.length;j++){var m=fsub.match(TPATS[j].r);if(m){dbg('  FedEx barcode-row match: '+m[1]);return m[1];}}
+          }
+        }
+      }
+    }
+
+    // FedEx International (Connect Plus etc.) uses a different label
+    // template with no long barcode-digit row at all — just a plain
+    // "TRK#" followed by a 12-digit number starting with 8774, e.g.
+    // "8774 0420 2111". Domestic-format scanning above finds nothing on
+    // these, so without this fallback they were falling through to the
+    // Uniuni tall-page synthetic-ID logic — generating a FAKE ID for a
+    // label that actually has a real, scannable tracking number.
+    var trkRow = words.filter(function(w){ return /^TRK#?$/i.test(w.text); });
+    if(trkRow.length){
+      var trkTop = trkRow[0].top;
+      var nearbyRows = rowKeys.filter(function(rk){ return rk >= trkTop && rk <= trkTop + 40; })
+        .sort(function(a,b){ return a-b; });
+      for(var tri=0; tri<nearbyRows.length; tri++){
+        var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
+          .map(function(w){return clean(w.text);}).join('');
+        var trkDigits = trkConcat.replace(/[^0-9]/g,'');
+        var trkM = trkDigits.match(/^8774\d{8}$/) || trkConcat.match(/8774\d{8}/);
+        if(trkM){
+          var trkFinal = (typeof trkM[0]==='string' ? trkM[0] : trkDigits).replace(/[^0-9]/g,'');
+          if(trkFinal.length===12){
+            dbg('  FedEx International TRK# match: FEDEX-'+trkFinal);
+            return 'FEDEX-'+trkFinal;
           }
         }
       }
@@ -2316,41 +2343,16 @@ function extractOrder(words, pageH){
   var tracking = matchTracking(words);
   var carrier = tracking ? dc(tracking) : null;
 
-
-  // Guard: never assign a synthetic Uniuni ID to a page that looks like a UPS label.
-  // Without this, tall UPS PDFs (pageH >= 600 at higher DPI) that fail tracking
-  // extraction could fall into the Uniuni path and show as "Uniuni" on the divider.
-  var _allText = words.map(function(w){return w.text;}).join(' ');
-  var _looksLikeUPS = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(_allText);
-  if(!tracking && !_looksLikeUPS && (pageH >= 600 || /UNIUNI/i.test(_allText))){
-
-    var uuSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
-    if(uuSkuW.length){
-
-      var uuShelfW = words.filter(function(w){ return w.x > pageH*0.3 && /[A-Z]\d/.test(w.text); });
-      var uuShelf  = uuShelfW.length ? uuShelfW[0].text : '';
-      var uuSku    = uuSkuW[0].text.split('*')[0];
-      tracking = 'UUS-' + uuSku + (uuShelf ? '-' + uuShelf : '') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
-      carrier  = 'UPS';
-      dbg('  Uniuni tall-page detected, synthetic ID: ' + tracking);
-    } else {
-      // The page clearly qualifies as Uniuni-like (tall page or explicit
-      // "UNIUNI" text) but didn't have the expected SKU*qty pattern this
-      // path relies on — previously this meant a silent, total skip with
-      // no fallback at all. Fall back to the same "longest usable anchor
-      // token" approach already used elsewhere, so the page still becomes
-      // a real, packable order instead of vanishing from the batch.
-      var anchor='';
-      for(var wi=0; wi<words.length; wi++){
-        var wc=(words[wi].text||'').replace(/[^A-Z0-9]/gi,'');
-        if(wc.length>=8 && !/UNIUNI/i.test(words[wi].text)){ anchor=wc.slice(0,12); break; }
-      }
-      if(!anchor) anchor='PG'+(pageH||0)+Math.random().toString(36).slice(2,8).toUpperCase();
-      tracking = 'UUS-' + anchor.toUpperCase();
-      carrier  = 'UPS';
-      dbg('  Uniuni tall-page fallback (no SKU*qty pattern found), synthetic ID: ' + tracking);
-    }
-  }
+  // No blind "tall page = Uniuni" guessing here anymore — that assumption
+  // was wrong for other carriers (like UPS Ground Saver / USPS hybrid
+  // labels) that happen to share the same tall-page, SKU*qty shape. The
+  // legitimate Uniuni detection (matchTracking finding the word "UNIUNI"
+  // explicitly, or an actual UUS-prefixed tracking number) still applies —
+  // this was only removing the case where NEITHER was actually confirmed,
+  // and a fake ID with a fake carrier label got invented anyway. A page
+  // with no real, verified tracking signal now honestly falls through to
+  // Missing Labels below, with its image, for manual handling — instead of
+  // silently pretending to be scannable when it never was.
 
   if(!tracking) return null;
 
@@ -3330,7 +3332,7 @@ async function printSkuSort(){
     } else {
       var src=(hiRes && s.order.pageIndex!=null && hiRes[s.order.pageIndex])
               ? hiRes[s.order.pageIndex] : s.order.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(s.order.skus, s.order.shelf)+'</div>';
     }
   });
 
@@ -3341,6 +3343,7 @@ async function printSkuSort(){
     +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.label-page:last-child{page-break-after:avoid;}'
     +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;display:block;object-fit:contain;object-position:top left;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
+    +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'.divider-page{display:flex;flex-direction:column;width:4in;height:6in;border:6px solid #000;background:#fff;}'
     +'.divider-header{background:#000;color:#fff;font-family:Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:2px;line-height:1.1;padding:22px 18px;text-align:center;word-break:break-word;flex-shrink:0;}'
     +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
@@ -3354,6 +3357,7 @@ async function printSkuSort(){
       +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
       +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
+      +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'}';
 
   // Populate the already-open window and trigger print
@@ -3465,7 +3469,7 @@ async function printByPacker(){
     bodyHtml+=dividerPage(grp.name, grp.color, grp.orders.length, grp.orders);
     grp.orders.forEach(function(o){
       var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(o.skus, o.shelf)+'</div>';
     });
   });
 
@@ -3473,7 +3477,7 @@ async function printByPacker(){
     bodyHtml+=dividerPage('UNASSIGNED','#888',unassigned.length);
     unassigned.forEach(function(o){
       var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/></div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(o.skus, o.shelf)+'</div>';
     });
   }
   pm('✓ '+(allPrintOrders.length)+' label(s) ready — opening print dialog…');
@@ -3498,6 +3502,7 @@ async function printByPacker(){
       +'image-rendering:-webkit-optimize-contrast;'
       +'image-rendering:crisp-edges;'
     +'}'
+    +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     // Divider page — monochrome only (thermal printers ignore colour)
     +'.divider-page{'
       +'display:flex;flex-direction:column;'
@@ -3540,6 +3545,7 @@ async function printByPacker(){
       +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
       +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
+      +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
@@ -5504,6 +5510,21 @@ function warnBeforePrintDialog(){
     + 'check your print queue/printer status first.\n\n'
     + 'Clicking Print a second time will print this entire batch twice.'
   );
+}
+
+// Builds a large, bold SKU + location banner overlaid on a printed label —
+// on some carriers' original label templates, BOTH the SKU and shelf
+// location text are genuinely tiny and hard to read on the warehouse
+// floor, even though we already have this data structured and ready to use.
+function labelSkuOverlay(skus, shelf){
+  var skuText = (skus && skus.length)
+    ? skus.map(function(s){ return s.sku + (s.qty>1?' ×'+s.qty:''); }).join('  ·  ')
+    : '';
+  if(!skuText && !shelf) return '';
+  var parts = [];
+  if(skuText) parts.push(skuText);
+  if(shelf) parts.push('📍 '+shelf);
+  return '<div class="label-sku-overlay">'+parts.join('&nbsp;&nbsp;|&nbsp;&nbsp;')+'</div>';
 }
 
 function printLabelsViaHiddenIframe(css, bodyHtml){
