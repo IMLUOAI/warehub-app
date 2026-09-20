@@ -2173,6 +2173,62 @@ async function parsePdf(file){
       }
 
       var o = extractOrder(words, H);
+
+      // Narrow, targeted OCR rescue — ONLY for pages where text extraction
+      // found essentially nothing (confirmed pattern: just a bare SKU*qty
+      // and a shelf location, nothing else — e.g. some UPS Ground Saver /
+      // USPS-hybrid label PDFs that flatten the entire label into an
+      // image). This never runs for pages that already parsed fine via
+      // text, so overall batch speed for the vast majority of labels is
+      // unaffected — it only adds time for this specific rare case.
+      if(!o && words.length > 0 && words.length <= 6){
+        var ocrVp = page.getViewport({scale: IMG_SCALE});
+        var ocrCanvas = document.createElement('canvas');
+        ocrCanvas.width = ocrVp.width; ocrCanvas.height = ocrVp.height;
+        var ocrCtx = ocrCanvas.getContext('2d');
+        ocrCtx.imageSmoothingEnabled = true;
+        ocrCtx.imageSmoothingQuality = 'medium';
+        await page.render({canvasContext: ocrCtx, viewport: ocrVp}).promise;
+        var ocrImg = ocrCanvas.toDataURL('image/jpeg', 0.85);
+        ocrCanvas.width = 0; ocrCanvas.height = 0;
+
+        try{
+          await ensureTesseract();
+          pm('⟳ OCR checking page '+p+' (image-based label, no extractable text)…');
+          var ocrResult = await window.Tesseract.recognize(ocrImg, 'eng');
+          var ocrText = (ocrResult && ocrResult.data && ocrResult.data.text) || '';
+          var ocrMatch = ocrText.match(/1Z[A-Z0-9]{14,18}/i);
+          if(ocrMatch){
+            var ocrTracking = ocrMatch[0].toUpperCase().replace(/\s/g,'');
+            dbg('  OCR rescued p'+p+' — found UPS tracking via image: '+ocrTracking);
+            var ocrSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
+            var ocrShelfW = words.filter(function(w){ return /^[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)?$/i.test(w.text) && w.text.indexOf('*')===-1; });
+            var ocrSkus = ocrSkuW.map(function(w){
+              var parts = w.text.split('*');
+              return { sku: parts[0].toUpperCase(), qty: parseInt(parts[1])||1, scanned:0 };
+            });
+            if(!ocrSkus.length) ocrSkus = [{sku:'UNKNOWN', qty:1, scanned:0}];
+            o = {
+              tracking: ocrTracking, carrier: 'UPS', hub: '',
+              dest: '', recipient: '', city: '', weight: '', ref: '',
+              shelf: ocrShelfW.length ? ocrShelfW[0].text : '',
+              skus: ocrSkus, status: 'pending', completedAt: null, labelDate: null,
+              assignedTo: null, packedBy: null, orderStartTime: null, orderEndTime: null,
+              // Flags this order so the print flow knows its underlying
+              // label is a flattened image with tiny real text — unlike
+              // normal successfully-parsed orders, this one still needs
+              // the large SKU/location overlay when printed.
+              _ocrRescued: true
+            };
+          } else {
+            dbg('  OCR ran for p'+p+' but found no UPS tracking number in the image.');
+          }
+        }catch(e){
+          console.error('[OCR] failed for page '+p+':', e);
+          dbg('  OCR attempt failed for p'+p+': '+e.message);
+        }
+      }
+
       if(o){
         // ── Shared/duplicate tracking-ID fix ────────────────────────────────────
         // FedEx SmartPost / Ground batch PDFs print the same GS1 barcode prefix
@@ -2881,6 +2937,15 @@ function renderSkippedPanel(){
   }).join('');
 }
 
+// Builds a large, readable overlay from a skipped page's captured text
+// tokens (typically just a SKU and shelf location, since that's often
+// all that's extractable from these image-based labels) — the ONLY
+// text present is often tiny on the original rendered label image.
+function missingLabelOverlay(tokens){
+  if(!tokens || !tokens.length) return '';
+  return '<div class="miss-overlay">'+tokens.slice(0,4).join('&nbsp;&nbsp;|&nbsp;&nbsp;')+'</div>';
+}
+
 function printOneMissingLabel(idx){
   var skipped = window._skippedPages || [];
   var s = skipped[idx];
@@ -2890,10 +2955,12 @@ function printOneMissingLabel(idx){
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
     +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
     +'body{background:#fff;display:flex;align-items:flex-start;justify-content:center;}'
+    +'.lp{position:relative;width:4in;height:6in;}'
     +'img{width:4in;height:6in;object-fit:contain;object-position:top;}'
+    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;height:6in;}}'
     +'</style></head><body>'
-    +'<img src="'+s.img+'">'
+    +'<div class="lp"><img src="'+s.img+'">'+missingLabelOverlay(s.tokens)+'</div>'
     +'<script>window.onload=function(){window.print();}<\/script>'
     +'</body></html>');
   w.document.close();
@@ -2906,7 +2973,7 @@ function printMissingLabels(){
   var w = window.open('', '_blank', 'width=800,height=600');
   if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
   var body = withImg.map(function(s){
-    return '<div class="lp"><img src="'+s.img+'"><div class="pg">PDF p.'+s.pageNum+'</div></div>';
+    return '<div class="lp"><img src="'+s.img+'">'+missingLabelOverlay(s.tokens)+'<div class="pg">PDF p.'+s.pageNum+'</div></div>';
   }).join('');
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
     +'<style>*{margin:0;padding:0;box-sizing:border-box;}'
@@ -2914,7 +2981,8 @@ function printMissingLabels(){
     +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.lp:last-child{page-break-after:avoid;}'
     +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;}'
+    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;z-index:10;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
     +'</style></head><body>'
     +body
@@ -2953,13 +3021,13 @@ window._reprintAllMissing = function(){
   var skipped = window._skippedPages || [];
   var dups = window._lastDroppedDups || [];
   var allImgs = [];
-  skipped.forEach(function(s){ if(s.img) allImgs.push({img:s.img, pageNum:s.pageNum}); });
+  skipped.forEach(function(s){ if(s.img) allImgs.push({img:s.img, pageNum:s.pageNum, tokens:s.tokens}); });
   dups.forEach(function(d){
     (d.droppedImgs||[]).forEach(function(x){ if(x.img) allImgs.push(x); });
   });
   if(!allImgs.length){ pm('No images available to reprint.'); return; }
   var body = allImgs.map(function(x){
-    return '<div class="lp"><img src="'+x.img+'"><div class="pg">p.'+x.pageNum+'</div></div>';
+    return '<div class="lp"><img src="'+x.img+'">'+missingLabelOverlay(x.tokens)+'<div class="pg">p.'+x.pageNum+'</div></div>';
   }).join('');
   var w = window.open('','_blank','width=800,height=600');
   if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
@@ -2969,7 +3037,8 @@ window._reprintAllMissing = function(){
     +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.lp:last-child{page-break-after:avoid;}'
     +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;}'
+    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;z-index:10;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
     +'</style></head><body>'
     +body
@@ -3332,7 +3401,7 @@ async function printSkuSort(){
     } else {
       var src=(hiRes && s.order.pageIndex!=null && hiRes[s.order.pageIndex])
               ? hiRes[s.order.pageIndex] : s.order.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(s.order.skus, s.order.shelf)+'</div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+(s.order._ocrRescued?labelSkuOverlay(s.order.skus, s.order.shelf):'')+'</div>';
     }
   });
 
@@ -3469,7 +3538,7 @@ async function printByPacker(){
     bodyHtml+=dividerPage(grp.name, grp.color, grp.orders.length, grp.orders);
     grp.orders.forEach(function(o){
       var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(o.skus, o.shelf)+'</div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+(o._ocrRescued?labelSkuOverlay(o.skus, o.shelf):'')+'</div>';
     });
   });
 
@@ -3477,7 +3546,7 @@ async function printByPacker(){
     bodyHtml+=dividerPage('UNASSIGNED','#888',unassigned.length);
     unassigned.forEach(function(o){
       var src=(hiRes && o.pageIndex!=null && hiRes[o.pageIndex]) ? hiRes[o.pageIndex] : o.pageImg;
-      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+labelSkuOverlay(o.skus, o.shelf)+'</div>';
+      bodyHtml+='<div class="label-page"><img class="label-img" src="'+src+'"/>'+(o._ocrRescued?labelSkuOverlay(o.skus, o.shelf):'')+'</div>';
     });
   }
   pm('✓ '+(allPrintOrders.length)+' label(s) ready — opening print dialog…');
@@ -5586,6 +5655,21 @@ function ensureJsBarcode(){
     var s=document.createElement('script');
     s.src='https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js';
     s.onload=res; s.onerror=function(){ rej(new Error('Failed to load JsBarcode')); };
+    document.head.appendChild(s);
+  });
+}
+
+// Loaded ONLY when a page's text extraction found essentially nothing
+// (a narrow, confirmed case — flattened-image labels like some UPS Ground
+// Saver / USPS-hybrid PDFs where the tracking number was never real text
+// to begin with). Never loaded or run for the vast majority of pages that
+// parse fine via fast text extraction, so normal batch speed is unaffected.
+function ensureTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  return new Promise(function(res,rej){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
+    s.onload=res; s.onerror=function(){ rej(new Error('Failed to load Tesseract.js')); };
     document.head.appendChild(s);
   });
 }
