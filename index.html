@@ -2300,7 +2300,7 @@ async function parsePdf(file){
       } else {
         // Store skipped page info — cap image renders at 50 to avoid unbounded memory
         var imgSkip = null;
-        if(window._skippedPages.length < 50){
+        if(window._skippedPages.length < 500){
           var vpSkip = page.getViewport({scale: IMG_SCALE});
           var cSkip  = document.createElement('canvas');
           cSkip.width  = vpSkip.width;
