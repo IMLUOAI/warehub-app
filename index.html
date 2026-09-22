@@ -1314,7 +1314,7 @@ var CR = {
   USPS:   {c:'#00ff88', t:function(s){return /^9[0-9]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s)||/^70\d{14}$/.test(s);}},
   SWIFT:  {c:'#eab308', t:function(s){return /^SW/i.test(s);}},
   SpeedX: {c:'#ff3d5a', t:function(s){return /^(SPX|SDX)/i.test(s);}},
-  Uniuni: {c:'#ffb300', display:'UPS', t:function(s){return /^UUS/i.test(s);}},
+  Uniuni: {c:'#ffb300', display:'Uniuni', t:function(s){return /^(UUS|YWE\d)/i.test(s);}},
   LSO:    {c:'#fb923c', t:function(s){return /^(LSO|1L[0-9])/i.test(s);}},
   OnTrac: {c:'#38bdf8', t:function(s){return /^[CD]\d{14}$/.test(s);}},
   Amazon: {c:'#f59e0b', t:function(s){return /^(TBA|1DS)/i.test(s);}},
@@ -1550,6 +1550,18 @@ function matchTracking(words){
 
   var allText = words.map(function(w){return w.text;}).join(' ');
 
+  // Uniuni's real tracking number format — "YWE" + 14 digits, appears as
+  // a single clean token on pages with fuller metadata. Confirmed via
+  // real batch data (multiple examples: YWE00001561662034 etc.) — this is
+  // genuinely embedded text, not an image, so no OCR needed for this case.
+  for(var ywi=0; ywi<words.length; ywi++){
+    var ywMatch = clean(words[ywi].text).match(/^YWE\d{10,17}$/i);
+    if(ywMatch){
+      dbg('  Uniuni YWE tracking match: '+ywMatch[0]);
+      return ywMatch[0].toUpperCase();
+    }
+  }
+
 
   var hintFedEx  = /FedEx|fedex|FEDERAL\s*EXPRESS|FX\s*[0-9]|e-VS|E-VS|INTL\s*CONN\s*PLUS|ORIGIN\s*ID\s*:\s*RBDA/i.test(allText);
   var hintUPS    = /\bUPS\b|United\s*Parcel|1Z[A-Z0-9]{4,}/i.test(allText);
@@ -1604,6 +1616,39 @@ function matchTracking(words){
       }
     }
 
+    // Check the explicit "TRK#" number FIRST — it's the one Fedex prints
+    // as THE tracking number, always unique per package. The barcode-row
+    // digit-scan below is checked only as a fallback: on some domestic
+    // FedEx Home Delivery labels, that row's early digits are a STATIC
+    // account/facility prefix shared by every label from that account,
+    // padded with zeros — a substring-scan can match that static prefix
+    // and stop before ever reaching the real unique digits at the end,
+    // silently producing the SAME "tracking number" for many different
+    // real packages. Confirmed directly against real label data: pages
+    // with completely different recipients/addresses were all extracting
+    // to "963208040000000000000087" — a static, non-unique template
+    // match — while the label's own genuinely unique number (the TRK#
+    // one) sat right there unused.
+    var trkRow = words.filter(function(w){ return /^TRK#?$/i.test(w.text); });
+    if(trkRow.length){
+      var trkTop = trkRow[0].top;
+      var nearbyRows = rowKeys.filter(function(rk){ return rk >= trkTop && rk <= trkTop + 40; })
+        .sort(function(a,b){ return a-b; });
+      for(var tri=0; tri<nearbyRows.length; tri++){
+        var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
+          .map(function(w){return clean(w.text);}).join('');
+        var trkDigits = trkConcat.replace(/[^0-9]/g,'');
+        var trkM = trkDigits.match(/^8774\d{8}$/) || trkConcat.match(/8774\d{8}/);
+        if(trkM){
+          var trkFinal = (typeof trkM[0]==='string' ? trkM[0] : trkDigits).replace(/[^0-9]/g,'');
+          if(trkFinal.length===12){
+            dbg('  FedEx TRK# match (preferred, reliably unique): FEDEX-'+trkFinal);
+            return 'FEDEX-'+trkFinal;
+          }
+        }
+      }
+    }
+
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
       // Only rows visually starting with a FedEx barcode prefix (96xx or 93xx) —
@@ -1628,34 +1673,7 @@ function matchTracking(words){
         for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
           var fsub = fDigits.substr(fstart,flen);
           if(/^(96|61|74|75)/.test(fsub)){
-            for(var j=0;j<TPATS.length;j++){var m=fsub.match(TPATS[j].r);if(m){dbg('  FedEx barcode-row match: '+m[1]);return m[1];}}
-          }
-        }
-      }
-    }
-
-    // FedEx International (Connect Plus etc.) uses a different label
-    // template with no long barcode-digit row at all — just a plain
-    // "TRK#" followed by a 12-digit number starting with 8774, e.g.
-    // "8774 0420 2111". Domestic-format scanning above finds nothing on
-    // these, so without this fallback they were falling through to the
-    // Uniuni tall-page synthetic-ID logic — generating a FAKE ID for a
-    // label that actually has a real, scannable tracking number.
-    var trkRow = words.filter(function(w){ return /^TRK#?$/i.test(w.text); });
-    if(trkRow.length){
-      var trkTop = trkRow[0].top;
-      var nearbyRows = rowKeys.filter(function(rk){ return rk >= trkTop && rk <= trkTop + 40; })
-        .sort(function(a,b){ return a-b; });
-      for(var tri=0; tri<nearbyRows.length; tri++){
-        var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
-          .map(function(w){return clean(w.text);}).join('');
-        var trkDigits = trkConcat.replace(/[^0-9]/g,'');
-        var trkM = trkDigits.match(/^8774\d{8}$/) || trkConcat.match(/8774\d{8}/);
-        if(trkM){
-          var trkFinal = (typeof trkM[0]==='string' ? trkM[0] : trkDigits).replace(/[^0-9]/g,'');
-          if(trkFinal.length===12){
-            dbg('  FedEx International TRK# match: FEDEX-'+trkFinal);
-            return 'FEDEX-'+trkFinal;
+            for(var j=0;j<TPATS.length;j++){var m=fsub.match(TPATS[j].r);if(m){dbg('  FedEx barcode-row match (fallback): '+m[1]);return m[1];}}
           }
         }
       }
@@ -2197,10 +2215,13 @@ async function parsePdf(file){
           pm('⟳ OCR checking page '+p+' (image-based label, no extractable text)…');
           var ocrResult = await window.Tesseract.recognize(ocrImg, 'eng');
           var ocrText = (ocrResult && ocrResult.data && ocrResult.data.text) || '';
-          var ocrMatch = ocrText.match(/1Z[A-Z0-9]{14,18}/i);
+          var ocrMatchUPS = ocrText.match(/1Z[A-Z0-9]{14,18}/i);
+          var ocrMatchUniuni = ocrText.match(/YWE\d{10,17}/i);
+          var ocrMatch = ocrMatchUPS || ocrMatchUniuni;
+          var ocrCarrier = ocrMatchUPS ? 'UPS' : 'Uniuni';
           if(ocrMatch){
             var ocrTracking = ocrMatch[0].toUpperCase().replace(/\s/g,'');
-            dbg('  OCR rescued p'+p+' — found UPS tracking via image: '+ocrTracking);
+            dbg('  OCR rescued p'+p+' — found '+ocrCarrier+' tracking via image: '+ocrTracking);
             var ocrSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
             var ocrShelfW = words.filter(function(w){ return /^[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)?$/i.test(w.text) && w.text.indexOf('*')===-1; });
             var ocrSkus = ocrSkuW.map(function(w){
@@ -2209,7 +2230,7 @@ async function parsePdf(file){
             });
             if(!ocrSkus.length) ocrSkus = [{sku:'UNKNOWN', qty:1, scanned:0}];
             o = {
-              tracking: ocrTracking, carrier: 'UPS', hub: '',
+              tracking: ocrTracking, carrier: ocrCarrier, hub: '',
               dest: '', recipient: '', city: '', weight: '', ref: '',
               shelf: ocrShelfW.length ? ocrShelfW[0].text : '',
               skus: ocrSkus, status: 'pending', completedAt: null, labelDate: null,
@@ -2923,7 +2944,21 @@ function renderSkippedPanel(){
   panel.style.display = 'block';
   if(countEl) countEl.textContent = skipped.length+' label'+(skipped.length>1?'s':'')+' could not be identified — their images are shown below. Click PRINT MISSING LABELS to reprint them.';
 
-  listEl.innerHTML = skipped.map(function(s, idx){
+  // Sort the DISPLAY order by SKU (the first captured token, e.g.
+  // "X004CRFK99*1") so workers see every instance of the same item
+  // together instead of whatever random order the PDF pages happened to
+  // be in — the underlying window._skippedPages array itself is left
+  // untouched, since other functions (printMissingLabels, single-item
+  // print buttons) index into it directly by its original position.
+  var withIdx = skipped.map(function(s, idx){ return {s:s, idx:idx}; });
+  withIdx.sort(function(a, b){
+    var skuA = (a.s.tokens && a.s.tokens[0]) || '';
+    var skuB = (b.s.tokens && b.s.tokens[0]) || '';
+    return skuA.localeCompare(skuB);
+  });
+
+  listEl.innerHTML = withIdx.map(function(pair){
+    var s = pair.s, idx = pair.idx;
     var preview = s.tokens.filter(function(t){ return t && t.length > 1; }).slice(0, 5).join(' · ') || '(no readable text)';
     var imgHtml = s.img
       ? '<img src="'+s.img+'" style="width:160px;height:240px;object-fit:contain;object-position:top;display:block;border:1px solid var(--bdr);cursor:pointer;" onclick="printOneMissingLabel('+idx+')" title="Click to print this label" />'
@@ -2957,7 +2992,7 @@ function printOneMissingLabel(idx){
     +'body{background:#fff;display:flex;align-items:flex-start;justify-content:center;}'
     +'.lp{position:relative;width:4in;height:6in;}'
     +'img{width:4in;height:6in;object-fit:contain;object-position:top;}'
-    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.miss-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;height:6in;}}'
     +'</style></head><body>'
     +'<div class="lp"><img src="'+s.img+'">'+missingLabelOverlay(s.tokens)+'</div>'
@@ -2970,6 +3005,11 @@ function printMissingLabels(){
   var skipped = window._skippedPages || [];
   var withImg = skipped.filter(function(s){ return !!s.img; });
   if(!withImg.length){ pm('No missing label images to print.'); return; }
+  withImg.sort(function(a, b){
+    var skuA = (a.tokens && a.tokens[0]) || '';
+    var skuB = (b.tokens && b.tokens[0]) || '';
+    return skuA.localeCompare(skuB);
+  });
   var w = window.open('', '_blank', 'width=800,height=600');
   if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site.'); return; }
   var body = withImg.map(function(s){
@@ -2981,7 +3021,7 @@ function printMissingLabels(){
     +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.lp:last-child{page-break-after:avoid;}'
     +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.miss-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;z-index:10;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
     +'</style></head><body>'
@@ -3037,7 +3077,7 @@ window._reprintAllMissing = function(){
     +'.lp{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.lp:last-child{page-break-after:avoid;}'
     +'img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-    +'.miss-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.miss-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'.pg{position:absolute;bottom:4px;right:6px;font-family:monospace;font-size:9px;color:#999;background:rgba(255,255,255,.7);padding:1px 4px;z-index:10;}'
     +'@media print{@page{size:4in 6in;margin:0;}body{width:4in;}}'
     +'</style></head><body>'
@@ -3412,7 +3452,7 @@ async function printSkuSort(){
     +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;}'
     +'.label-page:last-child{page-break-after:avoid;}'
     +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;display:block;object-fit:contain;object-position:top left;image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;}'
-    +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.label-sku-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'.divider-page{display:flex;flex-direction:column;width:4in;height:6in;border:6px solid #000;background:#fff;}'
     +'.divider-header{background:#000;color:#fff;font-family:Arial,sans-serif;font-size:44px;font-weight:900;letter-spacing:2px;line-height:1.1;padding:22px 18px;text-align:center;word-break:break-word;flex-shrink:0;}'
     +'.divider-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;}'
@@ -3426,7 +3466,7 @@ async function printSkuSort(){
       +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
       +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-      +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+      +'.label-sku-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'}';
 
   // Populate the already-open window and trigger print
@@ -3571,7 +3611,7 @@ async function printByPacker(){
       +'image-rendering:-webkit-optimize-contrast;'
       +'image-rendering:crisp-edges;'
     +'}'
-    +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+    +'.label-sku-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     // Divider page — monochrome only (thermal printers ignore colour)
     +'.divider-page{'
       +'display:flex;flex-direction:column;'
@@ -3614,7 +3654,7 @@ async function printByPacker(){
       +'.label-page{width:4in;height:6in;position:relative;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;}'
       +'.label-page:last-child{page-break-after:avoid;}'
       +'.label-img{position:absolute;top:0;left:0;width:4in;height:6in;object-fit:contain;object-position:top left;}'
-      +'.label-sku-overlay{position:absolute;top:0;left:0;right:0;background:#000;color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
+      +'.label-sku-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#0ff;font-family:Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:1px;padding:6px 10px;text-align:center;z-index:10;word-break:break-word;}'
     +'}';
 
   var total=packerIds.reduce(function(s,pid){return s+packerGroups[pid].orders.length;},0)+unassigned.length;
