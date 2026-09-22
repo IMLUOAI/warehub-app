@@ -9617,6 +9617,49 @@ async function fbaBatchDelete(batchId, label){
 
 // ══════════════════════════════════════════════════════
 var fbaRecords = [];
+
+// Adjusts tracked inventory for a list of {sku, qty} items — direction -1
+// deducts (units leaving the warehouse via an FBA shipment), +1 adds back
+// (used when reconciling an edited shipment's old sku list before
+// applying its new one). Deducts from whichever tracked location has the
+// most on hand for that SKU, same approach used for order completion.
+function fbaAdjustInventory(skus, direction){
+  if(!skus || !skus.length || !window._inventoryData) return;
+  skus.forEach(function(s){
+    if(!s.sku) return;
+    var amount = (parseInt(s.qty)||0) * direction;
+    if(direction < 0){
+      // Deducting — find the location with the most on hand for this SKU.
+      var best = null;
+      Object.keys(window._inventoryData).forEach(function(loc){
+        var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        if(item && (parseInt(item.qty)||0) > 0 && (!best || (parseInt(item.qty)||0) > (parseInt(best.item.qty)||0))){
+          best = { loc: loc, item: item };
+        }
+      });
+      if(best){
+        best.item.qty = Math.max(0, (parseInt(best.item.qty)||0) + amount);
+        if(best.item.qty === 0){
+          window._inventoryData[best.loc].skus = window._inventoryData[best.loc].skus.filter(function(x){ return x.sku!==s.sku; });
+        }
+      }
+    } else {
+      // Adding back — restore to whichever location still has ANY record
+      // of this SKU (even qty 0, meaning it was just fully deducted), or
+      // the first tracked location holding it, so the reversal lands
+      // somewhere sensible rather than silently doing nothing.
+      var loc2 = Object.keys(window._inventoryData).find(function(l){
+        return ((window._inventoryData[l]||{}).skus||[]).some(function(x){ return x.sku===s.sku; });
+      });
+      if(loc2){
+        var item2 = window._inventoryData[loc2].skus.find(function(x){ return x.sku===s.sku; });
+        if(item2) item2.qty = (parseInt(item2.qty)||0) + amount;
+        else window._inventoryData[loc2].skus.push({sku:s.sku, name:'', qty:amount, unit:'PCS'});
+      }
+    }
+  });
+  if(typeof inventorySync === 'function') inventorySync();
+}
 var fbaReprints = [];   // persistent reprint queue — saved to warehub_fba_reprints
 var _fbaSkuSeq = 0;
 var _fbaEditingId = null;  // id of the logged record currently being edited, or null for a new entry
@@ -9715,6 +9758,13 @@ function fbaSubmit(){
       fbaClearForm();
       return;
     }
+    // Reconcile tracked inventory: restore the OLD sku quantities (this
+    // shipment's previous contribution), then deduct the NEW ones — same
+    // pattern used for editing a logged return.
+    var oldSkus = fbaRecords[idx].skus || [];
+    fbaAdjustInventory(oldSkus, +1); // add back
+    fbaAdjustInventory(skus, -1);    // deduct new
+
     fbaRecords[idx] = {
       id: _fbaEditingId, date: date, shipId: shipId, fc: fc, by: by,
       carrier: carrier, tracking: tracking, boxes: boxes||'', units: units||'',
@@ -9744,6 +9794,7 @@ function fbaSubmit(){
     skus:     skus
   };
 
+  fbaAdjustInventory(skus, -1); // deduct — these units are leaving the warehouse
   fbaRecords.unshift(rec);
   fbaSaveLocal();
   fbaClearForm();
@@ -10977,6 +11028,8 @@ function renderFbaLog(){
 }
 
 function fbaDelete(id){
+  var rec = fbaRecords.find(function(r){ return r.id===id; });
+  if(rec) fbaAdjustInventory(rec.skus, +1); // restore whatever this shipment had deducted
   fbaRecords = fbaRecords.filter(function(r){ return r.id!==id; });
   fbaSaveLocal();
   if(_fbaEditingId === id) fbaClearForm(); // was open in the edit form — exit edit mode
