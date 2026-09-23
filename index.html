@@ -1323,6 +1323,83 @@ var CR = {
 function dc(s){ for(var n in CR){ if(CR[n].t(s)) return CR[n].display || n; } return 'Unknown'; }
 function cc(c){ for(var n in CR){ if((CR[n].display||n)===c) return CR[n].c; } return '#4a6080'; }
 
+function whCleanAlnum(s){
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[|]/g,'I')
+    .replace(/[^A-Z0-9]/g,'');
+}
+
+function whDigitish(s){
+  return String(s || '')
+    .toUpperCase()
+    .replace(/[OQ]/g,'0')
+    .replace(/[IL|]/g,'1')
+    .replace(/[^0-9]/g,'');
+}
+
+function whPushTrackingCandidate(list, tracking, carrier, score, source){
+  if(!tracking) return;
+  tracking = String(tracking).toUpperCase().replace(/[^A-Z0-9-]/g,'');
+  if(!tracking || list.some(function(c){ return c.tracking === tracking; })) return;
+  list.push({tracking:tracking, carrier:carrier || dc(tracking), score:score || 0.5, source:source || 'regex'});
+}
+
+// Shared scanner/OCR fallback. This intentionally returns candidates, then
+// scores them, instead of trusting the first long number OCR happens to see.
+function whExtractTrackingCandidates(rawText){
+  var raw = String(rawText || '');
+  var upperRaw = raw.toUpperCase();
+  var compact = whCleanAlnum(raw);
+  var digits = whDigitish(raw);
+  var out = [];
+  var hintFedEx  = /FEDEX|FEDERAL\s*EXPRESS|\bTRK#|TRACKING\s*ID#|MSTR#/i.test(raw);
+  var hintDHL    = /\bDHL\b/i.test(raw);
+
+  function addRegex(source, re, carrier, score){
+    var m;
+    re.lastIndex = 0;
+    while((m = re.exec(source)) !== null){
+      whPushTrackingCandidate(out, m[1] || m[0], carrier, score, 'regex');
+      if(!re.global) break;
+    }
+  }
+
+  addRegex(compact, /(1Z[A-Z0-9]{14,18})/gi, 'UPS', 0.98);
+  addRegex(compact.replace(/^[ILO]Z/,'1Z'), /(1Z[A-Z0-9]{14,18})/gi, 'UPS', 0.9);
+  addRegex(compact, /(YWE\d{10,17})/gi, 'Uniuni', 0.98);
+  addRegex(compact, /(UUS[A-Z0-9]{10,22})/gi, 'Uniuni', 0.94);
+  addRegex(compact, /(GFUS[A-Z0-9]{10,22})/gi, 'GOFO', 0.98);
+  addRegex(compact, /(SPX[A-Z0-9]{6,22})/gi, 'SpeedX', 0.96);
+  addRegex(compact, /(SDX[A-Z0-9]{6,22})/gi, 'SpeedX', 0.96);
+  addRegex(compact, /(SWF?[A-Z0-9]{6,20})/gi, 'SWIFT', 0.88);
+  addRegex(compact, /(LSO[A-Z0-9]{6,20}|1L\d{10,18})/gi, 'LSO', 0.92);
+  addRegex(compact, /(TBA\d{10,18}|1DS\d{10,18})/gi, 'Amazon', 0.94);
+  addRegex(compact, /(GM\d{16,18}|JD\d{18,22})/gi, 'DHL', 0.92);
+
+  var explicitFedEx = upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*(\d{4}\s?\d{4}\s?\d{4})\b/i)
+                   || upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*(\d{12})\b/i);
+  if(explicitFedEx) whPushTrackingCandidate(out, explicitFedEx[1].replace(/\s+/g,''), 'FedEx', 0.99, 'fedex-label-field');
+
+  addRegex(digits, /(96\d{18,22}|61\d{17,20}|7[245]\d{14,18})/g, 'FedEx', hintFedEx ? 0.96 : 0.72);
+  if(!hintFedEx){
+    addRegex(digits, /(9[0-9]\d{18,20}|70\d{14})/g, 'USPS', 0.92);
+    addRegex(digits, /(\d{20,22})/g, 'USPS', 0.82);
+  } else {
+    addRegex(digits, /(9[0-9]\d{18,20}|70\d{14})/g, 'USPS', 0.55);
+  }
+  if(hintDHL) addRegex(digits, /(\d{10,11})/g, 'DHL', 0.8);
+
+  return out.sort(function(a,b){
+    return b.score - a.score || b.tracking.length - a.tracking.length;
+  });
+}
+
+function whExtractBestTracking(rawText){
+  var found = whExtractTrackingCandidates(rawText);
+  return found.length ? found[0] : null;
+}
+
 // Mirrors the backend's PLAN_LIMITS — server still enforces this for real;
 // this copy is just so the UI can show a clean prompt instead of letting
 // someone click into a tab and hit a raw API error.
@@ -2215,13 +2292,11 @@ async function parsePdf(file){
           pm('⟳ OCR checking page '+p+' (image-based label, no extractable text)…');
           var ocrResult = await window.Tesseract.recognize(ocrImg, 'eng');
           var ocrText = (ocrResult && ocrResult.data && ocrResult.data.text) || '';
-          var ocrMatchUPS = ocrText.match(/1Z[A-Z0-9]{14,18}/i);
-          var ocrMatchUniuni = ocrText.match(/YWE\d{10,17}/i);
-          var ocrMatch = ocrMatchUPS || ocrMatchUniuni;
-          var ocrCarrier = ocrMatchUPS ? 'UPS' : 'Uniuni';
-          if(ocrMatch){
-            var ocrTracking = ocrMatch[0].toUpperCase().replace(/\s/g,'');
-            dbg('  OCR rescued p'+p+' — found '+ocrCarrier+' tracking via image: '+ocrTracking);
+          var ocrBest = whExtractBestTracking(ocrText);
+          if(ocrBest){
+            var ocrTracking = ocrBest.tracking;
+            var ocrCarrier = ocrBest.carrier || dc(ocrTracking);
+            dbg('  OCR rescued p'+p+' — found '+ocrCarrier+' tracking via image: '+ocrTracking+' ('+ocrBest.source+', score '+ocrBest.score+')');
             var ocrSkuW = words.filter(function(w){ return /[A-Z0-9][A-Z0-9\-]{2,18}\*\d+/i.test(w.text); });
             var ocrShelfW = words.filter(function(w){ return /^[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)?$/i.test(w.text) && w.text.indexOf('*')===-1; });
             var ocrSkus = ocrSkuW.map(function(w){
@@ -2242,7 +2317,7 @@ async function parsePdf(file){
               _ocrRescued: true
             };
           } else {
-            dbg('  OCR ran for p'+p+' but found no UPS tracking number in the image.');
+            dbg('  OCR ran for p'+p+' but found no supported tracking number in the image.');
           }
         }catch(e){
           console.error('[OCR] failed for page '+p+':', e);
@@ -3943,8 +4018,13 @@ function doScan(raw){
     return stripped;
   }
   var scannedExtracted = extractFromGS1(scanned) || scanned;
+  var scanBest = whExtractBestTracking(scannedExtracted);
+  if(scanBest && scanBest.tracking) scannedExtracted = scanBest.tracking;
   var scannedNorm = norm(scannedExtracted);
   var rawNorm = norm(scanned); // keep original for fallback matching
+  var scanCandidateNorms = whExtractTrackingCandidates(scannedExtracted).map(function(c){ return norm(c.tracking); });
+  if(scanCandidateNorms.indexOf(scannedNorm) < 0) scanCandidateNorms.unshift(scannedNorm);
+  if(rawNorm !== scannedNorm && scanCandidateNorms.indexOf(rawNorm) < 0) scanCandidateNorms.push(rawNorm);
 
   // NOTE: rack scanning is handled entirely by its own dedicated input in the
   // Rack Map tab (see rackScanState/rack-scan-input) — nothing here ever sets
@@ -3955,7 +4035,7 @@ function doScan(raw){
 
   // Exact match (GS1-extracted)
   for(var i=0;i<orders.length;i++){
-    if(norm(orders[i].tracking)===scannedNorm){ order=orders[i]; break; }
+    if(scanCandidateNorms.indexOf(norm(orders[i].tracking)) >= 0){ order=orders[i]; break; }
   }
   // Exact match against raw scan (catches barcodes where GS1 extraction wasn't needed)
   if(!order && rawNorm !== scannedNorm){
@@ -3967,8 +4047,12 @@ function doScan(raw){
   if(!order){
     for(var i=0;i<orders.length;i++){
       var t = norm(orders[i].tracking);
-      if(t.length>=10 && scannedNorm.length>=10){
-        if(scannedNorm.indexOf(t)>=0 || t.indexOf(scannedNorm)>=0){ order=orders[i]; break; }
+      if(t.length>=10){
+        for(var ci=0; ci<scanCandidateNorms.length; ci++){
+          var c = scanCandidateNorms[ci];
+          if(c.length>=10 && (c.indexOf(t)>=0 || t.indexOf(c)>=0)){ order=orders[i]; break; }
+        }
+        if(order) break;
       }
     }
   }
