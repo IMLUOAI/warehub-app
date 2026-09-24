@@ -1072,6 +1072,7 @@ body{
           <div id="ac-top"></div>
           <div id="ac-track">← Waiting for order</div>
           <div id="ac-dest"></div>
+          <div id="ac-pick-guide"></div>
           <div id="checklist"></div>
           <div id="done-ov">
             <div style="font-size:48px;">✓</div>
@@ -1323,6 +1324,17 @@ var CR = {
 function dc(s){ for(var n in CR){ if(CR[n].t(s)) return CR[n].display || n; } return 'Unknown'; }
 function cc(c){ for(var n in CR){ if((CR[n].display||n)===c) return CR[n].c; } return '#4a6080'; }
 
+// ── Multi-carrier tracking-candidate extraction ──────────────────────
+// Used by both OCR (reading a rendered image) and scan-gun input matching.
+// Rather than trusting a single regex or the first plausible-looking
+// number, this scans for every known carrier's specific tracking-number
+// shape within a block of text, scores each candidate by how confident
+// the match is, and returns them ranked. This catches cases where a
+// barcode's raw scan output includes extra encoded data (other GS1
+// Application Identifiers, service codes, etc.) that doesn't form a
+// clean prefix/suffix around the real tracking number — a plain
+// substring check can miss those, but a carrier-shape regex still finds
+// the real number wherever it sits in the string.
 function whCleanAlnum(s){
   return String(s || '')
     .toUpperCase()
@@ -1345,8 +1357,6 @@ function whPushTrackingCandidate(list, tracking, carrier, score, source){
   list.push({tracking:tracking, carrier:carrier || dc(tracking), score:score || 0.5, source:source || 'regex'});
 }
 
-// Shared scanner/OCR fallback. This intentionally returns candidates, then
-// scores them, instead of trusting the first long number OCR happens to see.
 function whExtractTrackingCandidates(rawText){
   var raw = String(rawText || '');
   var upperRaw = raw.toUpperCase();
@@ -1381,6 +1391,27 @@ function whExtractTrackingCandidates(rawText){
                    || upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*(\d{12})\b/i);
   if(explicitFedEx) whPushTrackingCandidate(out, explicitFedEx[1].replace(/\s+/g,''), 'FedEx', 0.99, 'fedex-label-field');
 
+  // Bare "8774" + 8 digits — FedEx's TRK# format (seen on both domestic
+  // Home Delivery and International Connect Plus labels). The check above
+  // only catches this when the literal text "TRK#" is nearby, which finds
+  // it during label PARSING (reading the rendered page's text) but never
+  // during SCAN-GUN matching — a scanned barcode is raw encoded data with
+  // no "TRK#" label attached to it. Without this bare-digit pattern, any
+  // order stored with this tracking format could never be found by
+  // scanning its actual barcode, regardless of how it was originally
+  // extracted at import time.
+  // Position-based instead of prefix-based — the real, unique per-package
+  // FedEx number is always the LAST 12 digits of the barcode's full digit
+  // string; everything before it is a static account/facility/checksum
+  // prefix. Region varies those leading digits, so matching by any fixed
+  // prefix pattern keeps breaking — position within the string is the
+  // reliable part. Lower-confidence than the explicit "TRK#"-label match
+  // (which has real text context), since this applies to any long digit
+  // run regardless of source, but the substring comparison against real
+  // stored order tracking numbers later in the matching chain is what
+  // actually prevents a false-positive match, not this pattern being narrow.
+  if(digits.length >= 12) whPushTrackingCandidate(out, digits.slice(-12), 'FedEx', 0.8, 'last-12-digits');
+
   addRegex(digits, /(96\d{18,22}|61\d{17,20}|7[245]\d{14,18})/g, 'FedEx', hintFedEx ? 0.96 : 0.72);
   if(!hintFedEx){
     addRegex(digits, /(9[0-9]\d{18,20}|70\d{14})/g, 'USPS', 0.92);
@@ -1399,6 +1430,7 @@ function whExtractBestTracking(rawText){
   var found = whExtractTrackingCandidates(rawText);
   return found.length ? found[0] : null;
 }
+
 
 // Mirrors the backend's PLAN_LIMITS — server still enforces this for real;
 // this copy is just so the UI can show a clean prompt instead of letting
@@ -1715,7 +1747,12 @@ function matchTracking(words){
         var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
           .map(function(w){return clean(w.text);}).join('');
         var trkDigits = trkConcat.replace(/[^0-9]/g,'');
-        var trkM = trkDigits.match(/^8774\d{8}$/) || trkConcat.match(/8774\d{8}/);
+        // No fixed prefix required here — the "TRK#" text label itself is
+        // the confidence signal, and the first 4 digits vary by region
+        // (confirmed: seen both 8774 and 8776 on real labels, and told
+        // directly that the leading digits aren't fixed at all). Just
+        // take any 12-digit number sitting right next to "TRK#".
+        var trkM = trkDigits.match(/^\d{12}$/) || trkConcat.match(/\d{12}/);
         if(trkM){
           var trkFinal = (typeof trkM[0]==='string' ? trkM[0] : trkDigits).replace(/[^0-9]/g,'');
           if(trkFinal.length===12){
@@ -1746,13 +1783,18 @@ function matchTracking(words){
           });
         dbg('  FedEx multi-row expanded digits: ' + fDigits.slice(0,30));
       }
-      for(var flen=Math.min(fDigits.length,34);flen>=20;flen--){
-        for(var fstart=0;fstart+flen<=fDigits.length;fstart++){
-          var fsub = fDigits.substr(fstart,flen);
-          if(/^(96|61|74|75)/.test(fsub)){
-            for(var j=0;j<TPATS.length;j++){var m=fsub.match(TPATS[j].r);if(m){dbg('  FedEx barcode-row match (fallback): '+m[1]);return m[1];}}
-          }
-        }
+      // The real, unique per-package number is always the LAST 12 digits
+      // of this barcode row — everything before it is a static
+      // account/facility/checksum prefix shared by every label from that
+      // account (confirmed directly against real data: many different
+      // real packages all shared the same leading ~22 digits). Matching
+      // by fixed prefix digits kept breaking as regions vary those
+      // leading digits — position within the row is the reliable part,
+      // not any particular digit pattern.
+      if(fDigits.length >= 12){
+        var fLast12 = fDigits.slice(-12);
+        dbg('  FedEx barcode-row match (last 12 digits): ' + fLast12);
+        return fLast12;
       }
     }
   }
@@ -4018,10 +4060,21 @@ function doScan(raw){
     return stripped;
   }
   var scannedExtracted = extractFromGS1(scanned) || scanned;
+  // Also run the carrier-shape candidate extractor on the scanned input —
+  // catches cases where the scan gun's raw output has extra encoded data
+  // that doesn't form a clean prefix/suffix around the real tracking
+  // number, which a plain substring check on the GS1-stripped string can
+  // miss. If it finds a higher-confidence candidate, prefer that as the
+  // primary extracted value.
   var scanBest = whExtractBestTracking(scannedExtracted);
   if(scanBest && scanBest.tracking) scannedExtracted = scanBest.tracking;
   var scannedNorm = norm(scannedExtracted);
   var rawNorm = norm(scanned); // keep original for fallback matching
+
+  // Every plausible tracking-number candidate found in the scanned input,
+  // normalized — checked in addition to the single GS1-extracted value,
+  // so a barcode encoding multiple pieces of data still resolves to the
+  // right order even if GS1 stripping alone didn't isolate it cleanly.
   var scanCandidateNorms = whExtractTrackingCandidates(scannedExtracted).map(function(c){ return norm(c.tracking); });
   if(scanCandidateNorms.indexOf(scannedNorm) < 0) scanCandidateNorms.unshift(scannedNorm);
   if(rawNorm !== scannedNorm && scanCandidateNorms.indexOf(rawNorm) < 0) scanCandidateNorms.push(rawNorm);
@@ -4033,7 +4086,8 @@ function doScan(raw){
   // ── SHIPPING LABEL SCAN — completes order immediately ──
   var order = null;
 
-  // Exact match (GS1-extracted)
+  // Exact match against any extracted candidate (GS1-extracted, raw, or
+  // any carrier-shape candidate found in the scanned text)
   for(var i=0;i<orders.length;i++){
     if(scanCandidateNorms.indexOf(norm(orders[i].tracking)) >= 0){ order=orders[i]; break; }
   }
@@ -4043,7 +4097,8 @@ function doScan(raw){
       if(norm(orders[i].tracking)===rawNorm){ order=orders[i]; break; }
     }
   }
-  // Partial / embedded match (GS1-extracted) — handles long barcodes containing tracking
+  // Partial / embedded match — handles long barcodes containing tracking,
+  // checked against every extracted candidate, not just the one GS1 value
   if(!order){
     for(var i=0;i<orders.length;i++){
       var t = norm(orders[i].tracking);
@@ -4933,6 +4988,8 @@ function renderActiveCard(){
   if(!acTop) return;
 
   if(packState==='idle'){
+    var pickGuideElIdle = document.getElementById('ac-pick-guide');
+    if(pickGuideElIdle) pickGuideElIdle.innerHTML = '';
     if(!orders.length){
       acTop.innerHTML='';
       acTrack.innerHTML='<span style="color:var(--td);">Import a PDF batch first</span>';
@@ -4960,6 +5017,44 @@ function renderActiveCard(){
   acTrack.innerHTML='<span style="font-size:9px;color:var(--td);letter-spacing:1px;">TRACKING</span><br/>'
     +'<span style="font-size:12px;color:var(--ty,var(--tx));word-break:break-all;font-family:monospace;">'+o.tracking+'</span>';
   acDest.innerHTML='';
+
+  // Big, at-a-glance SKU + pick location callout — shown as soon as a
+  // label is scanned, so the packer immediately sees what to grab and
+  // exactly where from, without hunting through small text anywhere else
+  // on the page. Location comes from tracked inventory data (the real
+  // shelf a SKU is stocked at), not the order's own shelf field (which is
+  // the packed box's staging/sort destination, a different thing).
+  var pickGuideEl = document.getElementById('ac-pick-guide');
+  if(pickGuideEl){
+    if(packState==='verify-items' || packState==='scan-label'){
+      var seen = {};
+      var pickHtml = (o.skus||[]).filter(function(s){
+        if(seen[s.sku]) return false;
+        seen[s.sku] = true;
+        return true;
+      }).map(function(s){
+        var loc = '';
+        if(window._inventoryData){
+          Object.keys(window._inventoryData).some(function(l){
+            var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+            if(item && (parseInt(item.qty)||0) > 0){ loc = l; return true; }
+            return false;
+          });
+        }
+        return '<div style="display:flex;align-items:baseline;justify-content:center;gap:14px;flex-wrap:wrap;margin:6px 0;">'
+          + '<span style="font-size:32px;font-weight:900;color:var(--tx);font-family:monospace;letter-spacing:1px;">'+s.sku+'</span>'
+          + (loc
+              ? '<span style="font-size:32px;font-weight:900;color:var(--gn);font-family:monospace;">📍 '+loc+'</span>'
+              : '<span style="font-size:14px;font-weight:700;color:var(--td);">location unknown</span>')
+          + '</div>';
+      }).join('');
+      pickGuideEl.innerHTML = pickHtml
+        ? '<div style="text-align:center;padding:14px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;margin:10px 0;">'+pickHtml+'</div>'
+        : '';
+    } else {
+      pickGuideEl.innerHTML = '';
+    }
+  }
 
   if(packState==='verify-items'){
 
