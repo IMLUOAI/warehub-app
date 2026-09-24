@@ -4145,6 +4145,10 @@ function doScan(raw){
     bpErr(); flash('err');
     setErr('⚠ Already completed at '+order.completedAt);
     setFb('⚠ ALREADY DONE','var(--am)');
+    // Show what was packed for this order too, same as a fresh completion —
+    // useful for double-checking a re-scanned already-done label.
+    lastCompletedOrderForDisplay = order;
+    renderActiveCard();
     focusScan(); return;
   }
 
@@ -5070,16 +5074,20 @@ function renderActiveCard(){
   // on the page. Location comes from tracked inventory data (the real
   // shelf a SKU is stocked at), not the order's own shelf field (which is
   // the packed box's staging/sort destination, a different thing).
+  // Show whenever there's an active order being worked on — not gated on
+  // specific packState sub-values like 'verify-items'/'scan-label', which
+  // turned out to never actually be assigned anywhere in the app (a
+  // pre-existing dead condition, not something introduced here). o is
+  // already guaranteed non-null at this point (see the activeOrder guard
+  // above), so that alone is a reliable signal.
   var pickGuideEl = document.getElementById('ac-pick-guide');
-  if(pickGuideEl){
-    if(packState==='verify-items' || packState==='scan-label'){
-      pickGuideEl.innerHTML = buildPickGuideHtml(o);
-    } else {
-      pickGuideEl.innerHTML = '';
-    }
-  }
+  if(pickGuideEl) pickGuideEl.innerHTML = buildPickGuideHtml(o);
 
-  if(packState==='verify-items'){
+  // Same dead-condition issue as the pick guide above — packState never
+  // actually becomes 'verify-items' anywhere in the app, so this checklist
+  // has never been showing. verifySkus.length>0 is the real signal: there
+  // are items for this order still needing to be scanned/verified.
+  if(verifySkus && verifySkus.length){
 
     var grouped={};
     verifySkus.forEach(function(v){
