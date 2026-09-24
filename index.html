@@ -4021,6 +4021,7 @@ function mainScanKeyHandler(e){
 
 var packState = 'idle';
 var activeOrder = null;
+var lastCompletedOrderForDisplay = null; // kept briefly so the SKU/location pick guide doesn't vanish the instant an order completes
 var verifySkus = [];
 var _lastCompleteTime = {};  // per-packer map {packerId: timestamp} for elapsed calc
 
@@ -4127,6 +4128,16 @@ function doScan(raw){
     var stored = orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
     setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
     setFb('✗ NOT FOUND','var(--rd)');
+    // Full detail to the debug log — retrievable via the same "COPY DEBUG
+    // LOG" workflow already used for import diagnostics, since getting
+    // the exact scanned string any other way has been difficult.
+    dbg('═══ SCAN NOT FOUND ═══');
+    dbg('  Raw scanned input: "'+scanned+'"');
+    dbg('  GS1-extracted: "'+scannedExtracted+'"  (norm: "'+scannedNorm+'")');
+    dbg('  Raw norm: "'+rawNorm+'"');
+    dbg('  Candidates found in scan: '+JSON.stringify(scanCandidateNorms));
+    dbg('  All stored order trackings (norm): '+orders.map(function(o){return norm(o.tracking);}).join(', '));
+    dbg('═══════════════════════');
     focusScan(); return;
   }
 
@@ -4225,6 +4236,7 @@ function completeOrder(order, scannedTracking){
   if(typeof inventorySync === 'function') inventorySync();
 
   activeOrder=null; verifySkus=[];
+  lastCompletedOrderForDisplay = order; // shown briefly until the next scan starts
   setPackState('idle');
 
   document.getElementById('done-ov').classList.add('show');
@@ -4980,6 +4992,36 @@ function fmtMs(ms){
   return s<60?s+'s':Math.floor(s/60)+'m '+(s%60)+'s';
 }
 
+// Builds the big SKU + pick location callout HTML for a given order —
+// shared by the active-scan display and the brief post-completion display,
+// so a completed order's guide doesn't just vanish the instant it's done.
+function buildPickGuideHtml(order){
+  var seen = {};
+  var html = (order.skus||[]).filter(function(s){
+    if(seen[s.sku]) return false;
+    seen[s.sku] = true;
+    return true;
+  }).map(function(s){
+    var loc = '';
+    if(window._inventoryData){
+      Object.keys(window._inventoryData).some(function(l){
+        var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        if(item && (parseInt(item.qty)||0) > 0){ loc = l; return true; }
+        return false;
+      });
+    }
+    return '<div style="display:flex;align-items:baseline;justify-content:center;gap:14px;flex-wrap:wrap;margin:6px 0;">'
+      + '<span style="font-size:32px;font-weight:900;color:var(--tx);font-family:monospace;letter-spacing:1px;">'+s.sku+'</span>'
+      + (loc
+          ? '<span style="font-size:32px;font-weight:900;color:var(--gn);font-family:monospace;">📍 '+loc+'</span>'
+          : '<span style="font-size:14px;font-weight:700;color:var(--td);">location unknown</span>')
+      + '</div>';
+  }).join('');
+  return html
+    ? '<div style="text-align:center;padding:14px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;margin:10px 0;">'+html+'</div>'
+    : '';
+}
+
 function renderActiveCard(){
   var acTop=document.getElementById('ac-top');
   var acTrack=document.getElementById('ac-track');
@@ -4989,7 +5031,11 @@ function renderActiveCard(){
 
   if(packState==='idle'){
     var pickGuideElIdle = document.getElementById('ac-pick-guide');
-    if(pickGuideElIdle) pickGuideElIdle.innerHTML = '';
+    if(pickGuideElIdle){
+      pickGuideElIdle.innerHTML = lastCompletedOrderForDisplay
+        ? buildPickGuideHtml(lastCompletedOrderForDisplay)
+        : '';
+    }
     if(!orders.length){
       acTop.innerHTML='';
       acTrack.innerHTML='<span style="color:var(--td);">Import a PDF batch first</span>';
@@ -5027,30 +5073,7 @@ function renderActiveCard(){
   var pickGuideEl = document.getElementById('ac-pick-guide');
   if(pickGuideEl){
     if(packState==='verify-items' || packState==='scan-label'){
-      var seen = {};
-      var pickHtml = (o.skus||[]).filter(function(s){
-        if(seen[s.sku]) return false;
-        seen[s.sku] = true;
-        return true;
-      }).map(function(s){
-        var loc = '';
-        if(window._inventoryData){
-          Object.keys(window._inventoryData).some(function(l){
-            var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
-            if(item && (parseInt(item.qty)||0) > 0){ loc = l; return true; }
-            return false;
-          });
-        }
-        return '<div style="display:flex;align-items:baseline;justify-content:center;gap:14px;flex-wrap:wrap;margin:6px 0;">'
-          + '<span style="font-size:32px;font-weight:900;color:var(--tx);font-family:monospace;letter-spacing:1px;">'+s.sku+'</span>'
-          + (loc
-              ? '<span style="font-size:32px;font-weight:900;color:var(--gn);font-family:monospace;">📍 '+loc+'</span>'
-              : '<span style="font-size:14px;font-weight:700;color:var(--td);">location unknown</span>')
-          + '</div>';
-      }).join('');
-      pickGuideEl.innerHTML = pickHtml
-        ? '<div style="text-align:center;padding:14px 10px;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;margin:10px 0;">'+pickHtml+'</div>'
-        : '';
+      pickGuideEl.innerHTML = buildPickGuideHtml(o);
     } else {
       pickGuideEl.innerHTML = '';
     }
