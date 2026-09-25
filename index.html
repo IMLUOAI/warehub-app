@@ -5426,15 +5426,17 @@ async function floorRenderRackMap(){
 
     // Same large vertical warehouse-sign-style side label as the main
     // Rack Map, for consistency and distance legibility on the wall monitor.
-    var sideLabelW = Math.max(20, Math.min(30, z.w * 0.12));
-    var sideLabelFontSize = Math.max(14, Math.min(26, (z.h-ZHDR) * 0.12));
+    // Solid dark background (not the zone's own color) so it's always
+    // clearly distinct rather than blending in.
+    var sideLabelW = Math.max(24, Math.min(34, z.w * 0.14));
+    var sideLabelFontSize = Math.max(15, Math.min(28, (z.h-ZHDR) * 0.13));
     var sideLabelCx = z.x + sideLabelW/2;
     var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
     html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
-          + ' fill="'+col+'" opacity="0.85"/>';
+          + ' fill="#0a0e16" stroke="'+col+'" stroke-width="2"/>';
     html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
-          + ' text-anchor="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
-          + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="2"'
+          + ' text-anchor="middle" dominant-baseline="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
+          + ' fill="'+col+'" font-family="Arial,sans-serif" letter-spacing="2"'
           + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
   });
   svg.innerHTML = html;
@@ -7052,16 +7054,19 @@ function rackBuildSVG(cfg){
 
     // Large vertical side label — like a physical warehouse aisle sign,
     // mounted along the zone's left edge, readable from a distance
-    // without needing to squint at the small spot text.
-    var sideLabelW = Math.max(20, Math.min(30, z.w * 0.12));
-    var sideLabelFontSize = Math.max(14, Math.min(26, (z.h-ZHDR) * 0.12));
+    // without needing to squint at the small spot text. Solid dark
+    // background (not the zone's own color) so it's always clearly
+    // distinct, regardless of zone color or any spot-level highlighting
+    // (e.g. "has tracked inventory") that might otherwise blend with it.
+    var sideLabelW = Math.max(24, Math.min(34, z.w * 0.14));
+    var sideLabelFontSize = Math.max(15, Math.min(28, (z.h-ZHDR) * 0.13));
     var sideLabelCx = z.x + sideLabelW/2;
     var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
     html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
-          + ' fill="'+col+'" opacity="0.85"/>';
+          + ' fill="#0a0e16" stroke="'+col+'" stroke-width="2"/>';
     html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
-          + ' text-anchor="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
-          + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="2"'
+          + ' text-anchor="middle" dominant-baseline="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
+          + ' fill="'+col+'" font-family="Arial,sans-serif" letter-spacing="2"'
           + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
   });
 
