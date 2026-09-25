@@ -7058,16 +7058,21 @@ function rackBuildSVG(cfg){
     // background (not the zone's own color) so it's always clearly
     // distinct, regardless of zone color or any spot-level highlighting
     // (e.g. "has tracked inventory") that might otherwise blend with it.
-    var sideLabelW = Math.max(24, Math.min(34, z.w * 0.14));
-    var sideLabelFontSize = Math.max(15, Math.min(28, (z.h-ZHDR) * 0.13));
-    var sideLabelCx = z.x + sideLabelW/2;
-    var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
-    html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
-          + ' fill="#0a0e16" stroke="'+col+'" stroke-width="2"/>';
-    html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
-          + ' text-anchor="middle" dominant-baseline="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
-          + ' fill="'+col+'" font-family="Arial,sans-serif" letter-spacing="2"'
-          + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
+    try{
+      var sideLabelW = Math.max(24, Math.min(34, z.w * 0.14));
+      var sideLabelFontSize = Math.max(15, Math.min(28, (z.h-ZHDR) * 0.13));
+      var sideLabelCx = z.x + sideLabelW/2;
+      var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
+      console.log('[rack side-label]', prefix, {x:z.x, y:z.y, w:z.w, h:z.h, sideLabelW:sideLabelW, sideLabelFontSize:sideLabelFontSize, sideLabelCx:sideLabelCx, sideLabelCy:sideLabelCy});
+      html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
+            + ' fill="#0a0e16" stroke="'+col+'" stroke-width="2"/>';
+      html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
+            + ' text-anchor="middle" dominant-baseline="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
+            + ' fill="'+col+'" font-family="Arial,sans-serif" letter-spacing="2"'
+            + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
+    }catch(sideLabelErr){
+      console.error('[rack side-label] FAILED for zone', prefix, sideLabelErr);
+    }
   });
 
   // Add route path/arrow polylines (hidden by default)
