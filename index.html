@@ -5423,6 +5423,19 @@ async function floorRenderRackMap(){
         html += '</g>';
       }
     }
+
+    // Same large vertical warehouse-sign-style side label as the main
+    // Rack Map, for consistency and distance legibility on the wall monitor.
+    var sideLabelW = Math.max(20, Math.min(30, z.w * 0.12));
+    var sideLabelFontSize = Math.max(14, Math.min(26, (z.h-ZHDR) * 0.12));
+    var sideLabelCx = z.x + sideLabelW/2;
+    var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
+    html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
+          + ' fill="'+col+'" opacity="0.85"/>';
+    html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
+          + ' text-anchor="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
+          + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="2"'
+          + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
   });
   svg.innerHTML = html;
   floorHighlightRackActivity();
@@ -7036,6 +7049,20 @@ function rackBuildSVG(cfg){
         html += '</g>';
       }
     }
+
+    // Large vertical side label — like a physical warehouse aisle sign,
+    // mounted along the zone's left edge, readable from a distance
+    // without needing to squint at the small spot text.
+    var sideLabelW = Math.max(20, Math.min(30, z.w * 0.12));
+    var sideLabelFontSize = Math.max(14, Math.min(26, (z.h-ZHDR) * 0.12));
+    var sideLabelCx = z.x + sideLabelW/2;
+    var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
+    html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
+          + ' fill="'+col+'" opacity="0.85"/>';
+    html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
+          + ' text-anchor="middle" font-size="'+sideLabelFontSize.toFixed(1)+'" font-weight="900"'
+          + ' fill="#fff" font-family="Arial,sans-serif" letter-spacing="2"'
+          + ' transform="rotate(-90 '+sideLabelCx+' '+sideLabelCy+')">'+prefix+'</text>';
   });
 
   // Add route path/arrow polylines (hidden by default)
