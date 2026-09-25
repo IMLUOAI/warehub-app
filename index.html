@@ -6951,6 +6951,22 @@ function rackBuildSVG(cfg){
     + '<polygon points="0 0, 8 3, 0 6" fill="#0af"/>'
     + '</marker>'
     + '</defs>';
+
+  // Faint snap-grid overlay, visible only in edit mode — shows exactly
+  // what dragging snaps to, making it much easier to align zones
+  // consistently instead of eyeballing free-form positions.
+  if(_rackEditMode){
+    var GRID_VIS = 20; // must match the snap increment in rackZoneDragMove
+    html += '<g opacity="0.12" pointer-events="none">';
+    for(var gx=0; gx<=totalW; gx+=GRID_VIS){
+      html += '<line x1="'+gx+'" y1="0" x2="'+gx+'" y2="'+totalH+'" stroke="#888" stroke-width="0.5"/>';
+    }
+    for(var gy=0; gy<=totalH; gy+=GRID_VIS){
+      html += '<line x1="0" y1="'+gy+'" x2="'+totalW+'" y2="'+gy+'" stroke="#888" stroke-width="0.5"/>';
+    }
+    html += '</g>';
+  }
+
   zones.forEach(function(z, zi){
     var col = z.color || '#4a9eff';
     var colFaint = col + '22';
@@ -6989,6 +7005,14 @@ function rackBuildSVG(cfg){
       html += '<rect class="rack-resize-handle" data-zi="'+zi+'" x="'+(z.x+z.w-hs)+'" y="'+(z.y+z.h-hs)+'" width="'+hs+'" height="'+hs+'"'
             + ' fill="'+col+'" stroke="#fff" stroke-width="1" rx="2" style="cursor:nwse-resize;"'
             + ' onmousedown="rackZoneResizeStart(event,'+zi+')"/>';
+
+      // Reset-size button — top-right corner of the header, a direct fix
+      // for when drag-resizing goes wrong (too large, or squeezed too
+      // small to grab the resize handle comfortably again).
+      html += '<g onclick="event.stopPropagation();rackZoneResetSize('+zi+');" style="cursor:pointer;" title="Reset to natural size">'
+            + '<circle cx="'+(z.x+z.w-13)+'" cy="'+(z.y+13)+'" r="9" fill="rgba(0,0,0,0.35)" stroke="#fff" stroke-width="1"/>'
+            + '<text x="'+(z.x+z.w-13)+'" y="'+(z.y+17)+'" text-anchor="middle" font-size="12" fill="#fff" font-family="Arial,sans-serif">↺</text>'
+            + '</g>';
     }
 
     // Spot grid — each row can have a different number of spots
@@ -7163,13 +7187,21 @@ function rackZoneDragMove(evt){
   var z = _rackConfig.zones[_rackDrag.zi];
   var dx = p.x - _rackDrag.startX;
   var dy = p.y - _rackDrag.startY;
+  var GRID = 20; // snap increment — matches the visible grid overlay drawn in edit mode
+  var snap = function(n){ return Math.round(n/GRID)*GRID; };
   if(_rackDrag.mode==='move'){
-    z.x = Math.max(0, _rackDrag.origX + dx);
-    z.y = Math.max(0, _rackDrag.origY + dy);
+    z.x = snap(Math.max(0, _rackDrag.origX + dx));
+    z.y = snap(Math.max(0, _rackDrag.origY + dy));
   } else {
     var MIN = 60; // don't let a zone get so small the header/spots break
-    z.w = Math.max(MIN, _rackDrag.origW + dx);
-    z.h = Math.max(MIN, _rackDrag.origH + dy);
+    // Cap growth to the visible canvas (viewBox is 700x500) so a zone can
+    // never be dragged so large it swallows the rest of the layout and
+    // leaves other zones with no usable space to resize into — this had
+    // no upper bound before, letting exactly that happen.
+    var MAX_W = Math.max(MIN, 700 - z.x - 10);
+    var MAX_H = Math.max(MIN, 500 - z.y - 10);
+    z.w = snap(Math.min(MAX_W, Math.max(MIN, _rackDrag.origW + dx)));
+    z.h = snap(Math.min(MAX_H, Math.max(MIN, _rackDrag.origH + dy)));
   }
   rackBuildSVG(_rackConfig);
 }
@@ -7181,6 +7213,22 @@ function rackZoneDragEnd(){
     rackConfigSave(_rackConfig); // persists locally + syncs to the cloud
   }
   _rackDrag = null;
+}
+
+// Resets a zone to a natural size based on how many spots it actually
+// has — a direct fix for when drag-resizing goes wrong (a zone dragged
+// too large, or squeezed too small to comfortably grab its handle again),
+// without needing to fight the drag handle to recover it.
+function rackZoneResetSize(zi){
+  if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones[zi]) return;
+  var z = _rackConfig.zones[zi];
+  var SZ = 24, SGAP = 4, ZPPAD = 10, ZHDR = 26;
+  var rowSizes = rackGetRowSizes(z);
+  var maxRow = Math.max.apply(null, rowSizes);
+  z.w = ZPPAD*2 + maxRow*(SZ+SGAP) - SGAP;
+  z.h = ZPPAD*2 + ZHDR + rowSizes.length*(SZ+SGAP) - SGAP;
+  rackBuildSVG(_rackConfig);
+  rackConfigSave(_rackConfig);
 }
 
 /* ── Build legend ── */
@@ -7284,9 +7332,11 @@ function rackCfgAddZone(z){
   var defColor = z.color || defaultColors[idx % defaultColors.length];
 
   var row = document.createElement('div');
-  row.style.cssText = 'display:grid;grid-template-columns:70px 1fr 40px 1fr 54px 28px;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
+  row.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;';
   var rowSizesStr = rackGetRowSizes(z).join(',');
-  row.innerHTML =
+  var topRow = document.createElement('div');
+  topRow.style.cssText = 'display:grid;grid-template-columns:70px 1fr 40px 1fr 54px 28px;gap:6px;align-items:center;';
+  topRow.innerHTML =
     '<div>'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">PREFIX/ID</div>'
       +'<input class="rack-cfg-prefix" value="'+(z.prefix||'')+'" placeholder="A" maxlength="6" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:5px 6px;font-size:11px;font-family:inherit;outline:none;border-radius:3px;"/>'
@@ -7309,8 +7359,31 @@ function rackCfgAddZone(z){
     +'</div>'
     +'<div style="text-align:center;">'
       +'<div style="font-size:8px;color:var(--td);margin-bottom:3px;">DEL</div>'
-      +'<button onclick="this.closest(\'div[style]\').remove()" style="width:24px;height:24px;background:transparent;border:1px solid var(--bdr);color:var(--rd);border-radius:3px;cursor:pointer;font-size:13px;line-height:1;font-family:inherit;">✕</button>'
+      +'<button onclick="this.closest(\'.rack-cfg-zone-row\').remove()" style="width:24px;height:24px;background:transparent;border:1px solid var(--bdr);color:var(--rd);border-radius:3px;cursor:pointer;font-size:13px;line-height:1;font-family:inherit;">✕</button>'
     +'</div>';
+  row.appendChild(topRow);
+
+  // Exact position/size — the direct alternative to dragging, for anyone
+  // who wants precise, repeatable control instead of fiddling with the
+  // resize handle. Leave any field blank to keep its current dragged
+  // value (or let the layout auto-place it, for a brand-new zone).
+  var dimRow = document.createElement('div');
+  dimRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bdr);';
+  var dims = [
+    {cls:'rack-cfg-x', label:'X', val:z.x},
+    {cls:'rack-cfg-y', label:'Y', val:z.y},
+    {cls:'rack-cfg-w', label:'WIDTH', val:z.w},
+    {cls:'rack-cfg-h', label:'HEIGHT', val:z.h}
+  ];
+  dimRow.innerHTML = dims.map(function(d){
+    return '<div>'
+      +'<div style="font-size:7px;color:var(--td);margin-bottom:2px;letter-spacing:0.5px;">'+d.label+' (PX)</div>'
+      +'<input type="number" class="'+d.cls+'" value="'+(d.val!=null?d.val:'')+'" placeholder="auto" step="1"'
+      +' style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:4px 6px;font-size:10.5px;font-family:monospace;outline:none;border-radius:3px;"/>'
+    +'</div>';
+  }).join('');
+  row.appendChild(dimRow);
+  row.className = 'rack-cfg-zone-row';
 
   zonesEl.appendChild(row);
 }
@@ -7334,9 +7407,19 @@ function rackCfgSave(){
     var reverse = !!(row.querySelector('.rack-cfg-reverse')||{}).checked;
     if(!prefix || !name) return; // skip blank rows
     var existing = existingByPrefix[prefix] || {};
+    // Numeric position/size fields — a typed value takes precedence over
+    // whatever dragging had set, so this doubles as a direct way to fix a
+    // zone that got stuck too large/small from dragging, or to lay out a
+    // whole rack precisely without touching the mouse at all.
+    var xEl = row.querySelector('.rack-cfg-x'), yEl = row.querySelector('.rack-cfg-y');
+    var wEl = row.querySelector('.rack-cfg-w'), hEl = row.querySelector('.rack-cfg-h');
+    var xVal = xEl && xEl.value !== '' ? parseFloat(xEl.value) : existing.x;
+    var yVal = yEl && yEl.value !== '' ? parseFloat(yEl.value) : existing.y;
+    var wVal = wEl && wEl.value !== '' ? parseFloat(wEl.value) : existing.w;
+    var hVal = hEl && hEl.value !== '' ? parseFloat(hEl.value) : existing.h;
     zones.push({
       prefix:prefix, name:name, color:color, rowSizes:rowSizes, reverse:reverse,
-      x:existing.x, y:existing.y, w:existing.w, h:existing.h
+      x:xVal, y:yVal, w:wVal, h:hVal
     });
   });
 
