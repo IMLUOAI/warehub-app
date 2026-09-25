@@ -7063,7 +7063,6 @@ function rackBuildSVG(cfg){
       var sideLabelFontSize = Math.max(15, Math.min(28, (z.h-ZHDR) * 0.13));
       var sideLabelCx = z.x + sideLabelW/2;
       var sideLabelCy = z.y + ZHDR + (z.h-ZHDR)/2;
-      console.log('[rack side-label]', prefix, {x:z.x, y:z.y, w:z.w, h:z.h, sideLabelW:sideLabelW, sideLabelFontSize:sideLabelFontSize, sideLabelCx:sideLabelCx, sideLabelCy:sideLabelCy});
       html += '<rect x="'+z.x+'" y="'+(z.y+ZHDR)+'" width="'+sideLabelW+'" height="'+(z.h-ZHDR)+'"'
             + ' fill="#0a0e16" stroke="'+col+'" stroke-width="2"/>';
       html += '<text x="'+sideLabelCx+'" y="'+sideLabelCy+'"'
@@ -7268,6 +7267,26 @@ function rackZoneResetSize(zi){
   rackConfigSave(_rackConfig);
 }
 
+// Clears every zone's saved X/Y/Width/Height, letting the existing
+// auto-layout logic (in rackBuildSVG) regenerate a clean, properly-scaled
+// flow-grid layout from scratch — a direct recovery path for when a
+// layout ends up badly out of scale (e.g. coordinates typed in the wrong
+// magnitude via the numeric position fields), rather than fixing each
+// zone by hand.
+function rackResetAllPositions(){
+  if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length) return;
+  if(!confirm('Reset the position and size of all '+_rackConfig.zones.length+' zone(s)? '
+    + 'This regenerates a clean, properly-scaled layout from scratch (each zone re-sized to fit its actual spot count). '
+    + 'You can still drag zones into your preferred arrangement afterward.')) return;
+  _rackConfig.zones.forEach(function(z){
+    z.x = null; z.y = null; z.w = null; z.h = null;
+  });
+  rackBuildSVG(_rackConfig); // needsAutoLayout logic recomputes clean positions
+  rackConfigSave(_rackConfig);
+  rackCloseConfig();
+  pm('✓ All zone positions reset to a clean auto-layout.');
+}
+
 /* ── Build legend ── */
 function rackBuildLegend(cfg){
   var el = document.getElementById('rack-legend');
@@ -7404,6 +7423,13 @@ function rackCfgAddZone(z){
   // who wants precise, repeatable control instead of fiddling with the
   // resize handle. Leave any field blank to keep its current dragged
   // value (or let the layout auto-place it, for a brand-new zone).
+  //
+  // These are the map's own internal coordinate units, NOT screen
+  // pixels — a real layout typically stays in the 20-700 range (default
+  // canvas is 700 wide). A value typed at screen-pixel scale (thousands)
+  // silently breaks the whole map's scale — confirmed directly from a
+  // real case. max="2000" plus the "typically 20-700" hint below are
+  // both here specifically to prevent that.
   var dimRow = document.createElement('div');
   dimRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--bdr);';
   var dims = [
@@ -7414,8 +7440,8 @@ function rackCfgAddZone(z){
   ];
   dimRow.innerHTML = dims.map(function(d){
     return '<div>'
-      +'<div style="font-size:7px;color:var(--td);margin-bottom:2px;letter-spacing:0.5px;">'+d.label+' (PX)</div>'
-      +'<input type="number" class="'+d.cls+'" value="'+(d.val!=null?d.val:'')+'" placeholder="auto" step="1"'
+      +'<div style="font-size:7px;color:var(--td);margin-bottom:2px;letter-spacing:0.5px;" title="Map coordinate units, not screen pixels — typically 20-700 for a real layout">'+d.label+' (typ. 20-700)</div>'
+      +'<input type="number" class="'+d.cls+'" value="'+(d.val!=null?d.val:'')+'" placeholder="auto" step="1" min="0" max="2000"'
       +' style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:4px 6px;font-size:10.5px;font-family:monospace;outline:none;border-radius:3px;"/>'
     +'</div>';
   }).join('');
@@ -7448,12 +7474,22 @@ function rackCfgSave(){
     // whatever dragging had set, so this doubles as a direct way to fix a
     // zone that got stuck too large/small from dragging, or to lay out a
     // whole rack precisely without touching the mouse at all.
+    //
+    // Clamped to a sensible range — the map's internal coordinate system
+    // (viewBox) is much smaller than a typical screen, roughly 20-1500
+    // for any real layout. Without this clamp, a value typed at
+    // screen-pixel scale (e.g. 18000) silently made the whole canvas
+    // scale up 50-100x, making everything else (including any fixed-size
+    // element like the side label) shrink to a fraction of a visible
+    // pixel — confirmed directly from a real broken layout.
+    var DIM_MAX = 2000;
+    var clampDim = function(v){ return (v==null || isNaN(v)) ? v : Math.max(0, Math.min(DIM_MAX, v)); };
     var xEl = row.querySelector('.rack-cfg-x'), yEl = row.querySelector('.rack-cfg-y');
     var wEl = row.querySelector('.rack-cfg-w'), hEl = row.querySelector('.rack-cfg-h');
-    var xVal = xEl && xEl.value !== '' ? parseFloat(xEl.value) : existing.x;
-    var yVal = yEl && yEl.value !== '' ? parseFloat(yEl.value) : existing.y;
-    var wVal = wEl && wEl.value !== '' ? parseFloat(wEl.value) : existing.w;
-    var hVal = hEl && hEl.value !== '' ? parseFloat(hEl.value) : existing.h;
+    var xVal = clampDim(xEl && xEl.value !== '' ? parseFloat(xEl.value) : existing.x);
+    var yVal = clampDim(yEl && yEl.value !== '' ? parseFloat(yEl.value) : existing.y);
+    var wVal = clampDim(wEl && wEl.value !== '' ? parseFloat(wEl.value) : existing.w);
+    var hVal = clampDim(hEl && hEl.value !== '' ? parseFloat(hEl.value) : existing.h);
     zones.push({
       prefix:prefix, name:name, color:color, rowSizes:rowSizes, reverse:reverse,
       x:xVal, y:yVal, w:wVal, h:hVal
@@ -12309,7 +12345,10 @@ document.addEventListener('DOMContentLoaded', function(){
       </div>
 
       <!-- Zone list -->
-      <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;">ZONES <span style="font-size:9px;letter-spacing:0;font-weight:400;color:var(--td);">— each zone becomes a labeled section on the map</span></div>
+      <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span>ZONES <span style="font-size:9px;letter-spacing:0;font-weight:400;color:var(--td);">— each zone becomes a labeled section on the map</span></span>
+        <button onclick="rackResetAllPositions()" style="font-size:9px;letter-spacing:0;padding:4px 10px;background:transparent;border:1px solid var(--rd);color:var(--rd);border-radius:5px;cursor:pointer;font-family:inherit;white-space:nowrap;" title="Clears every zone's X/Y/Width/Height so the layout auto-regenerates cleanly — use this to recover from a badly out-of-scale layout">↺ Reset All Positions</button>
+      </div>
       <div id="rack-cfg-zones" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
       <button onclick="rackCfgAddZone()" style="width:100%;padding:9px;background:transparent;border:1px dashed var(--bdr);color:var(--cy);font-size:11px;font-family:inherit;cursor:pointer;border-radius:6px;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--cy)'" onmouseout="this.style.borderColor='var(--bdr)'">+ Add Zone</button>
 
