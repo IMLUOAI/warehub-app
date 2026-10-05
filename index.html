@@ -742,6 +742,29 @@ body{
             background:var(--cy,#818cf8);border:none;color:#0a0f18;font-family:inherit;
           ">Add Webhook</button>
 
+          <!-- Per-tenant ERP connectors -->
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">ERP CONNECTORS</div>
+          <div style="font-size:10px;color:var(--td);margin-bottom:10px;line-height:1.5;">
+            Connect your own warehouse system with <b>your</b> API credentials. Each account uses its own keys — nothing is shared across customers.
+          </div>
+          <div id="connectors-list" style="margin-bottom:12px;"></div>
+          <div style="background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:8px;">Lingxing WMS (xlwms)</div>
+            <input id="xlwms-app-key" type="text" placeholder="App Key" autocomplete="off" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:6px;box-sizing:border-box;
+              background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+            <input id="xlwms-app-secret" type="password" placeholder="App Secret" autocomplete="off" style="
+              width:100%;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:8px;box-sizing:border-box;
+              background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+            "/>
+            <button onclick="connectorSaveXlwms()" style="
+              width:100%;padding:9px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
+              background:linear-gradient(135deg,#4a9eff,#c77dff);border:none;color:#fff;font-family:inherit;
+            ">Save / Update Lingxing connection</button>
+            <div id="connector-xlwms-status" style="font-size:10px;color:var(--td);margin-top:6px;min-height:14px;"></div>
+          </div>
+
           <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">API REFERENCE</div>
           <div style="font-size:10px;color:var(--td);line-height:1.7;font-family:monospace;background:var(--bg,#0a0f18);padding:10px;border-radius:6px;">
             GET  /api/v1/orders?status=pending<br/>
@@ -923,11 +946,10 @@ body{
     <button class="tab"     data-view="pack"     onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
     <button class="tab"     data-view="dash"     onclick="gv('dash')" data-i18n="nav_dash">Dashboard</button>
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')" data-i18n="nav_stats">📊 Stats</button>
-    <button class="tab"     data-view="floor"    onclick="gv('floor')" data-i18n="nav_floor">Floor Display</button>
+    <button class="tab"     data-view="locations" onclick="gv('locations')" data-i18n="nav_locations">📍 Locations</button>
     <button class="tab"     data-view="returns"  onclick="gv('returns')" data-i18n="nav_returns">📦 Returns</button>
     <button class="tab"     data-view="receiving" onclick="gv('receiving')" data-i18n="nav_receiving">📥 Receiving</button>
     <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')" data-i18n="nav_vehicle">🚗 Vehicle</button>
-    <button class="tab" data-view="rackmap" onclick="gv('rackmap')" data-i18n="nav_rackmap">🗺 Rack Map</button>
     <button class="tab" data-view="fba" onclick="gv('fba')" data-i18n="nav_fba">📤 FBA Outbound</button>
   </div>
 </div>
@@ -1295,47 +1317,46 @@ body{
     </div>
   </div>
 
-  <!-- ══ FLOOR DISPLAY ══ -->
-  <div id="view-floor" class="view" style="display:flex;flex-direction:column;padding:16px 18px;">
-    <div style="padding:16px 18px;display:flex;flex-direction:column;flex:1;min-height:0;">
-    <div id="floor" style="padding:16px 18px;">
-      <div id="fnum" style="color:var(--cy);">–</div>
-      <div id="fsub">ORDERS REMAINING TODAY</div>
-      <div id="fbar"><div id="fbarf"></div></div>
-      <div class="frow" id="f-cars" style="margin-bottom:4px;"></div>
-      <!-- Packer live board -->
-      <div style="font-size:9px;letter-spacing:4px;color:var(--td);margin-top:4px;">PACKER BOARD</div>
-      <div class="frow" id="f-packers"></div>
-    </div>
-
-    <!-- Live rack map + pick queue + activity ticker -->
-    <div style="display:flex;gap:16px;flex:1;min-height:0;margin-top:12px;flex-wrap:wrap;">
-      <div style="flex:3;min-width:400px;display:flex;flex-direction:column;min-height:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:12px;letter-spacing:4px;color:var(--td);">LIVE PICKING ACTIVITY</div>
-          <div style="display:flex;gap:18px;font-size:13px;color:var(--tx);font-weight:600;">
-            <span><span style="display:inline-block;width:14px;height:14px;background:#0ff;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Needs picking</span>
-            <span><span style="display:inline-block;width:14px;height:14px;background:#ffd700;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Pending order</span>
-            <span><span style="display:inline-block;width:14px;height:14px;background:#68d391;border-radius:3px;margin-right:6px;vertical-align:-2px;"></span>Done</span>
+  <!-- ══ LOCATIONS (list + SKU search — no visual map) ══ -->
+  <div id="view-locations" class="view" style="display:flex;flex-direction:column;padding:16px 18px;overflow-y:auto;">
+    <div style="max-width:900px;margin:0 auto;width:100%;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">INVENTORY</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">📍 Locations</div>
+          <div style="font-size:11px;color:var(--td);margin-top:4px;line-height:1.5;max-width:420px;">
+            SKU → bin locations from Lingxing sync and label imports. Pack Station uses this map first, then the order’s shelf from the label.
           </div>
         </div>
-        <div style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);padding:10px;">
-          <svg id="floor-rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
-          <div id="floor-rack-empty" style="display:none;text-align:center;padding:30px;color:var(--td);font-size:11px;">No rack layout configured yet — set one up in Rack Map.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" id="loc-xlwms-sync-btn" onclick="xlwmsSyncInventoryNow()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">📍 SYNC FROM LINGXING</button>
+          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
+          <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
         </div>
       </div>
-      <div style="flex:1;min-width:280px;display:flex;flex-direction:column;min-height:0;gap:12px;">
-        <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
-          <div style="font-size:12px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">🎯 PICK QUEUE — GO GET THESE</div>
-          <div id="floor-pick-queue" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+      <div id="loc-sync-status" style="font-size:10px;color:var(--td);margin-bottom:10px;min-height:14px;"></div>
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="loc-search" placeholder="Search SKU or location…" oninput="locationsSearch(this.value)" style="
+          flex:1;min-width:200px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);
+          padding:10px 12px;font-size:13px;font-family:inherit;outline:none;border-radius:8px;
+        "/>
+        <span id="loc-stats" style="font-size:11px;color:var(--td);white-space:nowrap;"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div style="border:1px solid var(--bdr);border-radius:10px;background:var(--sur);overflow:hidden;min-height:280px;">
+          <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);font-size:10px;letter-spacing:2px;color:var(--td);">LOCATION → SKUs</div>
+          <div id="loc-by-location" style="max-height:420px;overflow:auto;padding:8px;"></div>
         </div>
-        <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
-          <div style="font-size:12px;letter-spacing:4px;color:var(--td);margin-bottom:6px;">RECENT ACTIVITY</div>
-          <div id="floor-ticker" style="flex:1;overflow:auto;border:1px solid var(--bdr);border-radius:8px;background:var(--sur);display:flex;flex-direction:column;"></div>
+        <div style="border:1px solid var(--bdr);border-radius:10px;background:var(--sur);overflow:hidden;min-height:280px;">
+          <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);font-size:10px;letter-spacing:2px;color:var(--td);">🎯 PENDING PICKS BY LOCATION</div>
+          <div id="loc-pick-queue" style="max-height:420px;overflow:auto;padding:8px;"></div>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Legacy Floor Display removed (Option C). Keep empty stub id for any old refs. -->
+  <div id="view-floor" class="view" style="display:none!important;"></div>
 
 </div><!-- #app -->
 
@@ -1549,14 +1570,15 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
-  if(name==='rackmap'){ rackConfigLoad(); rackClearHighlight(); if(orders.length) rackHighlightSpots(); }
+  if(name==='locations'){ renderLocations(); }
+  if(name==='rackmap'){ /* legacy map removed — redirect */ gv('locations'); return; }
+  if(name==='floor'){ /* legacy floor removed — redirect */ gv('locations'); return; }
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
-  if(name==='floor')  { renderFloor(); floorPoll(); }
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
   if(name==='receiving'){ recvInitView(); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
@@ -1607,8 +1629,8 @@ function dzSetParsingGlow(isParsing){
 var I18N = {
   en: {
     nav_import: 'Import', nav_packers: 'Packers', nav_pack: 'Pack Station',
-    nav_dash: 'Dashboard', nav_stats: '📊 Stats', nav_floor: 'Floor Display',
-    nav_returns: '📦 Returns', nav_receiving: '📥 Receiving', nav_vehicle: '🚗 Vehicle', nav_rackmap: '🗺 Rack Map',
+    nav_dash: 'Dashboard', nav_stats: '📊 Stats', nav_locations: '📍 Locations', nav_floor: '📍 Locations',
+    nav_returns: '📦 Returns', nav_receiving: '📥 Receiving', nav_vehicle: '🚗 Vehicle', nav_rackmap: '📍 Locations',
     nav_fba: '📤 FBA Outbound',
 
     pack_title: 'PACK STATION — 2-STEP VERIFY',
@@ -1621,8 +1643,8 @@ var I18N = {
   },
   zh: {
     nav_import: '匯入', nav_packers: '打包員', nav_pack: '打包站',
-    nav_dash: '儀表板', nav_stats: '📊 統計', nav_floor: '現場顯示',
-    nav_returns: '📦 退貨', nav_receiving: '📥 收貨', nav_vehicle: '🚗 車輛', nav_rackmap: '🗺 貨架地圖',
+    nav_dash: '儀表板', nav_stats: '📊 統計', nav_locations: '📍 庫位', nav_floor: '📍 庫位',
+    nav_returns: '📦 退貨', nav_receiving: '📥 收貨', nav_vehicle: '🚗 車輛', nav_rackmap: '📍 庫位',
     nav_fba: '📤 FBA 出貨',
 
     pack_title: '打包站 — 兩步驟驗證',
@@ -1635,8 +1657,8 @@ var I18N = {
   },
   es: {
     nav_import: 'Importar', nav_packers: 'Empacadores', nav_pack: 'Estación de Empaque',
-    nav_dash: 'Panel', nav_stats: '📊 Estadísticas', nav_floor: 'Pantalla de Planta',
-    nav_returns: '📦 Devoluciones', nav_receiving: '📥 Recepción', nav_vehicle: '🚗 Vehículo', nav_rackmap: '🗺 Mapa de Estantes',
+    nav_dash: 'Panel', nav_stats: '📊 Estadísticas', nav_locations: '📍 Ubicaciones', nav_floor: '📍 Ubicaciones',
+    nav_returns: '📦 Devoluciones', nav_receiving: '📥 Recepción', nav_vehicle: '🚗 Vehículo', nav_rackmap: '📍 Ubicaciones',
     nav_fba: '📤 Envío FBA',
 
     pack_title: 'ESTACIÓN DE EMPAQUE — VERIFICACIÓN EN 2 PASOS',
@@ -4500,8 +4522,13 @@ function userMenuPopulate(){
   if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   var apiBtn = document.getElementById('user-menu-api-btn');
   if(apiBtn) apiBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
-  var xlwmsPanel = document.getElementById('xlwms-sync-panel');
-  if(xlwmsPanel) xlwmsPanel.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
+  // XLWMS sync panel only when this tenant has connected their own credentials
+  if(typeof connectorsRender === 'function' && window._tenantRole === 'owner'){
+    connectorsRender(); // sets _xlwmsConnected + panel visibility
+  } else {
+    var xlwmsPanel = document.getElementById('xlwms-sync-panel');
+    if(xlwmsPanel) xlwmsPanel.style.display = 'none';
+  }
   applyPlanUIGating();
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
@@ -4717,6 +4744,7 @@ function apiAccessOpen(){
   if(dd) dd.style.display = 'none';
   apiKeysRender();
   webhooksRender();
+  connectorsRender();
 }
 function apiAccessClose(){
   var m = document.getElementById('api-access-modal');
@@ -4799,6 +4827,84 @@ async function webhookDelete(id){
   if(!confirm('Remove this webhook?')) return;
   await window.warehubApi('DELETE', '/api/integrations/webhooks/'+id).catch(function(){});
   webhooksRender();
+}
+
+// ── Per-tenant ERP connectors ─────────────────────────────────────
+window._xlwmsConnected = false;
+
+async function connectorsRender(){
+  var list = document.getElementById('connectors-list');
+  if(!list) return;
+  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
+  var result = await window.warehubApi('GET', '/api/integrations/connectors').catch(function(){ return null; });
+  if(!result){
+    list.innerHTML = '<div style="font-size:11px;color:#f87171;">Could not load connectors. Run integrations_migration.sql if this is a new install.</div>';
+    window._xlwmsConnected = false;
+    updateXlwmsPanelVisibility();
+    return;
+  }
+  var items = result.connectors || [];
+  window._xlwmsConnected = items.some(function(c){ return c.provider === 'xlwms' && c.active && c.has_credentials; });
+  updateXlwmsPanelVisibility();
+
+  if(!items.length){
+    list.innerHTML = '<div style="font-size:11px;color:var(--td);">No connectors saved yet — add Lingxing credentials below.</div>';
+    return;
+  }
+  var html = '';
+  items.forEach(function(c){
+    var syncInfo = c.last_sync_at
+      ? ('Last sync: ' + c.last_sync_at + (c.last_sync_status && c.last_sync_status !== 'ok' ? ' · ' + c.last_sync_status : ' · ok'))
+      : 'Never synced';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-size:12px;font-weight:700;color:var(--tx);">' + (c.display_name || c.provider) + ' <span style="font-size:10px;color:var(--td);font-weight:500;">(' + c.provider + ')</span></div>'
+      +   '<div style="font-size:10px;color:var(--td);">' + syncInfo + '</div>'
+      + '</div>'
+      + '<button onclick="connectorDelete(\'' + c.id + '\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Disconnect</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function updateXlwmsPanelVisibility(){
+  var panel = document.getElementById('xlwms-sync-panel');
+  if(!panel) return;
+  // Only show sync buttons when this tenant has connected their own xlwms account
+  panel.style.display = (window._tenantRole === 'owner' && window._xlwmsConnected) ? 'flex' : 'none';
+}
+
+async function connectorSaveXlwms(){
+  var keyEl = document.getElementById('xlwms-app-key');
+  var secEl = document.getElementById('xlwms-app-secret');
+  var status = document.getElementById('connector-xlwms-status');
+  var appKey = (keyEl && keyEl.value || '').trim();
+  var appSecret = (secEl && secEl.value || '').trim();
+  if(!appKey || !appSecret){
+    if(status){ status.style.color = '#f87171'; status.textContent = 'Both App Key and App Secret are required.'; }
+    return;
+  }
+  if(status){ status.style.color = 'var(--td)'; status.textContent = 'Saving…'; }
+  var result = await window.warehubApi('POST', '/api/integrations/connectors', {
+    provider: 'xlwms',
+    display_name: 'Lingxing WMS',
+    app_key: appKey,
+    app_secret: appSecret
+  }).catch(function(e){ return { error: e.message }; });
+  if(!result || result.error){
+    if(status){ status.style.color = '#f87171'; status.textContent = (result && result.error) || 'Save failed'; }
+    return;
+  }
+  if(status){ status.style.color = '#4caf80'; status.textContent = '✓ Connected. You can now use SYNC FROM XLWMS on the Import tab.'; }
+  if(keyEl) keyEl.value = '';
+  if(secEl) secEl.value = '';
+  connectorsRender();
+}
+
+async function connectorDelete(id){
+  if(!confirm('Disconnect this ERP? Sync buttons will be hidden until you reconnect.')) return;
+  await window.warehubApi('DELETE', '/api/integrations/connectors/' + id).catch(function(){});
+  connectorsRender();
 }
 
 // ── Out of Stock ───────────────────────────────────────────────────
@@ -5043,30 +5149,40 @@ async function xlwmsSyncNow(){
 // Rack Map's SKU search reflects the real ERP-tracked locations instead of
 // relying solely on manually-logged return put-aways.
 async function xlwmsSyncInventoryNow(){
-  var btn = document.getElementById('xlwms-inv-sync-btn');
-  var status = document.getElementById('xlwms-inv-sync-status');
-  btn.disabled = true;
-  btn.textContent = '⟳ Syncing…';
-  status.style.display = 'block';
-  status.textContent = 'Pulling bin-level inventory from xlwms (last 180 days of stock movement, deriving current locations)…';
-  status.style.color = 'var(--td)';
+  var btn = document.getElementById('xlwms-inv-sync-btn') || document.getElementById('loc-xlwms-sync-btn');
+  var status = document.getElementById('xlwms-inv-sync-status') || document.getElementById('loc-sync-status');
+  if(btn){ btn.disabled = true; btn.textContent = '⟳ Syncing…'; }
+  if(status){
+    status.style.display = 'block';
+    status.textContent = 'Pulling bin-level inventory from Lingxing (deriving current locations)…';
+    status.style.color = 'var(--td)';
+  }
   var result = await window.warehubApi('POST', '/api/integrations/xlwms/sync-inventory', {})
     .catch(function(e){ return { error: e.message }; });
-  btn.disabled = false;
-  btn.textContent = '📍 SYNC BIN LOCATIONS';
+  if(btn){ btn.disabled = false; btn.textContent = '📍 SYNC FROM LINGXING'; }
   if(!result || result.error){
     var detail = (result && result.error) || 'Sync failed — check console/Worker logs.';
     if(result && result.code) detail += ' (code: ' + result.code + ')';
     if(result && result.raw) detail += ' — ' + result.raw;
-    status.textContent = '✗ ' + detail;
-    status.style.color = '#f87171';
+    if(status){ status.textContent = '✗ ' + detail; status.style.color = '#f87171'; }
     return;
   }
-  status.textContent = '✓ Synced ' + (result.locations||0) + ' location(s), ' + (result.skus||0) + ' SKU record(s) from xlwms. Rack Map\'s SKU search now reflects this.';
-  status.style.color = '#4caf80';
-  // Refresh the cached copy immediately if Rack Map has already loaded one
-  // this session, so the new data is usable without a page reload.
-  if(typeof rackConfigLoad === 'function') rackConfigLoad();
+  if(status){
+    status.textContent = '✓ Synced ' + (result.locations||0) + ' location(s), ' + (result.skus||0) + ' SKU record(s) from Lingxing.';
+    status.style.color = '#4caf80';
+  }
+  // Reload inventory into _inventoryData from cloud settings, then refresh UI
+  try {
+    if(typeof window.warehubApi === 'function'){
+      var settingsResult = await window.warehubApi('GET', '/api/settings').catch(function(){ return null; });
+      var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
+      if(serverInv){
+        window._inventoryData = serverInv;
+        try { localStorage.setItem('warehub_inventory', JSON.stringify(serverInv)); } catch(e){}
+      }
+    }
+  } catch(e){}
+  if(typeof renderLocations === 'function') renderLocations();
 }
 
 // Close menu when clicking outside
@@ -5086,25 +5202,134 @@ function fmtMs(ms){
 // Builds the big SKU + pick location callout HTML for a given order —
 // shared by the active-scan display and the brief post-completion display,
 // so a completed order's guide doesn't just vanish the instant it's done.
+// ── Locations tab (Option C: list + search, no visual map) ─────────
+function locationsGetInventory(){
+  return window._inventoryData && typeof window._inventoryData === 'object' ? window._inventoryData : {};
+}
+
+function renderLocations(){
+  var inv = locationsGetInventory();
+  var q = ((document.getElementById('loc-search') || {}).value || '').trim().toUpperCase();
+  locationsRenderByLocation(inv, q);
+  locationsRenderPickQueue(q);
+  var locCount = Object.keys(inv).length;
+  var skuCount = 0;
+  Object.keys(inv).forEach(function(loc){
+    skuCount += ((inv[loc] && inv[loc].skus) || []).length;
+  });
+  var stats = document.getElementById('loc-stats');
+  if(stats) stats.textContent = locCount + ' location(s) · ' + skuCount + ' SKU row(s)';
+}
+
+function locationsSearch(val){
+  renderLocations();
+}
+
+function locationsRenderByLocation(inv, q){
+  var el = document.getElementById('loc-by-location');
+  if(!el) return;
+  var locs = Object.keys(inv).sort();
+  if(!locs.length){
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;line-height:1.6;">No inventory locations yet.<br/>Sync from Lingxing or import a CSV / receive stock.</div>';
+    return;
+  }
+  var html = '';
+  locs.forEach(function(loc){
+    var skus = ((inv[loc] && inv[loc].skus) || []).filter(function(s){
+      if(!q) return true;
+      return (s.sku || '').toUpperCase().indexOf(q) >= 0 || loc.toUpperCase().indexOf(q) >= 0;
+    });
+    if(q && !skus.length && loc.toUpperCase().indexOf(q) < 0) return;
+    if(q && !skus.length) return;
+    html += '<div style="margin-bottom:10px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;">'
+      + '<div style="padding:8px 10px;background:var(--bg);font-family:monospace;font-weight:700;font-size:13px;color:var(--cy);">📍 ' + loc + '</div>';
+    if(!skus.length){
+      html += '<div style="padding:8px 10px;font-size:11px;color:var(--td);">No SKUs</div>';
+    } else {
+      skus.forEach(function(s){
+        html += '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-top:1px solid var(--bdr);font-size:12px;">'
+          + '<span style="font-family:monospace;font-weight:600;">' + (s.sku || '') + '</span>'
+          + '<span style="color:var(--td);">×' + (s.qty || 0) + '</span></div>';
+      });
+    }
+    html += '</div>';
+  });
+  el.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--td);font-size:12px;">No matches.</div>';
+}
+
+function locationsRenderPickQueue(q){
+  var el = document.getElementById('loc-pick-queue');
+  if(!el) return;
+  var inv = locationsGetInventory();
+  // Group pending order SKUs by resolved location
+  var groups = {}; // loc -> [{sku, tracking, shelf}]
+  (orders || []).filter(function(o){ return o.status !== 'done'; }).forEach(function(o){
+    (o.skus || []).forEach(function(s){
+      var loc = '';
+      if(inv){
+        var best = null;
+        Object.keys(inv).forEach(function(l){
+          var item = ((inv[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+          var qq = item ? (parseInt(item.qty)||0) : 0;
+          if(qq > 0 && (!best || qq > best.q)) best = { loc: l, q: qq };
+        });
+        if(best) loc = best.loc;
+      }
+      if(!loc) loc = (o.shelf || 'Unknown').trim() || 'Unknown';
+      if(q){
+        var hay = (loc + ' ' + (s.sku||'') + ' ' + (o.tracking||'')).toUpperCase();
+        if(hay.indexOf(q) < 0) return;
+      }
+      if(!groups[loc]) groups[loc] = [];
+      groups[loc].push({ sku: s.sku, qty: s.qty || 1, tracking: o.tracking });
+    });
+  });
+  var locs = Object.keys(groups).sort();
+  if(!locs.length){
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;">No pending picks.</div>';
+    return;
+  }
+  var html = '';
+  locs.forEach(function(loc){
+    html += '<div style="margin-bottom:10px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;">'
+      + '<div style="padding:8px 10px;background:var(--bg);font-family:monospace;font-weight:700;font-size:13px;color:var(--am);">📍 ' + loc + '</div>';
+    groups[loc].forEach(function(row){
+      html += '<div style="padding:6px 10px;border-top:1px solid var(--bdr);font-size:11px;">'
+        + '<span style="font-family:monospace;font-weight:700;">' + row.sku + '</span>'
+        + ' <span style="color:var(--td);">×' + row.qty + '</span>'
+        + '<div style="font-size:10px;color:var(--td);font-family:monospace;margin-top:2px;">' + (row.tracking||'') + '</div></div>';
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
 function buildPickGuideHtml(order){
   var seen = {};
+  var labelShelf = (order && order.shelf) ? String(order.shelf).trim() : '';
   var html = (order.skus||[]).filter(function(s){
     if(seen[s.sku]) return false;
     seen[s.sku] = true;
     return true;
   }).map(function(s){
+    // Prefer ERP / inventory map (real stock bin); fall back to label shelf hint
     var loc = '';
+    var fromInv = false;
     if(window._inventoryData){
-      Object.keys(window._inventoryData).some(function(l){
+      var best = null;
+      Object.keys(window._inventoryData).forEach(function(l){
         var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
-        if(item && (parseInt(item.qty)||0) > 0){ loc = l; return true; }
-        return false;
+        var q = item ? (parseInt(item.qty)||0) : 0;
+        if(q > 0 && (!best || q > best.q)) best = { loc: l, q: q };
       });
+      if(best){ loc = best.loc; fromInv = true; }
     }
+    if(!loc && labelShelf) loc = labelShelf;
     return '<div style="display:flex;align-items:baseline;justify-content:center;gap:14px;flex-wrap:wrap;margin:6px 0;">'
       + '<span style="font-size:32px;font-weight:900;color:var(--tx);font-family:monospace;letter-spacing:1px;">'+s.sku+'</span>'
       + (loc
           ? '<span style="font-size:32px;font-weight:900;color:var(--gn);font-family:monospace;">📍 '+loc+'</span>'
+            + (!fromInv && labelShelf ? '<span style="font-size:11px;color:var(--td);">(from label)</span>' : '')
           : '<span style="font-size:14px;font-weight:700;color:var(--td);">location unknown</span>')
       + '</div>';
   }).join('');
@@ -5629,6 +5854,11 @@ function floorRenderTicker(){
 }
 
 function renderFloor(){
+  // Floor Display removed (Option C). Refresh Locations pick queue if that tab is open.
+  if(typeof renderLocations === 'function' && document.getElementById('view-locations') && document.getElementById('view-locations').classList.contains('on')){
+    renderLocations();
+  }
+  return;
   var rem=orders.filter(function(o){return o.status==='pending';}).length;
   var don=orders.filter(function(o){return o.status==='done';}).length;
   var tot=orders.length;
@@ -12345,7 +12575,8 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 
   <!-- ══ RACK MAP ══ -->
-  <div id="view-rackmap" class="view" style="display:flex;flex-direction:column;padding:16px 18px;overflow-y:auto;">
+  <!-- Legacy Rack Map UI kept in DOM but hidden (Option C — list-only Locations tab) -->
+  <div id="view-rackmap" class="view" style="display:none!important;">
     <div style="max-width:700px;margin:0 auto;width:100%;">
 
       <!-- Header -->
@@ -13623,13 +13854,13 @@ function insightsRender(){
 })();
 </script>
 
-<!-- Floating Feedback button (always visible once signed in) -->
+<!-- Floating Feedback button — sits to the LEFT of the AI assistant (#ai-btn at right:20px) so they don't overlap -->
 <button id="feedback-fab" onclick="feedbackOpen()" title="Feedback / Report Issue" style="
-  display:none;position:fixed;bottom:22px;right:22px;z-index:9990;
-  width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
-  background:linear-gradient(135deg,#4a9eff,#c77dff);color:#fff;font-size:22px;
-  box-shadow:0 6px 20px rgba(74,158,255,0.45);line-height:1;
-  transition:transform .15s,box-shadow .15s;
+  display:none;position:fixed;bottom:20px;right:76px;z-index:9990;
+  width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#4a9eff,#c77dff);color:#fff;font-size:18px;
+  box-shadow:0 2px 16px rgba(74,158,255,0.4);line-height:1;
+  transition:transform .15s,box-shadow .15s;padding:0;
 " onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
   💬
 </button>
