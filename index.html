@@ -851,6 +851,57 @@ body{
         </div>
       </div>
 
+      <!-- Feedback / Report Issue modal -->
+      <div id="feedback-modal" style="
+        display:none;position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,0.55);
+        align-items:center;justify-content:center;
+      ">
+        <div style="
+          background:var(--sur);border:1px solid var(--bdr);border-radius:12px;
+          width:420px;max-width:94vw;padding:24px 22px 18px;
+          box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        ">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="font-size:14px;font-weight:800;color:var(--tx);">💬 Feedback / Report Issue</div>
+            <button onclick="feedbackClose()" style="background:none;border:none;color:var(--td);font-size:18px;cursor:pointer;line-height:1;">×</button>
+          </div>
+          <div style="font-size:11px;color:var(--td);margin-bottom:12px;line-height:1.5;">
+            Tell us what went wrong or what you need. We read every message and usually reply within 1 business day.
+          </div>
+          <label style="font-size:10px;font-weight:700;color:var(--td);display:block;margin-bottom:4px;">Category</label>
+          <select id="feedback-category" style="
+            width:100%;padding:8px 10px;margin-bottom:12px;border-radius:6px;font-size:12px;
+            background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
+          ">
+            <option value="bug">Bug / something broken</option>
+            <option value="scan">Scan / label not recognized</option>
+            <option value="feature">Feature request</option>
+            <option value="question">Question / how-to</option>
+            <option value="general">General feedback</option>
+          </select>
+          <label style="font-size:10px;font-weight:700;color:var(--td);display:block;margin-bottom:4px;">What happened?</label>
+          <textarea id="feedback-message" rows="5" placeholder="Describe the issue or request… Include the tracking number or SKU if relevant." style="
+            width:100%;padding:10px;border-radius:6px;font-size:12px;resize:vertical;box-sizing:border-box;
+            background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;line-height:1.45;
+          "></textarea>
+          <label style="display:flex;align-items:center;gap:6px;margin:10px 0 14px;font-size:11px;color:var(--td);cursor:pointer;">
+            <input type="checkbox" id="feedback-include-debug" checked style="accent-color:var(--cy);"/>
+            Include recent debug log (helps us diagnose scan/parse issues)
+          </label>
+          <div id="feedback-status" style="font-size:11px;min-height:16px;margin-bottom:8px;color:var(--td);"></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="feedbackSubmit()" id="feedback-submit-btn" style="
+              flex:1;padding:11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+              background:linear-gradient(135deg,#4a9eff,#c77dff);color:#fff;border:none;font-family:inherit;
+            ">Send feedback</button>
+            <button onclick="feedbackClose()" style="
+              padding:11px 14px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;
+              background:transparent;border:1px solid var(--bdr);color:var(--td);font-family:inherit;
+            ">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <!-- AI Insights bell -->
       <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="
         position:relative;background:transparent;border:none;cursor:pointer;padding:4px;
@@ -1725,36 +1776,40 @@ function matchTracking(words){
       }
     }
 
-    // Check the explicit "TRK#" number FIRST — it's the one Fedex prints
-    // as THE tracking number, always unique per package. The barcode-row
-    // digit-scan below is checked only as a fallback: on some domestic
-    // FedEx Home Delivery labels, that row's early digits are a STATIC
-    // account/facility prefix shared by every label from that account,
-    // padded with zeros — a substring-scan can match that static prefix
-    // and stop before ever reaching the real unique digits at the end,
-    // silently producing the SAME "tracking number" for many different
-    // real packages. Confirmed directly against real label data: pages
-    // with completely different recipients/addresses were all extracting
-    // to "963208040000000000000087" — a static, non-unique template
-    // match — while the label's own genuinely unique number (the TRK#
-    // one) sat right there unused.
-    var trkRow = words.filter(function(w){ return /^TRK#?$/i.test(w.text); });
+    // Check the explicit "TRK#" / "Tracking ID#" number FIRST — it's the one
+    // Fedex prints as THE tracking number, always unique per package. The
+    // barcode-row digit-scan below is only a fallback.
+    //
+    // Made tolerant of PDF.js tokenization: accepts "TRK#", "TRK", "TRK#:",
+    // "Trk#", or any word that *contains* TRK# / TRACKING ID# as a prefix.
+    // Also searches both above and below the label (previous code only looked
+    // downward and used a very tight 40px window, which missed many real labels).
+    var trkRow = words.filter(function(w){
+      var t = (w.text || '').trim();
+      return /^TRK#?:?$/i.test(t) || /^TRK$/i.test(t) || /^TRK#/i.test(t);
+    });
+    // Fallback: look for a word that is just "Tracking" near a word "ID" / "ID#"
+    if(!trkRow.length){
+      var trackingWords = words.filter(function(w){ return /Tracking/i.test(w.text); });
+      if(trackingWords.length){
+        trkRow = trackingWords;
+      }
+    }
     if(trkRow.length){
       var trkTop = trkRow[0].top;
-      var nearbyRows = rowKeys.filter(function(rk){ return rk >= trkTop && rk <= trkTop + 40; })
+      // Wider bidirectional window (±60) so the number line is found regardless
+      // of whether PDF.js reports the TRK# slightly above or below the digits.
+      var nearbyRows = rowKeys.filter(function(rk){ return Math.abs(rk - trkTop) <= 60; })
         .sort(function(a,b){ return a-b; });
       for(var tri=0; tri<nearbyRows.length; tri++){
         var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
           .map(function(w){return clean(w.text);}).join('');
         var trkDigits = trkConcat.replace(/[^0-9]/g,'');
-        // No fixed prefix required here — the "TRK#" text label itself is
-        // the confidence signal, and the first 4 digits vary by region
-        // (confirmed: seen both 8774 and 8776 on real labels, and told
-        // directly that the leading digits aren't fixed at all). Just
-        // take any 12-digit number sitting right next to "TRK#".
-        var trkM = trkDigits.match(/^\d{12}$/) || trkConcat.match(/\d{12}/);
+        // Prefer a clean 12-digit run (the real unique TRK#). Also accept
+        // 12 digits embedded in a longer string on the same visual line.
+        var trkM = trkDigits.match(/(\d{12})/);
         if(trkM){
-          var trkFinal = (typeof trkM[0]==='string' ? trkM[0] : trkDigits).replace(/[^0-9]/g,'');
+          var trkFinal = trkM[1];
           if(trkFinal.length===12){
             dbg('  FedEx TRK# match (preferred, reliably unique): FEDEX-'+trkFinal);
             return 'FEDEX-'+trkFinal;
@@ -1763,19 +1818,30 @@ function matchTracking(words){
       }
     }
 
+    // Also try a full-text regex for "TRK# 8778 3307 8380" style (handles cases
+    // where the number is on the same text item as the label).
+    var fullTextTrk = allText.match(/(?:TRK#?|TRACKING\s*ID#?)\s*[:.]?\s*(\d{4}\s*\d{4}\s*\d{4}|\d{12})/i);
+    if(fullTextTrk){
+      var ftDigits = fullTextTrk[1].replace(/[^0-9]/g,'');
+      if(ftDigits.length === 12){
+        dbg('  FedEx TRK# match (full-text regex): FEDEX-'+ftDigits);
+        return 'FEDEX-'+ftDigits;
+      }
+    }
+
     var fedexRows = Object.keys(rows).map(Number).filter(function(r){
       var txt = rows[r].map(function(w){return w.text;}).join(' ');
-      // Only rows visually starting with a FedEx barcode prefix (96xx or 93xx) —
-      // avoids false hits on USPS "9261 0000…" barcodes whose offset "61…"
-      // substring would match the FedEx 61-series TPAT.
-      return /9[36]\d{2}\s+\d{4}/.test(txt);
+      var compact = txt.replace(/[^0-9]/g,'');
+      // Accept rows that start with a FedEx barcode prefix whether or not
+      // spaces are present in the text layer (96xx / 93xx / 61xx).
+      return /9[36]\d{2}\s+\d{4}/.test(txt) || /^(96|93|61)\d{6,}/.test(compact);
     });
     for(var fi=0;fi<fedexRows.length;fi++){
       var fRowY = fedexRows[fi];
       var fRow = rows[fRowY].sort(function(a,b){return a.x-b.x;});
       var fConcat = fRow.map(function(w){return clean(w.text);}).join('');
       var fDigits = fConcat.replace(/[^0-9]/g,'');
-      if(fDigits.length < 20 && /^(96|61|74|75)/.test(fDigits)){
+      if(fDigits.length < 20 && /^(96|61|74|75|93)/.test(fDigits)){
         rowKeys.filter(function(rk){ return rk !== fRowY && Math.abs(rk - fRowY) <= 100; })
           .sort(function(a,b){ return a - b; })
           .forEach(function(rk){
@@ -1793,8 +1859,8 @@ function matchTracking(words){
       // not any particular digit pattern.
       if(fDigits.length >= 12){
         var fLast12 = fDigits.slice(-12);
-        dbg('  FedEx barcode-row match (last 12 digits): ' + fLast12);
-        return fLast12;
+        dbg('  FedEx barcode-row match (last 12 digits): FEDEX-'+fLast12);
+        return 'FEDEX-'+fLast12;
       }
     }
   }
@@ -4045,7 +4111,20 @@ function doScan(raw){
   if(!scanned) return;
   document.getElementById('scan-in').value = '';
 
-  function norm(s){ return s.replace(/[\s\-().]/g,'').toUpperCase(); }
+  // FedEx-aware normalizer: strips FEDEX-/FX- prefixes and non-alnum so that
+  // "FEDEX-877833078380", "8778 3307 8380", and long 96… barcodes all collapse
+  // to the same comparable form. Also exposes last-12 helper for FedEx.
+  function norm(s){
+    return String(s || '')
+      .toUpperCase()
+      .replace(/^FEDEX-?/, '')
+      .replace(/^FX-?/, '')
+      .replace(/[\s\-().]/g,'');
+  }
+  function last12(s){
+    var d = String(s || '').replace(/[^0-9]/g,'');
+    return d.length >= 12 ? d.slice(-12) : d;
+  }
 
   // GS1-128 extraction
   function extractFromGS1(s){
@@ -4072,13 +4151,21 @@ function doScan(raw){
   var scannedNorm = norm(scannedExtracted);
   var rawNorm = norm(scanned); // keep original for fallback matching
 
-  // Every plausible tracking-number candidate found in the scanned input,
-  // normalized — checked in addition to the single GS1-extracted value,
-  // so a barcode encoding multiple pieces of data still resolves to the
-  // right order even if GS1 stripping alone didn't isolate it cleanly.
-  var scanCandidateNorms = whExtractTrackingCandidates(scannedExtracted).map(function(c){ return norm(c.tracking); });
-  if(scanCandidateNorms.indexOf(scannedNorm) < 0) scanCandidateNorms.unshift(scannedNorm);
-  if(rawNorm !== scannedNorm && scanCandidateNorms.indexOf(rawNorm) < 0) scanCandidateNorms.push(rawNorm);
+  // Build a rich set of normalized candidates from the gun data.
+  // Always include last-12 digits so FedEx long barcodes (96… + unique 12)
+  // match orders that were stored as FEDEX-xxxxxxxxxxxx or bare 12-digit TRK#.
+  var scanCandidateNorms = [];
+  function addScanCand(v){
+    if(!v) return;
+    var n = norm(v);
+    if(n && n.length >= 8 && scanCandidateNorms.indexOf(n) < 0) scanCandidateNorms.push(n);
+    var l12 = last12(v);
+    if(l12 && l12.length === 12 && scanCandidateNorms.indexOf(l12) < 0) scanCandidateNorms.push(l12);
+  }
+  addScanCand(scannedExtracted);
+  addScanCand(scanned);
+  whExtractTrackingCandidates(scannedExtracted).forEach(function(c){ addScanCand(c.tracking); });
+  whExtractTrackingCandidates(scanned).forEach(function(c){ addScanCand(c.tracking); });
 
   // NOTE: rack scanning is handled entirely by its own dedicated input in the
   // Rack Map tab (see rackScanState/rack-scan-input) — nothing here ever sets
@@ -4087,47 +4174,47 @@ function doScan(raw){
   // ── SHIPPING LABEL SCAN — completes order immediately ──
   var order = null;
 
-  // Exact match against any extracted candidate (GS1-extracted, raw, or
-  // any carrier-shape candidate found in the scanned text)
+  // Match against every stored order by expanding BOTH sides the same way
+  // (norm + last-12). This makes FedEx scans succeed whether the order was
+  // stored as "FEDEX-877833078380", "877833078380", or a longer 96… barcode.
   for(var i=0;i<orders.length;i++){
-    if(scanCandidateNorms.indexOf(norm(orders[i].tracking)) >= 0){ order=orders[i]; break; }
-  }
-  // Exact match against raw scan (catches barcodes where GS1 extraction wasn't needed)
-  if(!order && rawNorm !== scannedNorm){
-    for(var i=0;i<orders.length;i++){
-      if(norm(orders[i].tracking)===rawNorm){ order=orders[i]; break; }
+    var stored = orders[i].tracking;
+    var storedNorms = [];
+    function addStored(v){
+      if(!v) return;
+      var n = norm(v);
+      if(n && n.length >= 8 && storedNorms.indexOf(n) < 0) storedNorms.push(n);
+      var l12 = last12(v);
+      if(l12 && l12.length === 12 && storedNorms.indexOf(l12) < 0) storedNorms.push(l12);
     }
-  }
-  // Partial / embedded match — handles long barcodes containing tracking,
-  // checked against every extracted candidate, not just the one GS1 value
-  if(!order){
-    for(var i=0;i<orders.length;i++){
-      var t = norm(orders[i].tracking);
-      if(t.length>=10){
-        for(var ci=0; ci<scanCandidateNorms.length; ci++){
-          var c = scanCandidateNorms[ci];
-          if(c.length>=10 && (c.indexOf(t)>=0 || t.indexOf(c)>=0)){ order=orders[i]; break; }
+    addStored(stored);
+
+    for(var si=0; si<storedNorms.length; si++){
+      var t = storedNorms[si];
+      if(t.length < 8) continue;
+      for(var ci=0; ci<scanCandidateNorms.length; ci++){
+        var c = scanCandidateNorms[ci];
+        if(c === t || (c.length >= 10 && t.length >= 10 && (c.indexOf(t) >= 0 || t.indexOf(c) >= 0))){
+          order = orders[i];
+          break;
         }
-        if(order) break;
       }
+      if(order) break;
     }
-  }
-  // Partial / embedded match against raw scan — catches FedEx multi-piece barcodes where
-  // the tracking number is a prefix of a longer barcode (e.g. 96XXXX + sequence data)
-  if(!order && rawNorm !== scannedNorm){
-    for(var i=0;i<orders.length;i++){
-      var t = norm(orders[i].tracking);
-      if(t.length>=10 && rawNorm.length>=10){
-        if(rawNorm.indexOf(t)>=0 || t.indexOf(rawNorm)>=0){ order=orders[i]; break; }
-      }
-    }
+    if(order) break;
   }
 
   if(!order){
     bpErr(); flash('err');
     var stored = orders.map(function(o){return norm(o.tracking).slice(0,12);}).join(' ');
-    setErr('✗ "'+scanned+'" not found. Stored starts: '+stored);
+    setErr('✗ "'+scanned+'" not found. Stored starts: '+stored+'  ·  Click 💬 to report this scan');
     setFb('✗ NOT FOUND','var(--rd)');
+    // Remember the last failed scan so the Feedback form can pre-fill it
+    window._lastFailedScan = {
+      scanned: scanned,
+      candidates: scanCandidateNorms.slice(0, 8),
+      storedSample: stored
+    };
     // Full detail to the debug log — retrievable via the same "COPY DEBUG
     // LOG" workflow already used for import diagnostics, since getting
     // the exact scanned string any other way has been difficult.
@@ -13533,6 +13620,130 @@ function insightsRender(){
   });
 }
 
+})();
+</script>
+
+<!-- Floating Feedback button (always visible once signed in) -->
+<button id="feedback-fab" onclick="feedbackOpen()" title="Feedback / Report Issue" style="
+  display:none;position:fixed;bottom:22px;right:22px;z-index:9990;
+  width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#4a9eff,#c77dff);color:#fff;font-size:22px;
+  box-shadow:0 6px 20px rgba(74,158,255,0.45);line-height:1;
+  transition:transform .15s,box-shadow .15s;
+" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+  💬
+</button>
+
+<script>
+// ── In-app Feedback ──────────────────────────────────────────────
+function feedbackOpen(prefill){
+  var modal = document.getElementById('feedback-modal');
+  if(!modal) return;
+  modal.style.display = 'flex';
+  var msg = document.getElementById('feedback-message');
+  var status = document.getElementById('feedback-status');
+  if(status) status.textContent = '';
+
+  // Auto-fill from the most recent failed scan if the user didn't pass prefill
+  if(!prefill && window._lastFailedScan){
+    var fs = window._lastFailedScan;
+    prefill = 'Scan not found\nScanned: ' + fs.scanned +
+      '\nCandidates tried: ' + (fs.candidates || []).join(', ') +
+      '\nStored sample: ' + (fs.storedSample || '');
+  }
+
+  if(msg){
+    msg.value = prefill || '';
+    setTimeout(function(){ msg.focus(); }, 50);
+  }
+  // Default category to "scan" if this looks like a scan issue
+  if(prefill && /not found|scan|tracking/i.test(prefill)){
+    var cat = document.getElementById('feedback-category');
+    if(cat) cat.value = 'scan';
+  }
+}
+function feedbackClose(){
+  var modal = document.getElementById('feedback-modal');
+  if(modal) modal.style.display = 'none';
+}
+async function feedbackSubmit(){
+  var msgEl = document.getElementById('feedback-message');
+  var catEl = document.getElementById('feedback-category');
+  var status = document.getElementById('feedback-status');
+  var btn = document.getElementById('feedback-submit-btn');
+  var message = (msgEl && msgEl.value || '').trim();
+  if(message.length < 3){
+    if(status){ status.style.color = 'var(--rd)'; status.textContent = 'Please write a short description.'; }
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
+  if(status){ status.style.color = 'var(--td)'; status.textContent = ''; }
+
+  var debugLog = '';
+  var includeDebug = document.getElementById('feedback-include-debug');
+  if(includeDebug && includeDebug.checked){
+    var logEl = document.getElementById('debug-log');
+    if(logEl) debugLog = (logEl.textContent || '').slice(-6000);
+  }
+
+  var page = '';
+  try {
+    var onTab = document.querySelector('.tab.on');
+    page = onTab ? (onTab.getAttribute('data-view') || onTab.textContent || '') : (location.hash || 'unknown');
+  } catch(e){}
+
+  var userName = '';
+  try {
+    if(window._clerkUser){
+      userName = window._clerkUser.fullName || window._clerkUser.firstName || '';
+    }
+  } catch(e){}
+
+  var body = {
+    message: message,
+    category: (catEl && catEl.value) || 'general',
+    page: page,
+    debug_log: debugLog,
+    user_agent: navigator.userAgent || '',
+    user_name: userName,
+    app_version: '2026-10-05'
+  };
+
+  try {
+    if(typeof window.warehubApi !== 'function'){
+      throw new Error('Not signed in');
+    }
+    var result = await window.warehubApi('POST', '/api/feedback', body);
+    if(result && result.ok){
+      if(status){ status.style.color = 'var(--gn)'; status.textContent = '✓ Thanks — we received your feedback.'; }
+      if(msgEl) msgEl.value = '';
+      setTimeout(feedbackClose, 1200);
+    } else {
+      throw new Error((result && result.error) || 'Send failed');
+    }
+  } catch(e){
+    if(status){ status.style.color = 'var(--rd)'; status.textContent = 'Could not send: ' + (e.message || e); }
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = 'Send feedback'; }
+  }
+}
+
+// Show the FAB once the main app is visible
+(function(){
+  function showFab(){
+    var fab = document.getElementById('feedback-fab');
+    var app = document.getElementById('app');
+    if(fab && app && app.style.display !== 'none'){
+      fab.style.display = 'block';
+    }
+  }
+  // Poll briefly after load / auth
+  var n = 0;
+  var t = setInterval(function(){
+    showFab();
+    if(++n > 40) clearInterval(t);
+  }, 500);
+  document.addEventListener('visibilitychange', showFab);
 })();
 </script>
 
