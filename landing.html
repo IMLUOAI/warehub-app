@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Warehub — Shipping Label Management for Warehouses & FBA Sellers</title>
-<meta name="description" content="Warehub turns your carrier PDFs into sorted, ready-to-print label packets in seconds. Built for 3PLs, FBA sellers, and fulfillment teams."/>
+<title>Warehub — Sort carrier label PDFs and pack by scan</title>
+<meta name="description" content="Upload UPS, FedEx, and USPS label PDFs. Warehub groups them into carrier print stacks and shows the SKU and shelf at the pack station."/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
@@ -158,12 +158,11 @@ footer{background:var(--text);color:rgba(255,255,255,0.6);padding:48px 5% 32px;}
 }
 </style>
 </head>
-<body>
 
-<!-- NAV -->
+<body>
 <nav>
   <div class="nav-inner">
-    <a href="#" class="nav-logo">
+    <a href="/" class="nav-logo">
       <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="7" fill="#2563eb"/>
         <path d="M7 12.5L16 8l9 4.5v7L16 24l-9-4.5v-7z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
@@ -175,326 +174,180 @@ footer{background:var(--text);color:rgba(255,255,255,0.6);padding:48px 5% 32px;}
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
       <a href="#pricing">Pricing</a>
-      <a href="https://app.wareplatform.com" class="nav-cta">Launch App →</a>
+      <a href="/support.html">Support</a>
+      <a href="https://app.wareplatform.com" class="nav-cta">Launch App</a>
     </div>
   </div>
 </nav>
 
-<!-- HERO -->
 <section class="hero">
   <div class="hero-inner">
     <div>
-      <div class="hero-badge">🚀 Built for high-volume fulfillment teams</div>
-      <h1>Shipping labels,<br/><span>sorted & printed</span><br/>in seconds.</h1>
-      <p>Drop in any carrier PDF — UPS, FedEx, USPS, Amazon. Warehub auto-sorts by carrier, assigns packers, and prints a clean packet ready for your team.</p>
+      <div class="hero-badge">Label sorting for sellers and small fulfillment teams</div>
+      <h1>Sort label PDFs.<br/><span>Pack by scan.</span></h1>
+      <p>Upload a UPS, FedEx, or USPS label PDF. Warehub groups pages into carrier print stacks, holds unreadable pages for manual print, and shows the SKU and shelf when the pack station scans the label.</p>
       <div class="hero-actions">
-        <a href="https://app.wareplatform.com" class="btn-primary">Start Free Trial →</a>
+        <a href="https://app.wareplatform.com" class="btn-primary">Start 14-day trial</a>
         <a href="#how" class="btn-secondary">See how it works</a>
       </div>
     </div>
     <div class="hero-visual">
       <div class="hero-visual-header">
-        <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="rgba(255,255,255,0.3)"/><path d="M4 8h8M4 5h8M4 11h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <span>Today's batch — 284 labels</span>
+        <span>Example batch</span>
       </div>
       <div class="hero-visual-body">
-        <div class="carrier-row ups">
-          <span>📦 UPS</span>
-          <span class="carrier-row-count">114 labels</span>
-        </div>
-        <div class="carrier-row fedex">
-          <span>✈️ FedEx</span>
-          <span class="carrier-row-count">89 labels</span>
-        </div>
-        <div class="carrier-row usps">
-          <span>📬 USPS</span>
-          <span class="carrier-row-count">53 labels</span>
-        </div>
-        <div class="carrier-row amazon">
-          <span>🟠 Amazon</span>
-          <span class="carrier-row-count">28 labels</span>
-        </div>
-        <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border-radius:8px;font-size:0.82rem;color:#166534;font-weight:600;display:flex;align-items:center;gap:8px;">
-          ✅ All labels parsed &amp; sorted. Ready to print.
-        </div>
+        <div class="carrier-row ups"><span>UPS</span><span class="carrier-row-count">Carrier stack</span></div>
+        <div class="carrier-row fedex"><span>FedEx</span><span class="carrier-row-count">Carrier stack</span></div>
+        <div class="carrier-row usps"><span>USPS</span><span class="carrier-row-count">Carrier stack</span></div>
+        <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border-radius:8px;font-size:0.82rem;color:#166534;font-weight:600;">Unreadable pages stay in Missing Labels with a page image. Nothing is dropped silently.</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- LOGOS -->
 <div class="logos">
   <div class="logos-inner">
-    <p>Works with all major carriers</p>
+    <p>Supported on the public listing</p>
     <div class="logos-row">
       <div class="logo-pill">UPS</div>
       <div class="logo-pill">FedEx</div>
       <div class="logo-pill">USPS</div>
-      <div class="logo-pill">Amazon</div>
-      <div class="logo-pill">DHL</div>
-      <div class="logo-pill">GOFO</div>
-      <div class="logo-pill">SWIFT</div>
+      <div class="logo-pill">FBA box-label PDF</div>
     </div>
   </div>
 </div>
 
-<!-- FEATURES -->
 <section class="features" id="features">
   <div class="section-header">
     <div class="section-tag">Features</div>
-    <h2>Everything your team needs to ship faster</h2>
-    <p>From raw carrier PDFs to sorted, assigned label packets — Warehub handles the entire workflow automatically.</p>
+    <h2>One job, done in the browser</h2>
+    <p>No install. Warehub does not buy postage and does not change Amazon orders.</p>
   </div>
   <div class="features-grid">
     <div class="feature-card">
-      <div class="feature-icon">⚡</div>
-      <h3>Instant PDF Parsing</h3>
-      <p>Drop in a PDF from any carrier. Warehub extracts every tracking number, detects the carrier, and groups labels automatically — no manual entry.</p>
+      <div class="feature-icon">1</div>
+      <h3>Read the label PDF</h3>
+      <p>Each page is read for tracking number, carrier, SKU, and shelf. UPS Ground Saver pages that also show a USPS final-mile number stay in the UPS stack.</p>
     </div>
     <div class="feature-card">
-      <div class="feature-icon">🗂️</div>
-      <h3>Auto-Sort by Carrier</h3>
-      <p>Labels are automatically sorted by carrier and printed with divider pages, so packers know exactly what they're handling at a glance.</p>
+      <div class="feature-icon">2</div>
+      <h3>Print by carrier</h3>
+      <p>Pages are grouped into UPS, FedEx, and USPS stacks. A page that cannot be read is kept in Missing Labels with its image so it can be printed by hand.</p>
     </div>
     <div class="feature-card">
-      <div class="feature-icon">👥</div>
-      <h3>Packer Assignment</h3>
-      <p>Assign shipments to specific packers. Print by packer to give each team member exactly their portion of the day's orders.</p>
+      <div class="feature-icon">3</div>
+      <h3>Pack by scan</h3>
+      <p>The pack station scan matches the label barcode to that page and shows the SKU and shelf from the label. A scan that matches two orders is rejected instead of completing the wrong one.</p>
     </div>
     <div class="feature-card">
-      <div class="feature-icon">🖨️</div>
-      <h3>Missing Label Detection</h3>
-      <p>Warehub flags any labels that couldn't be parsed and surfaces them with thumbnails so you can reprint individually or all at once.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">📦</div>
-      <h3>FBA Shipment Manager</h3>
-      <p>Parse Amazon FBA box labels, track shipments by FNSKU and ASIN, and maintain a reprint queue for missing box labels.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">📊</div>
-      <h3>Daily Stats & History</h3>
-      <p>Track orders processed, labels printed, and packer performance over time. Built-in log keeps a full history of every import batch.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🔒</div>
-      <h3>Team Access Control</h3>
-      <p>Role-based PIN system for packers and managers. Managers get full access; packers see only their assigned work queue.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">☁️</div>
-      <h3>Cloud Sync</h3>
-      <p>All data syncs to the cloud so your team can access the same records from any device, any shift, without losing history.</p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🌐</div>
-      <h3>No Install Required</h3>
-      <p>Runs entirely in the browser — open the app, log in, and you're working. No software to install, no IT team needed.</p>
+      <div class="feature-icon">4</div>
+      <h3>Account data</h3>
+      <p>Sign-in is per account. Batches and pack records stay with that account. Export or delete a batch from the app. Details are in the privacy policy.</p>
     </div>
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="howitworks" id="how">
-  <div class="howitworks-inner">
-    <div class="section-header">
-      <div class="section-tag">How it works</div>
-      <h2>From PDF to printed labels in 3 steps</h2>
-      <p>Warehub fits into your existing workflow. No new hardware, no complex setup.</p>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <h3>Upload your carrier PDF</h3>
-        <p>Drag and drop the shipping label PDF from your carrier portal — UPS, FedEx, USPS, or Amazon. Any size batch.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <h3>Warehub sorts & assigns</h3>
-        <p>Labels are parsed, grouped by carrier, and assigned to packers automatically. Missing labels are flagged instantly.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <h3>Print & pack</h3>
-        <p>Hit print. Each packer gets their sorted packet with carrier dividers. Done — your team can start packing immediately.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- PRICING -->
-<section class="pricing" id="pricing">
-  <div class="pricing-inner">
-    <div class="section-header">
-      <div class="section-tag">Pricing</div>
-      <h2>Simple, predictable pricing</h2>
-      <p>No per-label fees. No surprises. Pay monthly, cancel anytime.</p>
-    </div>
-    <div class="pricing-grid">
-      <!-- Basic -->
-      <div class="plan">
-        <div class="plan-name">Basic</div>
-        <div class="plan-price">$29<span>/mo</span></div>
-        <div class="plan-desc">For solo sellers and small teams just getting started.</div>
-        <ul class="plan-features">
-          <li>Up to 3 packer accounts</li>
-          <li>All carrier parsing (UPS, FedEx, USPS, Amazon)</li>
-          <li>Order queue & barcode scanning</li>
-          <li>Single warehouse location</li>
-          <li class="no">Returns / FBA / Vehicle log</li>
-          <li class="no">Priority support</li>
-        </ul>
-        <a href="https://app.wareplatform.com" class="plan-btn outline">Start Free Trial</a>
-      </div>
-      <!-- Starter -->
-      <div class="plan popular">
-        <div class="plan-badge">Most Popular</div>
-        <div class="plan-name">Starter</div>
-        <div class="plan-price">$79<span>/mo</span></div>
-        <div class="plan-desc">Perfect for a single warehouse location with a small team.</div>
-        <ul class="plan-features">
-          <li>Everything in Basic</li>
-          <li>Up to 10 packer accounts</li>
-          <li>Missing label detection & reprint</li>
-          <li>Returns intake & FBA outbound records</li>
-          <li>Vehicle trip log</li>
-          <li>Excel & CSV exports</li>
-        </ul>
-        <a href="https://app.wareplatform.com" class="plan-btn solid">Start Free Trial</a>
-      </div>
-      <!-- Pro -->
-      <div class="plan">
-        <div class="plan-name">Pro</div>
-        <div class="plan-price">$149<span>/mo</span></div>
-        <div class="plan-desc">For growing operations with multiple locations and high daily volume.</div>
-        <ul class="plan-features">
-          <li>Everything in Starter</li>
-          <li>Unlimited packer accounts</li>
-          <li>Multi-location support</li>
-          <li>FedEx live tracking status</li>
-          <li>Rack map & inventory</li>
-          <li>AI assistant (Claude-powered)</li>
-          <li>Priority support</li>
-        </ul>
-        <a href="https://app.wareplatform.com" class="plan-btn outline">Start Free Trial</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- TESTIMONIALS -->
-<section class="testimonials">
+<section class="how" id="how">
   <div class="section-header">
-    <div class="section-tag">Testimonials</div>
-    <h2>Trusted by fulfillment teams</h2>
-    <p>Warehouses that switched to Warehub cut their label prep time by over 60%.</p>
+    <div class="section-tag">How it works</div>
+    <h2>Four steps</h2>
   </div>
-  <div class="testi-featured">
-    <div class="testi-stars">★★★★★</div>
-    <p>"I've run Double-Sided ISCM's daily operations on Warehub for over 6 months now, and it's been invaluable. Our team sorts hundreds of labels across 50+ different SKUs every single day, and what used to take us 2 hours now takes about 15 minutes. Beyond labels, the Returns, FBA Outbound, and Vehicle tracking features have been just as useful for keeping the rest of our operation running smoothly."</p>
-    <div class="testi-author">
-      <div class="testi-avatar">SL</div>
-      <div>
-        <div class="testi-name">Samuel Luo</div>
-        <div class="testi-role">Manager, Double-Sided ISCM LLC — Warehub's creator</div>
-      </div>
-    </div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><h3>Upload</h3><p>Drop the carrier label PDF you already printed.</p></div>
+    <div class="step"><div class="step-num">2</div><h3>Review</h3><p>Check carrier counts and the missing-label queue before printing.</p></div>
+    <div class="step"><div class="step-num">3</div><h3>Print</h3><p>Print the carrier stacks. Reprint any missing page from its image.</p></div>
+    <div class="step"><div class="step-num">4</div><h3>Scan</h3><p>Scan the label at the pack station. Confirm the SKU matches the label, then pack.</p></div>
   </div>
-  <div class="testi-grid">
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I've been using Warehub for about 4 months now to sort our return items, manage packer hours, scan package quantities, and keep our rack map organized — it's an incredibly powerful tool. The built-in AI assistant is a standout for us: it summarizes our daily outbound data and even our part-time coworkers' hours automatically."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">EM</div>
-        <div>
-          <div class="testi-name">Eloy Martinez</div>
-          <div class="testi-role">Specialist Operator, Topseat</div>
-        </div>
-      </div>
+</section>
+
+<section class="pricing" id="pricing">
+  <div class="section-header">
+    <div class="section-tag">Pricing</div>
+    <h2>Same prices on this page and in the app</h2>
+    <p>14-day trial. Cancel any time from billing. Confirm the no-card trial in Stripe before advertising it on the Appstore.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="plan">
+      <div class="plan-name">Basic</div>
+      <div class="plan-price">$29<span>/mo</span></div>
+      <div class="plan-desc">Label import, carrier stacks, pack scan.</div>
+      <ul class="plan-features">
+        <li>UPS, FedEx, and USPS label PDFs</li>
+        <li>Missing-label queue</li>
+        <li>Pack station scan</li>
+        <li>Email support</li>
+      </ul>
+      <a href="https://app.wareplatform.com/billing.html" class="plan-btn outline">Choose Basic</a>
     </div>
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I sort labels with Warehub every shift. It used to mean going carrier by carrier by hand — now I drop in the PDF and everything's grouped and ready before I even sit down at my station."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">JH</div>
-        <div>
-          <div class="testi-name">Jessica Huerta</div>
-          <div class="testi-role">Warehouse Assistant</div>
-        </div>
-      </div>
+    <div class="plan popular">
+      <div class="plan-badge">Most Popular</div>
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">$79<span>/mo</span></div>
+      <div class="plan-desc">Basic, plus floor records.</div>
+      <ul class="plan-features">
+        <li>Everything in Basic</li>
+        <li>Up to 10 packer accounts</li>
+        <li>FBA box-label PDF log</li>
+        <li>Returns intake records</li>
+        <li>CSV export</li>
+      </ul>
+      <a href="https://app.wareplatform.com/billing.html" class="plan-btn solid">Choose Starter</a>
     </div>
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I handle our FBA outbound shipments and log new inventory as it comes in through Warehub. The rack map makes it easy to see exactly where things go as we rearrange stock, instead of trying to remember it all."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">KZ</div>
-        <div>
-          <div class="testi-name">Kevin Zhang</div>
-          <div class="testi-role">Packer</div>
-        </div>
-      </div>
-    </div>
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <p>"I log every return that comes through my station in Warehub — scan it, mark the condition, and it's already sorted into the right pile. If something needs a second look, my manager gets flagged automatically."</p>
-      <div class="testi-author">
-        <div class="testi-avatar">IK</div>
-        <div>
-          <div class="testi-name">Ira Kim</div>
-          <div class="testi-role">Packer</div>
-        </div>
-      </div>
+    <div class="plan">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$149<span>/mo</span></div>
+      <div class="plan-desc">Starter, plus higher packer limits.</div>
+      <ul class="plan-features">
+        <li>Everything in Starter</li>
+        <li>Unlimited packer accounts</li>
+        <li>Location list from label shelves</li>
+        <li>Email support</li>
+      </ul>
+      <a href="https://app.wareplatform.com/billing.html" class="plan-btn outline">Choose Pro</a>
     </div>
   </div>
 </section>
 
-<!-- CTA BANNER -->
 <section class="cta-banner">
-  <h2>Ready to stop sorting labels by hand?</h2>
-  <p>Start your free 14-day trial. No credit card required.</p>
-  <a href="https://app.wareplatform.com" class="btn-white">Get Started Free →</a>
+  <h2>Sort the morning label PDF before the team clocks in</h2>
+  <p>Trial the live app, then compare a scanned label to the SKU on screen.</p>
+  <a href="https://app.wareplatform.com" class="btn-white">Open the app</a>
 </section>
 
-<!-- FOOTER -->
 <footer>
   <div class="footer-inner">
     <div class="footer-top">
       <div class="footer-brand">
-        <div class="nav-logo">
-          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="7" fill="#2563eb"/>
-            <path d="M7 12.5L16 8l9 4.5v7L16 24l-9-4.5v-7z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
-            <path d="M16 8v16M7 12.5l9 4.5 9-4.5" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
-          </svg>
-          Warehub
-        </div>
-        <p>Shipping label management built for warehouses, 3PLs, and FBA sellers who need to move fast.</p>
+        <div class="nav-logo">Warehub</div>
+        <p>Browser tool for sorting carrier label PDFs and packing by scan. Not an Amazon service.</p>
       </div>
       <div class="footer-col">
         <h4>Product</h4>
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
         <a href="https://app.wareplatform.com">Launch App</a>
+        <a href="https://app.wareplatform.com/billing.html">Billing</a>
       </div>
       <div class="footer-col">
-        <h4>Carriers</h4>
-        <a href="#">UPS</a>
-        <a href="#">FedEx</a>
-        <a href="#">USPS</a>
-        <a href="#">Amazon / FBA</a>
+        <h4>Labels</h4>
+        <a href="#features">UPS</a>
+        <a href="#features">FedEx</a>
+        <a href="#features">USPS</a>
+        <a href="#features">FBA box-label PDF</a>
       </div>
       <div class="footer-col">
         <h4>Company</h4>
-        <a href="mailto:hello@wareplatform.com">Contact</a>
-        <a href="https://app.wareplatform.com/billing.html">Billing</a>
+        <a href="/support.html">Support</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="mailto:hello@wareplatform.com">hello@wareplatform.com</a>
       </div>
     </div>
     <div class="footer-bottom">
       <span>© 2026 Warehub · wareplatform.com</span>
-      <span>hello@wareplatform.com</span>
+      <span>1701 10th St Suite 200, Plano, TX 75074</span>
     </div>
   </div>
 </footer>
-
 </body>
 </html>

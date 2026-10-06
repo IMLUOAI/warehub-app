@@ -1,0 +1,16 @@
+Warehub Appstore fields
+Do not paste quotation marks, ampersands, or angle brackets into Amazon form fields.
+
+App name: Warehub
+Category: Shipping
+Website: https://wareplatform.com
+Support: https://wareplatform.com/support.html
+Privacy: https://wareplatform.com/privacy.html
+Terms: https://wareplatform.com/terms.html
+Pricing: Basic 29 USD per month. Starter 79 USD per month. Pro 149 USD per month. 14-day trial.
+
+Short description:
+Sort mixed carrier label PDFs into print stacks and pack by scan. For sellers and small fulfillment teams.
+
+Long description:
+Warehub is a browser tool for sellers who print their own UPS, FedEx, and USPS labels. Upload a label PDF. Warehub reads the tracking number and carrier, groups pages into carrier stacks, and holds unreadable pages in a missing-label queue with a page image. At the pack station, a scan shows the SKU and shelf from that label and marks the order packed. FBA box-label PDFs can be uploaded for shipment logging on Starter and Pro. Warehub does not buy shipping and does not change Amazon orders. Data is stored per account. Sellers can export or delete their batch.
