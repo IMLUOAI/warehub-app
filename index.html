@@ -367,6 +367,9 @@ body{
   #logo{font-size:11px;}
 }
 
+
+body.station-mode .tabs, body.station-mode #view-import, body.station-mode #view-manager, body.station-mode #view-dash { display:none !important; }
+body.station-mode #scan-fb { font-size:28px !important; }
 </style>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -944,6 +947,7 @@ body{
     <button class="tab on"  data-view="import"   onclick="gv('import')" data-i18n="nav_import">Import</button>
     <button class="tab"     data-view="manager"  onclick="gv('manager')" data-i18n="nav_packers">Packers</button>
     <button class="tab"     data-view="pack"     onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
+    <button class="tab"     data-view="exceptions" onclick="gv('exceptions')">Exceptions</button>
     <button class="tab"     data-view="dash"     onclick="gv('dash')" data-i18n="nav_dash">Dashboard</button>
     <button class="tab"     data-view="payroll"  onclick="gv('payroll')" data-i18n="nav_stats">📊 Stats</button>
     <button class="tab"     data-view="locations" onclick="gv('locations')" data-i18n="nav_locations">📍 Locations</button>
@@ -955,6 +959,20 @@ body{
 </div>
 
 <div id="app" style="display:none;">
+  <div id="view-exceptions" class="view" style="display:flex;flex-direction:column;padding:16px 18px;gap:14px;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:10px;letter-spacing:3px;color:var(--td);">FLOOR QUEUE</div>
+        <div style="font-size:18px;font-weight:700;">Unfinished and unscannable, by carrier</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn" onclick="exportPackHandoff()">Export pack CSV</button>
+        <button class="btn" onclick="renderExceptions()">Refresh</button>
+      </div>
+    </div>
+    <div id="exceptions-body" style="display:flex;flex-direction:column;gap:16px;"></div>
+  </div>
+
 
   <!-- ══ IMPORT ══ -->
   <div id="view-import" class="view on" style="display:flex;flex-direction:column;padding:16px 18px;">
@@ -1157,7 +1175,7 @@ body{
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
           <input id="scan-in" placeholder="Scan shipping label to begin…" data-i18n-placeholder="pack_scan_placeholder" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
-          <div id="scan-fb">ready…</div>
+          <button id="station-mode-btn" class="btn" onclick="toggleStationMode()">Station mode</button><div id="scan-fb">ready…</div>
         </div>
       </div>
       <div id="queue"></div>
@@ -1590,6 +1608,7 @@ function gv(name){
   if(name==='receiving'){ recvInitView(); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
   if(name==='import'){ dzUpdateNeonDate(); }
+  if(name==='exceptions'){ renderExceptions(); }
 }
 
 // ── Neon date reminder in the drop zone ─────────────────────────
@@ -4310,6 +4329,13 @@ function doScan(raw){
     setErr('✗ "'+scanned+'" not found. Stored starts: '+stored+'  ·  Click 💬 to report this scan');
     setFb('✗ NOT FOUND','var(--rd)');
     // Remember the last failed scan so the Feedback form can pre-fill it
+    window._scanMisses = window._scanMisses || [];
+    window._scanMisses.push({
+      at: new Date().toISOString(),
+      raw: scanned,
+      candidates: scanCandidateNorms.slice(0, 6),
+      carrier: (function(){ try { return dc(scannedExtracted || scanned); } catch(e){ return 'Unknown'; } })()
+    });
     window._lastFailedScan = {
       scanned: scanned,
       candidates: scanCandidateNorms.slice(0, 8),
@@ -4359,6 +4385,8 @@ function completeOrder(order, scannedTracking){
   var now=Date.now();
   order.status='done';
   order.completedAt=new Date().toLocaleTimeString();
+  order.scanAudit = order.scanAudit || [];
+  if(scannedTracking) order.scanAudit.push({at:new Date().toISOString(), raw:String(scannedTracking)});
   order.orderEndTime=now;
 
   // Determine which packer to credit:
@@ -14054,6 +14082,89 @@ async function feedbackSubmit(){
   }, 500);
   document.addEventListener('visibilitychange', showFab);
 })();
+
+function exceptionCarrier(value){
+  var c = 'Unknown';
+  try { c = dc(String(value||'')) || 'Unknown'; } catch(e){}
+  if(!c || c==='Unknown'){
+    var s = String(value||'');
+    if(/UPS|1Z/i.test(s)) c = 'UPS';
+    else if(/FEDEX|TRK#/i.test(s)) c = 'FedEx';
+    else if(/USPS|9\d{19}/i.test(s)) c = 'USPS';
+  }
+  return c;
+}
+function renderExceptions(){
+  var body = document.getElementById('exceptions-body');
+  if(!body) return;
+  var groups = {};
+  function bucket(carrier){
+    if(!groups[carrier]) groups[carrier] = {open:[], unread:[], missed:[]};
+    return groups[carrier];
+  }
+  (orders||[]).forEach(function(o){
+    if(o.status==='done') return;
+    bucket(o.carrier || exceptionCarrier(o.tracking)).open.push(o);
+  });
+  (window._skippedPages||[]).forEach(function(p){
+    var blob = (p.tokens||[]).join(' ');
+    bucket(exceptionCarrier(blob)).unread.push(p);
+  });
+  (window._scanMisses||[]).forEach(function(m){
+    bucket(m.carrier || exceptionCarrier(m.raw)).missed.push(m);
+  });
+  var names = Object.keys(groups).sort();
+  if(!names.length){
+    body.innerHTML = '<div style="color:var(--td);">No open labels, unread pages, or failed scans in this batch.</div>';
+    return;
+  }
+  body.innerHTML = names.map(function(car){
+    var g = groups[car];
+    function rowOpen(o){
+      var sku = (o.skus&&o.skus[0]&&o.skus[0].sku) || 'UNKNOWN';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">'+escHtml(o.tracking||'')+' · '+escHtml(sku)+' · '+escHtml(o.shelf||'no shelf')+'</div>';
+    }
+    function rowUnread(p){
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">Page '+escHtml(String(p.pageNum||''))+' · '+escHtml((p.tokens||[]).slice(0,8).join(' '))+'</div>';
+    }
+    function rowMiss(m){
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">'+escHtml(m.at||'')+' · '+escHtml(m.raw||'')+'</div>';
+    }
+    return '<section style="border:1px solid var(--bdr);border-radius:8px;padding:12px;">'
+      + '<div style="font-weight:700;margin-bottom:8px;">'+escHtml(car)+'</div>'
+      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);">UNFINISHED '+g.open.length+'</div>'
+      + (g.open.map(rowOpen).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
+      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);margin-top:10px;">UNREADABLE PAGES '+g.unread.length+'</div>'
+      + (g.unread.map(rowUnread).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
+      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);margin-top:10px;">SCAN GUN MISSES '+g.missed.length+'</div>'
+      + (g.missed.map(rowMiss).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
+      + '</section>';
+  }).join('');
+}
+function exportPackHandoff(){
+  var header = ['tracking','carrier','sku','qty','shelf','status','completedAt','lastScanRaw'];
+  var lines = [header.join(',')];
+  (orders||[]).forEach(function(o){
+    var skus = (o.skus&&o.skus.length) ? o.skus : [{sku:'',qty:''}];
+    var last = (o.scanAudit&&o.scanAudit.length) ? o.scanAudit[o.scanAudit.length-1].raw : '';
+    skus.forEach(function(s){
+      var cols = [o.tracking||'', o.carrier||'', s.sku||'', s.qty||'', o.shelf||'', o.status||'', o.completedAt||'', last];
+      lines.push(cols.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','));
+    });
+  });
+  var blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'warehub-pack-handoff.csv';
+  a.click();
+}
+function toggleStationMode(){
+  document.body.classList.toggle('station-mode');
+  var on = document.body.classList.contains('station-mode');
+  var btn = document.getElementById('station-mode-btn');
+  if(btn) btn.textContent = on ? 'Exit station' : 'Station mode';
+  setTimeout(function(){ var el=document.getElementById('scan-in'); if(el) el.focus(); }, 50);
+}
 </script>
 
 </body>
