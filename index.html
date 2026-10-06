@@ -1483,6 +1483,13 @@ function whExtractTrackingCandidates(rawText){
   // stored order tracking numbers later in the matching chain is what
   // actually prevents a false-positive match, not this pattern being narrow.
   if(digits.length >= 12) whPushTrackingCandidate(out, digits.slice(-12), 'FedEx', 0.8, 'last-12-digits');
+  // Express 34-digit barcode: unique serial is not the last 12 (those include
+  // the check digit). Ground 34-digit GSN does use last-12. Emit both, plus
+  // the 15-digit ground form, so the gun payload can hit the stored TRK#.
+  if(digits.length >= 14) whPushTrackingCandidate(out, digits.slice(-14, -2), 'FedEx', 0.78, 'fedex-serial-before-check');
+  if(digits.length >= 15) whPushTrackingCandidate(out, digits.slice(-15), 'FedEx', 0.74, 'fedex-15');
+  if(digits.length >= 22) whPushTrackingCandidate(out, digits.slice(-22), 'FedEx', 0.7, 'fedex-22');
+  if(digits.length >= 32) whPushTrackingCandidate(out, digits.slice(20, 32), 'FedEx', 0.76, 'fedex-34-mid');
 
   addRegex(digits, /(96\d{18,22}|61\d{17,20}|7[245]\d{14,18})/g, 'FedEx', hintFedEx ? 0.96 : 0.72);
   if(!hintFedEx){
@@ -2659,8 +2666,25 @@ function extractOrder(words, pageH){
   var skus=skuW.map(function(w){
     // Handle "SKU*QTY*extra" — only take first two parts
     var parts=w.text.split('*');
-    return{sku:parts[0].toUpperCase(),qty:parseInt(parts[1])||1,scanned:0};
+    return{sku:parts[0].toUpperCase(),qty:parseInt(parts[1])||1,scanned:0,top:w.top||0};
   });
+  // Drop tokens that are carrier words, zips, or tracking fragments. A loose
+  // "*digits" match was pulling reference lines and a neighboring label's
+  // SKU onto this page, so Pack Station showed a SKU that was not on the label.
+  skus=skus.filter(function(s){
+    if(!s.sku || s.sku.length<3) return false;
+    if(!/[A-Z]/.test(s.sku)) return false;
+    if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE)$/i.test(s.sku)) return false;
+    if(/^\d{6,}$/.test(s.sku)) return false;
+    return true;
+  });
+  // Warehouse stamp sits lowest on the page. If several candidates remain,
+  // keep the lowest cluster only so a higher packing-slip line cannot win.
+  if(skus.length>1){
+    var lowest=skus.reduce(function(m,s){return Math.max(m,s.top||0);},0);
+    var low=skus.filter(function(s){return (s.top||0) >= lowest-12;});
+    if(low.length) skus=low;
+  }
   if(!skus.length) skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
 
 
@@ -2746,10 +2770,52 @@ function extractOrder(words, pageH){
   var routeRow=near(189,8);
   var hubW=null;for(var i=0;i<routeRow.length;i++){if(/^[A-Z]{2,5}\d{2,3}$/.test(routeRow[i].text)){hubW=routeRow[i];break;}}
 
+  // UPS Ground Saver / Mail Innovations print a USPS final-mile number
+  // (92…) next to the real 1Z. dc() on the 92 number buckets the page into
+  // the USPS print stack. If the page is a UPS label, force UPS and keep
+  // both numbers as scan aliases.
+  var pageBlob = words.map(function(w){return w.text;}).join(' ');
+  var pageCompact = words.map(function(w){return w.text.replace(/[^A-Z0-9]/gi,'');}).join('');
+  var upsBrand = /\bUPS\b|United\s*Parcel|Ground\s*Saver|SurePost|Mail\s*Innovations/i.test(pageBlob);
+  var fedexBrand = /FedEx|Federal\s*Express|\bTRK#/i.test(pageBlob);
+  var zMatch = pageCompact.match(/1Z[A-Z0-9]{16}/i);
+  if(zMatch && (upsBrand || !fedexBrand)){
+    tracking = zMatch[0].toUpperCase();
+    carrier = 'UPS';
+  } else if(upsBrand && !fedexBrand){
+    carrier = 'UPS';
+  }
+
+  var trackAliases = [];
+  function addAlias(v){
+    if(!v) return;
+    v = String(v).toUpperCase().replace(/\s+/g,'');
+    if(v.length<8) return;
+    if(trackAliases.indexOf(v)<0) trackAliases.push(v);
+  }
+  addAlias(tracking);
+  if(zMatch) addAlias(zMatch[0]);
+  var uspsNums = pageCompact.match(/9\d{19,25}/g) || [];
+  uspsNums.forEach(addAlias);
+  // FedEx linear barcode is usually 34 digits. Ground GSN keeps the unique
+  // tracking in the last 12; Express 34 keeps a 12-digit serial ending two
+  // digits before the end (zip + serial + check). Store every window so a
+  // scan-gun payload can hit the printed TRK# even when it is not last-12.
+  var digitRuns = pageCompact.match(/\d{12,40}/g) || [];
+  digitRuns.forEach(function(d){
+    addAlias(d);
+    if(d.length>=12) addAlias(d.slice(-12));
+    if(d.length>=14) addAlias(d.slice(-14,-2));
+    if(d.length>=15) addAlias(d.slice(-15));
+    if(d.length>=22) addAlias(d.slice(-22));
+    if(d.length>=32) addAlias(d.slice(20,32));
+  });
+
   return{tracking:tracking, carrier:carrier, hub:hubW?hubW.text:'',
     dest:dest, recipient:recipient, city:city, weight:weight, ref:ref, shelf:shelf,
     skus:skus, status:'pending', completedAt:null, labelDate:labelDate,
-    assignedTo:null, packedBy:null, orderStartTime:null, orderEndTime:null};
+    assignedTo:null, packedBy:null, orderStartTime:null, orderEndTime:null,
+    trackAliases:trackAliases};
 }
 
 function initOrders(parsed){
@@ -4210,20 +4276,32 @@ function doScan(raw){
       if(l12 && l12.length === 12 && storedNorms.indexOf(l12) < 0) storedNorms.push(l12);
     }
     addStored(stored);
+    (orders[i].trackAliases||[]).forEach(addStored);
 
     for(var si=0; si<storedNorms.length; si++){
       var t = storedNorms[si];
       if(t.length < 8) continue;
       for(var ci=0; ci<scanCandidateNorms.length; ci++){
         var c = scanCandidateNorms[ci];
-        if(c === t || (c.length >= 10 && t.length >= 10 && (c.indexOf(t) >= 0 || t.indexOf(c) >= 0))){
-          order = orders[i];
+        // Exact only. Substring matching was completing a different order
+        // whose tracking merely contained these digits, so Pack Station
+        // showed that order's SKU instead of the label in hand.
+        if(c === t){
+          if(!order) order = orders[i];
+          else if(order !== orders[i]) order = 'AMBIGUOUS';
           break;
         }
       }
-      if(order) break;
+      if(order==='AMBIGUOUS') break;
     }
-    if(order) break;
+    if(order==='AMBIGUOUS') break;
+  }
+  if(order==='AMBIGUOUS'){
+    bpErr(); flash('err');
+    setErr('✗ Scan matched more than one order. Re-import this batch and check the debug log.');
+    setFb('✗ AMBIGUOUS SCAN','var(--rd)');
+    dbg('═══ SCAN AMBIGUOUS ═══ raw='+scanned);
+    focusScan(); return;
   }
 
   if(!order){
