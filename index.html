@@ -370,6 +370,14 @@ body{
 
 body.station-mode .tabs, body.station-mode #view-import, body.station-mode #view-manager, body.station-mode #view-dash { display:none !important; }
 body.station-mode #scan-fb { font-size:28px !important; }
+
+#pack-remaining{margin:14px 12px 8px;padding:18px 16px 14px;border:1px solid var(--bdr);background:var(--sur);text-align:center;flex-shrink:0;}
+#pack-left{font-size:84px;line-height:0.9;font-weight:900;color:var(--am);letter-spacing:-2px;}
+#pack-left-lbl{font-size:13px;letter-spacing:4px;color:var(--am);font-weight:700;margin-top:4px;}
+#pack-split{margin-top:8px;font-size:14px;color:var(--tx);}
+#pack-pace{margin-top:8px;font-size:12px;color:var(--td);}
+body.station-mode #pack-left{font-size:120px;}
+
 </style>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -1177,6 +1185,13 @@ body.station-mode #scan-fb { font-size:28px !important; }
           <input id="scan-in" placeholder="Scan shipping label to begin…" data-i18n-placeholder="pack_scan_placeholder" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
           <button id="station-mode-btn" class="btn" onclick="toggleStationMode()">Station mode</button><div id="scan-fb">ready…</div>
         </div>
+        <div id="pack-remaining">
+          <div id="pack-left">—</div>
+          <div id="pack-left-lbl">LEFT</div>
+          <div id="pack-split">0 finished · 0 total</div>
+          <div class="bar" style="height:10px;margin-top:10px;"><div class="barf" id="pack-bar" style="width:0%;background:var(--gn);transition:width .35s;"></div></div>
+          <div id="pack-pace">Import a batch to start the count</div>
+        </div>
       </div>
       <div id="queue"></div>
     </div>
@@ -1601,15 +1616,86 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
-  if(name==='pack')   { renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
+  if(name==='pack')   { renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
   if(name==='receiving'){ recvInitView(); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
+  if((name==='returns' || name==='receiving' || name==='vehicle' || name==='fba') && !document.getElementById('view-'+name)){
+    loadDeferredTabs().then(function(){ gv(name); });
+    return;
+  }
   if(name==='import'){ dzUpdateNeonDate(); }
   if(name==='exceptions'){ renderExceptions(); }
 }
+
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function todaysImportedOrders(){
+  var today = todayISO();
+  return (orders||[]).filter(function(o){ return o.importedOn===today; });
+}
+function renderPackRemaining(){
+  var leftEl = document.getElementById('pack-left');
+  if(!leftEl) return;
+  var dayOrders = todaysImportedOrders();
+  var total = dayOrders.length;
+  var done = dayOrders.filter(function(o){ return o.status==='done'; }).length;
+  var left = Math.max(0, total-done);
+  leftEl.textContent = total ? String(left) : '—';
+  leftEl.style.color = left ? 'var(--am)' : 'var(--gn)';
+  var lbl = document.getElementById('pack-left-lbl');
+  if(lbl){ lbl.textContent = left ? 'LEFT' : 'CLEAR'; lbl.style.color = leftEl.style.color; }
+  var split = document.getElementById('pack-split');
+  if(split) split.textContent = done+' finished · '+total+' imported today';
+  var bar = document.getElementById('pack-bar');
+  if(bar) bar.style.width = (total ? Math.round(done/total*100) : 0)+'%';
+  var pace = document.getElementById('pack-pace');
+  if(!pace) return;
+  if(!total){ pace.textContent = 'No labels imported today'; return; }
+  if(!left){ pace.textContent = 'This batch is finished'; return; }
+  var start = window._shiftStart || null;
+  (packers||[]).forEach(function(p){
+    if(p.online && p.loginTime && (!start || p.loginTime < start)) start = p.loginTime;
+  });
+  if(!start) start = Date.now();
+  window._shiftStart = start;
+  var elapsed = Math.max(0, (Date.now()-start)/3600000);
+  var leftHours = Math.max(0.25, 8-elapsed);
+  pace.textContent = 'Need '+Math.ceil(left/leftHours)+' per hour for the rest of the 8-hour shift';
+}
+function refreshAfterPack(){
+  renderPackRemaining();
+  renderQueue();
+  renderPackerPanel();
+  updatePackerBar();
+  var doneEl = document.getElementById('pp');
+  if(doneEl){ var day=todaysImportedOrders(); doneEl.textContent = day.filter(function(o){return o.status==='done';}).length+' / '+day.length+' today'; }
+  if(document.getElementById('view-dash') && document.getElementById('view-dash').classList.contains('on')) renderDash();
+  if(document.getElementById('view-exceptions') && document.getElementById('view-exceptions').classList.contains('on')) renderExceptions();
+  renderFloor();
+}
+var _deferredTabsPromise = null;
+function loadDeferredTabs(){
+  if(document.getElementById('view-returns')) return Promise.resolve();
+  if(_deferredTabsPromise) return _deferredTabsPromise;
+  _deferredTabsPromise = fetch('partials/deferred-tabs.html').then(function(r){
+    if(!r.ok) throw new Error('Could not load tab');
+    return r.text();
+  }).then(function(html){
+    var host = document.getElementById('deferred-tabs');
+    if(host) host.outerHTML = html;
+  }).catch(function(err){
+    _deferredTabsPromise = null;
+    alert('This tab could not load. Refresh and try again.');
+    throw err;
+  });
+  return _deferredTabsPromise;
+}
+
 
 // ── Neon date reminder in the drop zone ─────────────────────────
 function dzUpdateNeonDate(){
@@ -2833,11 +2919,14 @@ function extractOrder(words, pageH){
   return{tracking:tracking, carrier:carrier, hub:hubW?hubW.text:'',
     dest:dest, recipient:recipient, city:city, weight:weight, ref:ref, shelf:shelf,
     skus:skus, status:'pending', completedAt:null, labelDate:labelDate,
+    importedOn:todayISO(),
     assignedTo:null, packedBy:null, orderStartTime:null, orderEndTime:null,
     trackAliases:trackAliases};
 }
 
 function initOrders(parsed){
+  var today = todayISO();
+  (parsed||[]).forEach(function(o){ if(!o.importedOn) o.importedOn = today; });
   orders=parsed; ai=0;
   // Fallback date for labels with no readable date of their own (GOFO, USPS,
   // Uniuni today) — align them with the date actually found on MOST OTHER
@@ -4461,7 +4550,7 @@ function completeOrder(order, scannedTracking){
   document.getElementById('done-ov').classList.add('show');
   setTimeout(function(){document.getElementById('done-ov').classList.remove('show');},1400);
 
-  renderQueue(); renderDash(); renderFloor(); renderPackerPanel(); updatePackerBar();
+  refreshAfterPack();
   document.getElementById('pp').textContent=
     orders.filter(function(o){return o.status==='done';}).length+' / '+orders.length+' done';
   focusScan();
@@ -5960,37 +6049,9 @@ function floorRenderTicker(){
 }
 
 function renderFloor(){
-  // Floor Display removed (Option C). Refresh Locations pick queue if that tab is open.
   if(typeof renderLocations === 'function' && document.getElementById('view-locations') && document.getElementById('view-locations').classList.contains('on')){
     renderLocations();
   }
-  return;
-  var rem=orders.filter(function(o){return o.status==='pending';}).length;
-  var don=orders.filter(function(o){return o.status==='done';}).length;
-  var tot=orders.length;
-  var fnEl=document.getElementById('fnum');
-  var fdEl=document.getElementById('fdone');
-  var fpEl=document.getElementById('fprog');
-  if(fnEl) fnEl.textContent=rem;
-  if(fdEl) fdEl.textContent=don+' / '+tot+' done';
-  if(fpEl) fpEl.style.width=(tot?Math.round((don/tot)*100):0)+'%';
-
-  var fEl=document.getElementById('f-packers');
-  if(fEl){
-    fEl.innerHTML=packers.filter(function(p){return p.online;}).map(function(p){
-      var col=packerColor(p);
-      var myDone=orders.filter(function(o){return (o.packedBy||o.assignedTo)===p.id && o.status==='done';}).length;
-      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--sur);border:1px solid '+col+';border-radius:2px;">'
-        +avatarHtml(p,28)
-        +'<span style="color:'+col+';font-size:11px;font-weight:600;">'+p.name+'</span>'
-        +'<span style="color:var(--gn);font-size:14px;font-weight:900;margin-left:auto;">'+myDone+'</span>'
-        +'</div>';
-    }).join('');
-  }
-
-  floorRenderRackMap();
-  floorRenderPickQueue();
-  floorRenderTicker();
 }
 
 function printPackerCards(){
@@ -12081,711 +12142,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 
-  <!-- ── Returns Intake ── -->
-  <div id="view-returns" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
-    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">Returns Intake</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Scan · log condition · notify manager</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;">
-          <button class="btn" onclick="returnsExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="playClickSound();returnsSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
-          <button class="btn btn-r" onclick="if(confirm('Clear all return records?')){returnsList=[];returnsSave();renderReturnsList();renderReturnsStats();pm('Returns cleared.');}" style="font-size:9px;white-space:nowrap;">✕ CLEAR ALL</button>
-        </div>
-      </div>
-
-      <!-- Stats row -->
-      <div id="return-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex-shrink:0;"></div>
-
-      <!-- Manager notification banner -->
-      <div id="return-mgr-banner" style="display:none;background:#ffb30018;border:1px solid var(--am);padding:10px 14px;font-size:10px;color:var(--am);flex-shrink:0;">
-        <span style="font-weight:700;">⚠ MANAGER REVIEW REQUIRED</span>
-        <span id="return-mgr-count" style="margin-left:8px;"></span>
-        <button class="btn" onclick="returnsManagerClear()" style="font-size:8px;margin-left:12px;border-color:var(--am);color:var(--am);">✓ REVIEWED</button>
-      </div>
-
-      <!-- Scan input -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 16px;flex-shrink:0;">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">SCAN RETURN PACKAGE</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="return-scan-in"
-            placeholder="Scan tracking barcode…"
-            autocomplete="off"
-            style="flex:1;min-width:180px;background:var(--bg);border:2px solid var(--cy);color:var(--tx);padding:10px 14px;font-size:13px;font-family:monospace;outline:none;"
-            onkeydown="if(event.key==='Enter'){returnsScan(this.value.trim());this.value='';}"
-          />
-          <button class="btn btn-c" onclick="var v=document.getElementById('return-scan-in');returnsScan(v.value.trim());v.value='';v.focus();" style="font-size:9px;white-space:nowrap;">✓ SCAN</button>
-        </div>
-        <div id="return-scan-fb" style="font-size:11px;color:var(--td);margin-top:8px;min-height:16px;"></div>
-      </div>
-
-      <!-- Detail form (appears after scan) -->
-      <div id="return-form" style="background:var(--sur);border:1px solid var(--cy);padding:14px 16px;display:none;flex-shrink:0;">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:12px;">
-          RETURN DETAILS —
-          <span id="return-form-tracking" style="font-family:monospace;font-size:11px;"></span>
-          <span id="return-form-carrier" style="margin-left:8px;font-size:9px;opacity:0.7;"></span>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-          <!-- Return type -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TYPE</div>
-            <select id="return-type" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="customer">Customer Return</option>
-              <option value="undeliverable">Carrier Undeliverable</option>
-              <option value="refused">Refused by Recipient</option>
-              <option value="damaged_transit">Damaged in Transit</option>
-              <option value="wrong_item">Wrong Item Sent</option>
-              <option value="not_ordered">Item Not Ordered</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <!-- Condition -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ITEM CONDITION</div>
-            <select id="return-condition" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" onchange="returnsConditionChange(this.value)">
-              <option value="sealed">Sealed / Unopened ✅</option>
-              <option value="open_good">Opened — Good ✅</option>
-              <option value="open_damaged">Opened — Damaged ⚠</option>
-              <option value="damaged">Item Damaged ❌</option>
-              <option value="missing_items">Items Missing ❌</option>
-              <option value="counterfeit">Suspected Counterfeit 🚨</option>
-            </select>
-          </div>
-          <!-- SKU -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU / PRODUCT</div>
-            <input id="return-sku" placeholder="Scan or type SKU…" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;"
-            />
-          </div>
-          <!-- Qty -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QTY</div>
-            <input id="return-qty" type="number" min="1" value="1"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"
-            />
-          </div>
-          <!-- Restock location -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RESTOCK LOCATION</div>
-            <input id="return-location" placeholder="e.g. R1-05 (leave blank for return pile)"
-              autocomplete="off" list="return-location-list"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;"
-            />
-            <datalist id="return-location-list"></datalist>
-          </div>
-          <!-- Pile assignment -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN PILE</div>
-            <select id="return-pile" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="A">Pile A — Resellable</option>
-              <option value="B">Pile B — Needs Inspection</option>
-              <option value="C">Pile C — Damaged / Dispose</option>
-              <option value="D">Pile D — Manager Review</option>
-            </select>
-          </div>
-        </div>
-
-          <!-- Carrier -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">CARRIER</div>
-            <select id="return-carrier-sel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— Auto-detected —</option>
-              <option value="GOFO">GOFO</option>
-              <option value="FedEx">FedEx</option>
-              <option value="UPS">UPS</option>
-              <option value="USPS">USPS</option>
-              <option value="SpeedX">SpeedX</option>
-              <option value="SWIFT">SWIFT</option>
-              <option value="Uniuni">Uniuni</option>
-              <option value="LSO">LSO</option>
-              <option value="OnTrac">OnTrac</option>
-              <option value="Amazon">Amazon</option>
-              <option value="DHL">DHL</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <!-- Scanner -->
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SCANNED BY</div>
-            <select id="return-scanner-sel" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— Select staff —</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Notes -->
-        <div style="margin-bottom:10px;">
-          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NOTES</div>
-          <textarea id="return-notes" placeholder="Describe the condition, reason, any visible damage…" rows="2"
-            style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;"></textarea>
-        </div>
-
-        <!-- Photo capture -->
-        <div style="margin-bottom:12px;">
-          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:6px;">PHOTOS (optional)</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <button class="btn" onclick="returnsTakePhoto()" style="font-size:9px;white-space:nowrap;">📷 TAKE PHOTO</button>
-            <button class="btn" onclick="returnsUploadPhoto()" style="font-size:9px;white-space:nowrap;">🖼 UPLOAD</button>
-            <span id="return-photo-count" style="font-size:9px;color:var(--td);"></span>
-          </div>
-          <div id="return-photo-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
-        </div>
-
-        <!-- Manager flag -->
-        <div id="return-mgr-flag-row" style="display:none;background:#ffb30018;border:1px solid var(--am);padding:8px 12px;margin-bottom:10px;font-size:10px;color:var(--am);">
-          ⚠ This condition requires manager review — manager will be notified when you log this return.
-        </div>
-
-        <!-- Actions -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-g" onclick="returnsSubmit()" style="font-size:10px;padding:8px 18px;white-space:nowrap;">✓ LOG RETURN</button>
-          <button class="btn" onclick="returnsCancelForm()" style="font-size:9px;white-space:nowrap;">✕ CANCEL</button>
-        </div>
-      </div>
-
-      <!-- Returns list -->
-      <div style="flex-shrink:0;">
-        <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">RETURN LOG</div>
-        <div id="return-list" style="display:flex;flex-direction:column;gap:6px;"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── Receiving — scan new arrivals & assign shelf locations ── -->
-  <div id="view-receiving" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
-    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;min-width:0;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;flex-shrink:0;">
-        <div>
-          <div style="font-size:15px;font-weight:700;">📥 Receiving</div>
-          <div style="font-size:10.5px;color:var(--td);margin-top:2px;">Scan new arrivals in — SKU, shelf location, quantity — built for many boxes in a row.</div>
-        </div>
-        <div style="display:flex;gap:16px;">
-          <div style="text-align:center;">
-            <div id="recv-stat-today" style="font-size:20px;font-weight:800;color:var(--cy);">0</div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">TODAY</div>
-          </div>
-          <div style="text-align:center;">
-            <div id="recv-stat-total" style="font-size:20px;font-weight:800;color:var(--gn);">0</div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">TOTAL LOGGED</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Scan form -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:16px;flex-shrink:0;max-width:480px;">
-        <div style="display:grid;grid-template-columns:1fr;gap:10px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SKU</div>
-            <input id="recv-sku" type="text" placeholder="Scan or type SKU…" autocomplete="off"
-              style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
-                     background:var(--bg,#0a0f18);border:2px solid var(--cy);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-              onkeydown="recvSkuKeyHandler(event)"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LOCATION</div>
-            <input id="recv-location" type="text" placeholder="Scan or type shelf location…" autocomplete="off" list="return-location-list"
-              style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
-                     background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;letter-spacing:1px;"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('recv-qty').focus();document.getElementById('recv-qty').select();}"/>
-          </div>
-          <div style="display:flex;gap:10px;align-items:flex-end;">
-            <div style="flex:1;">
-              <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">QUANTITY</div>
-              <input id="recv-qty" type="number" value="1" min="1" autocomplete="off"
-                style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:14px;border-radius:7px;
-                       background:var(--bg,#0a0f18);border:2px solid var(--bdr);color:var(--tx);font-family:inherit;"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();recvSubmit();}"/>
-            </div>
-            <button onclick="recvSubmit()" style="padding:11px 22px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;background:var(--cy);border:none;color:#031014;font-family:inherit;white-space:nowrap;">✓ ASSIGN LOCATION</button>
-          </div>
-        </div>
-        <div id="recv-status" style="font-size:11px;margin-top:10px;min-height:16px;"></div>
-      </div>
-
-      <!-- Receiving log -->
-      <div style="flex-shrink:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <div style="font-size:8px;letter-spacing:2px;color:var(--td);">RECEIVING LOG</div>
-          <button onclick="recvExportExcel()" style="font-size:9px;padding:5px 10px;border-radius:6px;cursor:pointer;background:#1D6F4215;border:1px solid #1D6F42;color:#1D6F42;font-family:inherit;">📊 EXPORT EXCEL</button>
-        </div>
-        <div id="recv-log" style="display:flex;flex-direction:column;gap:6px;"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── Vehicle Log ── -->
-  <div id="view-vehicle" class="view" style="display:flex;flex-direction:column;">
-    <div style="padding:16px 18px;width:100%;box-sizing:border-box;flex-shrink:0;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">VEHICLE LOG</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">Daily Usage Record</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub · Company Vehicle Log</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-          <button class="btn" onclick="vehicleExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="playClickSound();vehicleSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
-        </div>
-      </div>
-
-      <!-- Vehicle Config -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:14px 20px;margin-bottom:16px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;">
-        <div style="font-size:8px;letter-spacing:2px;color:var(--cy);align-self:center;white-space:nowrap;">VEHICLE INFO</div>
-        <div style="display:flex;gap:12px;flex:1;flex-wrap:wrap;">
-          <div style="flex:1;min-width:140px;">
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">MODEL / NAME</div>
-            <input id="veh-config-model" placeholder="e.g. Ford Transit 2022" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div style="flex:1;min-width:120px;">
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LICENSE PLATE</div>
-            <input id="veh-config-plate" placeholder="e.g. ABC-1234" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-        </div>
-        <button class="btn btn-c" onclick="vehicleConfigSave()" style="font-size:9px;white-space:nowrap;align-self:flex-end;">💾 SAVE</button>
-      </div>
-
-      <!-- New Trip Form -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:14px;">NEW TRIP ENTRY</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DRIVER</div>
-            <select id="veh-driver" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— select driver —</option>
-            </select>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DESTINATION</div>
-            <div style="display:flex;gap:6px;">
-              <input id="veh-dest" placeholder="Start typing or click 🔍 to search…" autocomplete="off" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-              <button onclick="vehMapSearch()" style="padding:4px 10px;font-size:12px;background:#4285f4;border:none;color:#fff;cursor:pointer;" title="Search on map">🔍</button>
-            </div>
-            <div id="veh-dest-map-link" style="display:none;margin-top:4px;font-size:9px;"></div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">DEPARTURE TIME</div>
-            <div style="display:flex;gap:6px;">
-              <input id="veh-depart" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-              <button onclick="vehicleSetNow('veh-depart')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">RETURN TIME</div>
-            <div style="display:flex;gap:6px;">
-              <input id="veh-return" type="datetime-local" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-              <button onclick="vehicleSetNow('veh-return')" style="padding:4px 8px;font-size:9px;background:var(--bg);border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">NOW</button>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER START (mi)</div>
-            <input id="veh-odo-start" type="number" placeholder="e.g. 45230" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">ODOMETER END (mi)</div>
-            <input id="veh-odo-end" type="number" placeholder="e.g. 45265" onkeydown="if(event.key==='Enter')vehicleAddTrip();" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-        </div>
-        <div style="margin-bottom:12px;">
-          <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">PURPOSE / NOTES</div>
-          <textarea id="veh-notes" placeholder="Purpose of trip, items picked up, fuel filled, any incidents…" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:60px;"></textarea>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div id="veh-form-msg" style="font-size:10px;color:var(--am);"></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn" onclick="vehicleClearForm()" style="font-size:9px;">✕ CLEAR</button>
-            <button class="btn btn-c" onclick="vehicleAddTrip()" style="font-size:9px;">+ LOG TRIP</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stats bar -->
-      <div id="veh-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
-
-      <!-- Trip log table -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
-          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">TRIP HISTORY</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input id="veh-filter" placeholder="Filter by driver or destination…" oninput="renderVehicleLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:200px;"/>
-            <button class="btn" onclick="if(confirm('Delete ALL trip records?')){vehicleTrips=[];vehicleSave();renderVehicleLog();renderVehicleStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
-          </div>
-        </div>
-        <div id="veh-log" style="overflow-x:auto;"></div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- ══ FBA OUTBOUND ══ -->
-  <div id="view-fba" class="view" style="display:flex;flex-direction:column;overflow-y:auto;">
-    <div style="padding:16px 18px;width:100%;box-sizing:border-box;flex-shrink:0;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">AMAZON FBA</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">Outbound Shipment Record</div>
-          <div style="font-size:10px;color:var(--td);margin-top:2px;">Warehub · End-of-day summary per shipment plan</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-          <button class="btn" onclick="fbaExportCSV()" style="font-size:9px;white-space:nowrap;">⬇ EXPORT CSV</button>
-          <button class="btn" onclick="playClickSound();fbaSaveExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 SAVE TO EXCEL</button>
-        </div>
-      </div>
-
-      <!-- Stats bar -->
-      <div id="fba-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;"></div>
-
-      <!-- ── Outbound Items Grid (spreadsheet-style) ── -->
-      <div style="margin-bottom:28px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-          <div>
-            <div style="font-size:10px;letter-spacing:3px;color:var(--td);">OUTBOUND ITEMS</div>
-            <div style="font-size:13px;font-weight:700;">Quick-entry grid — <span id="fba-batch-label" style="color:var(--cy);">Batch 1</span></div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn" onclick="fbaBatchHistoryToggle()" style="font-size:9px;white-space:nowrap;">📜 BATCH HISTORY</button>
-            <button class="btn" onclick="fbaBatchStartNew()" style="border-color:var(--am,#fbbf24);color:var(--am,#fbbf24);background:#fbbf2415;font-size:9px;white-space:nowrap;">🆕 START NEW BATCH</button>
-            <button class="btn" onclick="fbaGridAddRow()" style="font-size:9px;white-space:nowrap;">+ ADD ROW</button>
-            <button class="btn" onclick="fbaGridExportExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 EXPORT EXCEL</button>
-          </div>
-        </div>
-        <div id="fba-batch-history" style="display:none;background:var(--sur2,#1a2030);border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;margin-bottom:12px;"></div>
-        <div style="overflow-x:auto;border:1px solid var(--bdr);border-radius:8px;">
-          <table style="width:100%;border-collapse:collapse;font-size:10.5px;min-width:960px;">
-            <thead>
-              <tr style="background:var(--sur2,#1a2030);">
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Ship Date</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Shipment ID</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">FC</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">SKU</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Qty</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Size (L*W*H)</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Weight (lb)</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Carrier</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Tracking #</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Boxes</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Submitted By</th>
-                <th style="padding:7px 8px;text-align:left;color:var(--td);font-weight:600;border-bottom:1px solid var(--bdr);white-space:nowrap;">Notes</th>
-                <th style="padding:7px 8px;border-bottom:1px solid var(--bdr);"></th>
-              </tr>
-            </thead>
-            <tbody id="fba-grid-body"></tbody>
-          </table>
-        </div>
-        <div id="fba-grid-empty" style="display:none;padding:16px;text-align:center;font-size:11px;color:var(--td);">No items yet — click "+ Add Row" to start.</div>
-      </div>
-
-      <!-- ── FBA Label PDF Import ── -->
-      <div id="fba-import-zone"
-        ondragover="event.preventDefault();this.style.borderColor='var(--cy)';this.style.background='#818cf808';"
-        ondragleave="this.style.borderColor='var(--bdr)';this.style.background='transparent';"
-        ondrop="event.preventDefault();this.style.borderColor='var(--bdr)';this.style.background='transparent';if(event.dataTransfer.files.length) fbaImportPdf(event.dataTransfer.files);"
-        onclick="document.getElementById('fba-pdf-input').click()"
-        style="border:2px dashed var(--bdr);padding:20px 24px;margin-bottom:16px;cursor:pointer;
-               display:flex;align-items:center;gap:16px;transition:all .2s;">
-        <div style="font-size:26px;flex-shrink:0;">📄</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;letter-spacing:2px;color:var(--cy);margin-bottom:3px;">IMPORT FROM AMAZON FBA LABEL PDF</div>
-          <div style="font-size:9px;color:var(--td);line-height:1.5;">
-            Drop the PDF here or click to browse — Shipment ID, FC, box count, tracking and SKUs will be parsed automatically.
-            Multi-shipment PDFs create multiple records at once. If your carrier (UPS/FedEx) labels are a separate PDF from
-            the Amazon box labels, select or drag <b>both files together</b> — carrier-only labels dropped alone have nothing
-            to link them to a shipment.
-          </div>
-        </div>
-        <input id="fba-pdf-input" type="file" accept="application/pdf" multiple style="display:none"
-          onchange="if(this.files.length) fbaImportPdf(this.files); this.value='';">
-        <div id="fba-import-spinner" style="display:none;font-size:11px;color:var(--cy);flex-shrink:0;">⟳ parsing…</div>
-      </div>
-
-      <!-- Batch edit panel — shown after PDF parsed, before logging -->
-      <div id="fba-parse-preview" style="display:none;background:var(--sur);border:1px solid var(--cy);padding:14px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div style="font-size:9px;letter-spacing:2px;color:var(--cy);">BATCH EDIT — REVIEW &amp; LOG PARSED SHIPMENTS</div>
-          <button onclick="_fbaParsedBatch=[];document.getElementById('fba-parse-preview').style.display='none';"
-            style="background:transparent;border:none;color:var(--td);font-size:13px;cursor:pointer;">✕</button>
-        </div>
-        <!-- fba-batch-global injected here by JS -->
-        <div id="fba-parse-cards" style="display:flex;flex-direction:column;gap:0;max-height:60vh;overflow-y:auto;"></div>
-        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
-          <button id="fba-parse-log-all" onclick="fbaLogParsedAll()"
-            class="btn btn-g" style="font-size:9px;">✓ LOG ALL SHIPMENTS</button>
-          <div id="fba-parse-msg" style="font-size:10px;color:var(--am);"></div>
-        </div>
-      </div>
-
-      <!-- ── Reprint Queue (persistent, auto-populated from parse) ── -->
-      <div id="fba-reprint-panel" style="display:none;background:var(--sur);border:1px solid #e05252;padding:14px 16px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="font-size:9px;letter-spacing:2px;color:#f87171;font-weight:700;">🖨 REPRINT QUEUE</div>
-            <div id="fba-reprint-badge" style="display:none;background:#e05252;color:#fff;font-size:9px;font-weight:700;padding:1px 9px;border-radius:20px;"></div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button onclick="fbaReprintPrint()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid #f87171;color:#f87171;cursor:pointer;font-family:inherit;white-space:nowrap;">🖨 PRINT SHEET</button>
-            <button onclick="fbaReprintClearDone()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">CLEAR DONE</button>
-            <button onclick="fbaReprintClearAll()" style="font-size:9px;padding:4px 12px;background:transparent;border:1px solid var(--bdr);color:var(--td);cursor:pointer;font-family:inherit;white-space:nowrap;">CLEAR ALL</button>
-          </div>
-        </div>
-        <div id="fba-reprint-list" style="display:flex;flex-direction:column;gap:0;max-height:300px;overflow-y:auto;border:1px solid var(--bdr);"></div>
-        <div style="font-size:9px;color:var(--td);margin-top:8px;line-height:1.5;">
-          Auto-populated when parse detects missing boxes. Click ○ to mark reprinted — queue persists across sessions.
-        </div>
-      </div>
-
-      <!-- New Shipment Form -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);padding:20px;margin-bottom:24px;">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:14px;">NEW FBA SHIPMENT ENTRY — or fill manually below</div>
-
-        <!-- Row 1: Shipment ID + FC + Date + Submitted By -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">FBA SHIPMENT ID <span style="font-size:8px;letter-spacing:0;opacity:.6;">📷 scan or type</span></div>
-            <input id="fba-shipment-id" placeholder="Scan FBA label or type FBA15XXXXXX…" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:2px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;transition:border-color .15s;"
-              onfocus="this.style.borderColor='var(--cy)'"
-              onblur="this.style.borderColor='var(--bdr)';this.value=this.value.trim();"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.value=this.value.trim();document.getElementById('fba-fc').focus();}"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">FC DESTINATION</div>
-            <input id="fba-fc" placeholder="e.g. ONT8, PHX6, MDW2…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;" list="fba-fc-list"/>
-            <datalist id="fba-fc-list">
-              <option value="ONT8"/><option value="PHX6"/><option value="MDW2"/><option value="BWI2"/>
-              <option value="EWR4"/><option value="LAX9"/><option value="DAL3"/><option value="MKE1"/>
-              <option value="SDF8"/><option value="RNO4"/><option value="TEB9"/><option value="HOU2"/>
-            </datalist>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SHIP DATE</div>
-            <input id="fba-date" type="date" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">SUBMITTED BY</div>
-            <select id="fba-submitted-by" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— select —</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Row 2: Carrier + Tracking + Boxes + Total Units -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">CARRIER TO FC</div>
-            <select id="fba-carrier" style="width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;">
-              <option value="">— select —</option>
-              <option value="UPS">UPS</option>
-              <option value="FedEx">FedEx</option>
-              <option value="USPS">USPS</option>
-              <option value="Amazon Partnered UPS">Amazon Partnered UPS</option>
-              <option value="Amazon Partnered FedEx">Amazon Partnered FedEx</option>
-              <option value="LTL / Freight">LTL / Freight</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">TRACKING TO FC <span style="font-size:8px;letter-spacing:0;opacity:.6;">📷 scan or type</span></div>
-            <input id="fba-tracking" placeholder="Scan shipping label or type tracking #…" autocomplete="off"
-              style="width:100%;box-sizing:border-box;background:var(--bg);border:2px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:monospace;outline:none;transition:border-color .15s;"
-              onfocus="this.style.borderColor='var(--cy)'"
-              onblur="this.style.borderColor='var(--bdr)';this.value=this.value.trim();"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.value=this.value.trim();document.getElementById('fba-boxes').focus();}"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NUMBER OF BOXES</div>
-            <input id="fba-boxes" type="number" min="1" placeholder="e.g. 12" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">TOTAL UNITS</div>
-            <input id="fba-total-units" type="number" min="1" placeholder="e.g. 240" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-        </div>
-
-        <!-- Row 3: Box dims + Weight per box -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">BOX L × W × H (in)</div>
-            <div style="display:flex;gap:4px;align-items:center;">
-              <input id="fba-dim-l" type="number" min="0" placeholder="L" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
-              <span style="color:var(--td);font-size:10px;">×</span>
-              <input id="fba-dim-w" type="number" min="0" placeholder="W" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
-              <span style="color:var(--td);font-size:10px;">×</span>
-              <input id="fba-dim-h" type="number" min="0" placeholder="H" style="flex:1;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 6px;font-size:11px;font-family:inherit;outline:none;"/>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">WEIGHT PER BOX (lbs)</div>
-            <input id="fba-weight" type="number" min="0" step="0.1" placeholder="e.g. 18.5" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-          <div style="grid-column:span 2;">
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">NOTES</div>
-            <input id="fba-notes" placeholder="Any additional notes, reference numbers, PO#…" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 8px;font-size:11px;font-family:inherit;outline:none;"/>
-          </div>
-        </div>
-
-        <!-- SKU Rows -->
-        <div style="margin-bottom:14px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <div style="font-size:8px;letter-spacing:1px;color:var(--td);">SKU / PRODUCT LINES</div>
-            <button class="btn" onclick="fbaAddSkuRow()" style="font-size:8px;padding:3px 10px;border-color:var(--am);color:var(--am);">+ ADD SKU</button>
-          </div>
-          <div id="fba-sku-rows">
-            <!-- SKU rows injected by fbaAddSkuRow() -->
-          </div>
-        </div>
-
-        <div id="fba-edit-banner" style="display:none;align-items:center;justify-content:space-between;background:var(--cy)15;border:1px solid var(--cy);padding:8px 12px;margin-bottom:12px;">
-          <span style="font-size:10px;color:var(--cy);"></span>
-          <button class="btn" onclick="fbaClearForm()" style="font-size:8px;padding:3px 10px;flex-shrink:0;margin-left:10px;">CANCEL EDIT</button>
-        </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div id="fba-form-msg" style="font-size:10px;color:var(--am);"></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn" onclick="fbaClearForm()" style="font-size:9px;">✕ CLEAR</button>
-            <button id="fba-submit-btn" class="btn btn-c" onclick="fbaSubmit()" style="font-size:9px;">+ LOG SHIPMENT</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Shipment log table -->
-      <div style="background:var(--sur);border:1px solid var(--bdr);">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bdr);">
-          <div style="font-size:9px;letter-spacing:2px;color:var(--td);">SHIPMENT HISTORY</div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input id="fba-filter" placeholder="Filter by shipment ID, FC, SKU…" oninput="renderFbaLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:220px;"/>
-            <button class="btn" onclick="if(confirm('Delete ALL FBA records?')){fbaRecords=[];fbaSaveLocal();renderFbaLog();renderFbaStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
-          </div>
-        </div>
-        <div id="fba-log" style="overflow-x:auto;"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ══ RACK MAP ══ -->
-  <!-- Legacy Rack Map UI kept in DOM but hidden (Option C — list-only Locations tab) -->
-  <div id="view-rackmap" class="view" style="display:none!important;">
-    <div style="max-width:700px;margin:0 auto;width:100%;">
-
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <div style="font-size:10px;letter-spacing:3px;color:var(--td);">WAREHOUSE</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">Goods Location Map</div>
-          <div id="rack-address-display" style="font-size:10px;color:var(--td);margin-top:2px;">—</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="rack-search" placeholder="Search spot or SKU…" oninput="rackSearch(this.value)" onkeydown="if(event.key==='Enter')rackSearch(this.value)" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 10px;font-size:11px;font-family:inherit;outline:none;width:180px;"/>
-          <button class="btn" onclick="rackClearHighlight()" style="font-size:9px;">✕ CLEAR</button>
-          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
-          <button class="btn" onclick="rackShowPickRoute()" style="font-size:9px;border-color:var(--cy);color:var(--cy);">🚶 PICK ROUTE</button>
-          <button class="btn" onclick="rackOpenConfig()" style="font-size:9px;border-color:var(--am);color:var(--am);">⚙ CONFIGURE LAYOUT</button>
-          <button class="btn" id="rack-edit-toggle" onclick="rackToggleEditMode()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">✏️ EDIT POSITIONS</button>
-          <button class="btn" onclick="rackPrintLocationLabels()" style="font-size:9px;border-color:#1D6F42;color:#1D6F42;">🖨 PRINT LOCATION LABELS</button>
-          <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
-        </div>
-      </div>
-
-      <div id="rack-edit-hint" style="display:none;font-size:10px;color:var(--pu,#c77dff);background:#c77dff15;border:1px solid var(--pu,#c77dff);border-radius:6px;padding:8px 12px;margin-bottom:12px;">
-        ✏️ Edit mode on — drag a zone to move it, or drag its bottom-right corner to resize it. Changes save automatically and sync to every device on this account.
-      </div>
-
-      <!-- Dynamic legend -->
-      <div id="rack-legend" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;font-size:9px;"></div>
-
-      <!-- Dynamic SVG rack map -->
-      <div id="rack-svg-wrap" style="overflow-x:auto;">
-        <svg id="rack-svg" viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;font-family:Arial,sans-serif;"></svg>
-      </div>
-
-      <!-- Setup prompt shown when no zones configured -->
-      <div id="rack-setup-prompt" style="display:none;text-align:center;padding:60px 20px;color:var(--td);">
-        <div style="font-size:32px;margin-bottom:16px;">🗺</div>
-        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px;">No layout configured yet</div>
-        <div style="font-size:12px;margin-bottom:20px;">Define your warehouse zones to build a custom rack map.</div>
-        <button class="btn btn-c" onclick="rackOpenConfig()" style="font-size:11px;">⚙ Configure Layout</button>
-      </div>
-
-      <!-- Spot info panel -->
-      <div id="rack-info-panel" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--cy);border-radius:6px;background:var(--bg);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div>
-            <span id="rack-info-title" style="font-size:14px;font-weight:700;color:var(--cy);"></span>
-            <span id="rack-info-type" style="font-size:9px;color:var(--td);margin-left:8px;letter-spacing:1px;"></span>
-          </div>
-          <button onclick="rackClearHighlight()" style="background:transparent;border:none;color:var(--td);cursor:pointer;font-size:14px;">✕</button>
-        </div>
-        <div id="rack-info-orders"></div>
-      </div>
-
-      <!-- Pick route panel -->
-      <div id="rack-route-panel" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--cy);border-radius:6px;background:var(--bg);">
-        <div style="font-size:9px;letter-spacing:2px;color:var(--cy);margin-bottom:10px;">OPTIMAL PICK ROUTE</div>
-        <div id="rack-route-steps"></div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ══ RACK LAYOUT CONFIG MODAL ══ -->
-  <div id="rack-config-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
-    <div style="background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:24px;width:min(600px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px #000a;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <div style="font-size:15px;font-weight:700;">Configure Warehouse Layout</div>
-        <button onclick="rackCloseConfig()" style="background:transparent;border:none;color:var(--td);font-size:18px;cursor:pointer;">✕</button>
-      </div>
-
-      <!-- Warehouse info -->
-      <div style="margin-bottom:20px;padding:14px;background:var(--bg);border-radius:8px;border:1px solid var(--bdr);">
-        <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;">WAREHOUSE INFO</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <div style="font-size:9px;color:var(--td);margin-bottom:4px;">WAREHOUSE NAME</div>
-            <input id="rack-cfg-name" placeholder="My Warehouse" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:7px 9px;font-size:11px;font-family:inherit;outline:none;border-radius:4px;"/>
-          </div>
-          <div>
-            <div style="font-size:9px;color:var(--td);margin-bottom:4px;">ADDRESS / NOTE</div>
-            <input id="rack-cfg-addr" placeholder="123 Main St, City TX" style="width:100%;box-sizing:border-box;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);padding:7px 9px;font-size:11px;font-family:inherit;outline:none;border-radius:4px;"/>
-          </div>
-        </div>
-      </div>
-
-      <!-- Zone list -->
-      <div style="font-size:10px;letter-spacing:2px;color:var(--td);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span>ZONES <span style="font-size:9px;letter-spacing:0;font-weight:400;color:var(--td);">— each zone becomes a labeled section on the map</span></span>
-        <button onclick="rackResetAllPositions()" style="font-size:9px;letter-spacing:0;padding:4px 10px;background:transparent;border:1px solid var(--rd);color:var(--rd);border-radius:5px;cursor:pointer;font-family:inherit;white-space:nowrap;" title="Clears every zone's X/Y/Width/Height so the layout auto-regenerates cleanly — use this to recover from a badly out-of-scale layout">↺ Reset All Positions</button>
-      </div>
-      <div id="rack-cfg-zones" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
-      <button onclick="rackCfgAddZone()" style="width:100%;padding:9px;background:transparent;border:1px dashed var(--bdr);color:var(--cy);font-size:11px;font-family:inherit;cursor:pointer;border-radius:6px;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--cy)'" onmouseout="this.style.borderColor='var(--bdr)'">+ Add Zone</button>
-
-      <!-- Actions -->
-      <div style="display:flex;gap:10px;margin-top:20px;">
-        <button onclick="rackCfgSave()" style="flex:1;padding:11px;background:var(--cy);color:#0d1117;border:none;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;">💾 Save & Rebuild Map</button>
-        <button onclick="rackCloseConfig()" style="padding:11px 18px;background:transparent;border:1px solid var(--bdr);color:var(--td);border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-
-  </div>
+  <div id="deferred-tabs"></div>
 
 <!-- ── AI Insights Panel ── -->
 <div id="insights-panel" style="
@@ -13537,7 +12894,7 @@ function aiDoActions(actions){
         orderStartTime: null, orderEndTime: null
       };
     });
-    renderQueue(); renderDash(); renderFloor();
+    refreshAfterPack();
     pm('✓ Orders restored from cloud (' + orders.length + ' orders)');
   };
 
