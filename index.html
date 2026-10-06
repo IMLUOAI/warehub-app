@@ -14120,26 +14120,66 @@ function renderExceptions(){
   }
   body.innerHTML = names.map(function(car){
     var g = groups[car];
+    var col = '#4a6080';
+    try { col = cc(car) || col; } catch(e){}
     function rowOpen(o){
       var sku = (o.skus&&o.skus[0]&&o.skus[0].sku) || 'UNKNOWN';
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">'+escHtml(o.tracking||'')+' · '+escHtml(sku)+' · '+escHtml(o.shelf||'no shelf')+'</div>';
+      var id = encodeURIComponent(o.tracking||'');
+      return '<div style="padding:8px 0;border-bottom:1px solid var(--bdr);font-size:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;">'
+        + '<div><span style="color:#7dd3fc;font-weight:700;">'+escHtml(o.tracking||'')+'</span>'
+        + ' <span style="color:#86efac;font-weight:700;">'+escHtml(sku)+'</span>'
+        + ' <span style="color:#fbbf24;">'+escHtml(o.shelf||'no shelf')+'</span></div>'
+        + '<div style="display:flex;gap:6px;">'
+        + '<button class="btn" onclick="editExceptionOrder(decodeURIComponent(\''+id+'\'))">Edit</button>'
+        + '<button class="btn" style="border-color:#86efac;color:#86efac;" onclick="confirmExceptionOrder(decodeURIComponent(\''+id+'\'))">Confirm packed</button>'
+        + '</div></div>';
     }
     function rowUnread(p){
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">Page '+escHtml(String(p.pageNum||''))+' · '+escHtml((p.tokens||[]).slice(0,8).join(' '))+'</div>';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;"><span style="color:#fb7185;font-weight:700;">Page '+escHtml(String(p.pageNum||''))+'</span> <span style="color:var(--td);">'+escHtml((p.tokens||[]).slice(0,8).join(' '))+'</span></div>';
     }
     function rowMiss(m){
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;">'+escHtml(m.at||'')+' · '+escHtml(m.raw||'')+'</div>';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px;"><span style="color:#c4b5fd;">'+escHtml(m.at||'')+'</span> <span style="color:#e2e8f0;">'+escHtml(m.raw||'')+'</span></div>';
     }
-    return '<section style="border:1px solid var(--bdr);border-radius:8px;padding:12px;">'
-      + '<div style="font-weight:700;margin-bottom:8px;">'+escHtml(car)+'</div>'
-      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);">UNFINISHED '+g.open.length+'</div>'
+    return '<section style="border:1px solid '+col+';border-radius:8px;padding:12px;">'
+      + '<div style="font-weight:800;margin-bottom:8px;color:'+col+';">'+escHtml(car)+'</div>'
+      + '<div style="font-size:11px;letter-spacing:1px;color:#fbbf24;font-weight:700;">UNFINISHED '+g.open.length+'</div>'
+      + '<div style="font-size:11px;color:var(--td);margin:2px 0 6px;">Gun could not read these. Edit the SKU if it is wrong, then confirm packed.</div>'
       + (g.open.map(rowOpen).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
-      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);margin-top:10px;">UNREADABLE PAGES '+g.unread.length+'</div>'
+      + '<div style="font-size:11px;letter-spacing:1px;color:#fb7185;font-weight:700;margin-top:10px;">UNREADABLE PAGES '+g.unread.length+'</div>'
       + (g.unread.map(rowUnread).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
-      + '<div style="font-size:11px;letter-spacing:1px;color:var(--td);margin-top:10px;">SCAN GUN MISSES '+g.missed.length+'</div>'
+      + '<div style="font-size:11px;letter-spacing:1px;color:#c4b5fd;font-weight:700;margin-top:10px;">SCAN GUN MISSES '+g.missed.length+'</div>'
       + (g.missed.map(rowMiss).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
       + '</section>';
   }).join('');
+}
+function findOpenException(tracking){
+  return (orders||[]).find(function(o){ return o.tracking===tracking && o.status!=='done'; });
+}
+function editExceptionOrder(tracking){
+  var o = findOpenException(tracking);
+  if(!o) return;
+  var sku = (o.skus&&o.skus[0]) ? o.skus[0].sku : '';
+  var nextSku = prompt('SKU printed on this label', sku);
+  if(nextSku===null) return;
+  var nextShelf = prompt('Shelf', o.shelf||'');
+  if(nextShelf===null) return;
+  if(!o.skus||!o.skus.length) o.skus=[{sku:String(nextSku).toUpperCase(), qty:1, scanned:0}];
+  else o.skus[0].sku = String(nextSku).toUpperCase();
+  o.shelf = nextShelf;
+  renderExceptions();
+}
+function confirmExceptionOrder(tracking){
+  var o = findOpenException(tracking);
+  if(!o) return;
+  if(!window.confirm('Mark '+tracking+' packed without a scan?')) return;
+  o.status='done';
+  o.completedAt=new Date().toLocaleTimeString();
+  o.manualClose=true;
+  o.scanAudit = o.scanAudit || [];
+  o.scanAudit.push({at:new Date().toISOString(), raw:'MANUAL-CONFIRM'});
+  try { renderQueue(); } catch(e){}
+  try { renderDash(); } catch(e){}
+  renderExceptions();
 }
 function exportPackHandoff(){
   var header = ['tracking','carrier','sku','qty','shelf','status','completedAt','lastScanRaw'];
