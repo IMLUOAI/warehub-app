@@ -368,7 +368,10 @@ body{
 }
 
 
-body.station-mode .tabs, body.station-mode #view-import, body.station-mode #view-manager, body.station-mode #view-dash { display:none !important; }
+body.station-mode .tabs { display:none !important; }
+body.station-mode #view-pack.on { display:flex !important; min-height:100vh; }
+body.station-mode #pack-remaining { display:block !important; }
+body.station-mode #station-exit { display:block !important; }
 body.station-mode #scan-fb { font-size:28px !important; }
 
 #pack-remaining{margin:14px 12px 8px;padding:18px 16px 14px;border:1px solid var(--bdr);background:var(--sur);text-align:center;flex-shrink:0;}
@@ -1183,7 +1186,7 @@ body.station-mode #pack-left{font-size:120px;}
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
           <input id="scan-in" placeholder="Scan shipping label to begin…" data-i18n-placeholder="pack_scan_placeholder" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
-          <button id="station-mode-btn" class="btn" onclick="toggleStationMode()">Station mode</button><div id="scan-fb">ready…</div>
+          <button id="station-mode-btn" class="btn" onclick="toggleStationMode()">Station mode</button><button id="station-exit" class="btn" style="display:none;position:fixed;top:10px;right:10px;z-index:50;" onclick="toggleStationMode()">Exit station</button><div id="scan-fb">ready…</div>
         </div>
         <div id="pack-remaining">
           <div id="pack-left">—</div>
@@ -1616,7 +1619,7 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
-  if(name==='pack')   { renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
+  if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
@@ -1636,7 +1639,8 @@ function todayISO(){
 }
 function todaysImportedOrders(){
   var today = todayISO();
-  return (orders||[]).filter(function(o){ return o.importedOn===today; });
+  var source = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
+  return source.filter(function(o){ return o.importedOn===today; });
 }
 function renderPackRemaining(){
   var leftEl = document.getElementById('pack-left');
@@ -12845,7 +12849,7 @@ function aiDoActions(actions){
     if(statusEl) statusEl.textContent = '⟳ Syncing '+unsynced.length+' order(s) to cloud — labels aren\'t searchable in Out-of-Stock until this finishes…';
     var batch = unsynced.map(function(o){
       return { tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'', skus: o.skus||[],
-               labelDate: o.labelDate || window._batchFallbackDateISO || null };
+               labelDate: o.labelDate || window._batchFallbackDateISO || null, importedOn: o.importedOn || todayISO() };
     });
     var result = await apiCall('POST', '/api/orders', { orders: batch }).catch(function(e){ return { error: e.message }; });
     if(result && result.error){
@@ -12879,23 +12883,27 @@ function aiDoActions(actions){
     });
   };
 
+  function accountOrderFromApi(o){
+    var importedOn = String(o.imported_at||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(importedOn)) importedOn = null;
+    return {
+      tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'',
+      skus: o.skus||[], status: o.status||'pending',
+      assignedTo: o.assigned_to||null, packedBy: o.packed_by||null,
+      completedAt: o.completed_at||null, apiId: o.id,
+      importedOn: importedOn,
+      orderStartTime: null, orderEndTime: null
+    };
+  }
   window.apiLoadOrders = async function(){
     if(!apiReady()) return;
     var result = await apiCall('GET', '/api/orders');
-    if(!result || !result.orders || !result.orders.length) return;
-    // Only restore if current session has no orders
-    if(orders.length) return;
-    orders = result.orders.map(function(o){
-      return {
-        tracking: o.tracking, carrier: o.carrier, shelf: o.shelf||'',
-        skus: o.skus||[], status: o.status||'pending',
-        assignedTo: o.assigned_to||null, packedBy: o.packed_by||null,
-        completedAt: o.completed_at||null, apiId: o.id,
-        orderStartTime: null, orderEndTime: null
-      };
-    });
+    if(!result || !result.orders) return;
+    var mapped = result.orders.map(accountOrderFromApi);
+    var today = todayISO();
+    window._accountTodayOrders = mapped.filter(function(o){ return o.importedOn===today; });
+    if(!orders.length) orders = window._accountTodayOrders.slice();
     refreshAfterPack();
-    pm('✓ Orders restored from cloud (' + orders.length + ' orders)');
   };
 
   // Patch initOrders to sync after import
