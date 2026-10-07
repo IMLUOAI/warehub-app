@@ -978,7 +978,7 @@ body.station-mode #pack-left{font-size:120px;}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn" onclick="exportPackHandoff()">Export pack CSV</button>
-        <button class="btn" onclick="renderExceptions()">Refresh</button>
+        <button type="button" class="btn" onclick="refreshExceptions()">Refresh</button>
       </div>
     </div>
     <div id="exceptions-body" style="display:flex;flex-direction:column;gap:16px;"></div>
@@ -1672,6 +1672,10 @@ function renderPackRemaining(){
   pace.textContent = 'Need '+Math.ceil(left/leftHours)+' per hour for the rest of the 8-hour shift';
 }
 function refreshAfterPack(){
+  (orders||[]).forEach(function(o){
+    if(o.status!=='done') return;
+    (window._accountTodayOrders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='done'; });
+  });
   renderPackRemaining();
   renderQueue();
   renderPackerPanel();
@@ -12901,8 +12905,12 @@ function aiDoActions(actions){
     if(!result || !result.orders) return;
     var mapped = result.orders.map(accountOrderFromApi);
     var today = todayISO();
+    var doneLocal = {};
+    (orders||[]).concat(window._accountTodayOrders||[]).forEach(function(o){ if(o.status==='done') doneLocal[o.tracking]=o.completedAt; });
     window._accountTodayOrders = mapped.filter(function(o){ return o.importedOn===today; });
+    window._accountTodayOrders.forEach(function(o){ if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; } });
     if(!orders.length) orders = window._accountTodayOrders.slice();
+    else orders.forEach(function(o){ if(doneLocal[o.tracking]) o.status='done'; });
     refreshAfterPack();
   };
 
@@ -13467,7 +13475,8 @@ function renderExceptions(){
     if(!groups[carrier]) groups[carrier] = {open:[], unread:[], missed:[]};
     return groups[carrier];
   }
-  (orders||[]).forEach(function(o){
+  var openSource = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
+  openSource.forEach(function(o){
     if(o.status==='done') return;
     bucket(o.carrier || exceptionCarrier(o.tracking)).open.push(o);
   });
@@ -13533,18 +13542,35 @@ function editExceptionOrder(tracking){
   o.shelf = nextShelf;
   renderExceptions();
 }
-function confirmExceptionOrder(tracking){
-  var o = findOpenException(tracking);
+function markOrderPacked(o, raw){
   if(!o) return;
-  if(!window.confirm('Mark '+tracking+' packed without a scan?')) return;
   o.status='done';
-  o.completedAt=new Date().toLocaleTimeString();
+  o.completedAt=o.completedAt || new Date().toLocaleTimeString();
   o.manualClose=true;
   o.scanAudit = o.scanAudit || [];
-  o.scanAudit.push({at:new Date().toISOString(), raw:'MANUAL-CONFIRM'});
+  o.scanAudit.push({at:new Date().toISOString(), raw:raw||'MANUAL-CONFIRM'});
+  (window._accountTodayOrders||[]).forEach(function(a){
+    if(a.tracking===o.tracking){ a.status='done'; a.completedAt=o.completedAt; a.apiId=a.apiId||o.apiId; }
+  });
+  (orders||[]).forEach(function(a){
+    if(a.tracking===o.tracking){ a.status='done'; a.completedAt=o.completedAt; }
+  });
+  if(window.apiCompleteOrder) window.apiCompleteOrder(o);
+  renderPackRemaining();
+}
+function confirmExceptionOrder(tracking){
+  var o = findOpenException(tracking);
+  if(!o && window._accountTodayOrders) o = window._accountTodayOrders.find(function(x){ return x.tracking===tracking && x.status!=='done'; });
+  if(!o) return;
+  if(!window.confirm('Mark '+tracking+' packed without a scan?')) return;
+  markOrderPacked(o, 'MANUAL-CONFIRM');
   try { renderQueue(); } catch(e){}
   try { renderDash(); } catch(e){}
   renderExceptions();
+}
+function refreshExceptions(){
+  renderExceptions();
+  renderPackRemaining();
 }
 function exportPackHandoff(){
   var header = ['tracking','carrier','sku','qty','shelf','status','completedAt','lastScanRaw'];
