@@ -1613,7 +1613,7 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
-  if(name==='locations'){ renderLocations(); }
+  if(name==='locations'){ locationsRefreshFromAccount(); }
   if(name==='rackmap'){ /* legacy map removed — redirect */ gv('locations'); return; }
   if(name==='floor'){ /* legacy floor removed — redirect */ gv('locations'); return; }
   if(name==='devpanel'){ devRender(); }
@@ -5410,6 +5410,27 @@ function locationsGetInventory(){
   return window._inventoryData && typeof window._inventoryData === 'object' ? window._inventoryData : {};
 }
 
+async function locationsRefreshFromAccount(){
+  var api = (typeof window.warehubApi === 'function') ? window.warehubApi : null;
+  if(api){
+    var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
+    var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
+    if(serverInv && typeof serverInv === 'object') window._inventoryData = serverInv;
+    var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
+    if(rec && Array.isArray(rec.receiving)){
+      if(!window._inventoryData) window._inventoryData = {};
+      rec.receiving.forEach(function(row){
+        var loc = row.location || 'UNASSIGNED';
+        var sku = row.sku;
+        if(!sku) return;
+        if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
+        var existing = window._inventoryData[loc].skus.find(function(s){ return s.sku===sku; });
+        if(!existing) window._inventoryData[loc].skus.push({sku:sku, name:'', qty:row.qty||1, unit:'PCS'});
+      });
+    }
+  }
+  renderLocations();
+}
 function renderLocations(){
   var inv = locationsGetInventory();
   var q = ((document.getElementById('loc-search') || {}).value || '').trim().toUpperCase();
@@ -7306,25 +7327,42 @@ async function recvWaitForAuth(){
   }
   return !!(window.Clerk && window.Clerk.user);
 }
+function recvFromApi(row){
+  return {
+    id: row.id,
+    sku: row.sku,
+    location: row.location || '',
+    qty: row.qty || 1,
+    date: row.received_date || '',
+    time: row.received_time || '',
+    by: row.scanned_by || ''
+  };
+}
 async function recvCloudPull(){
   var api = recvApi();
   if(!api) return {ok:false, reason:'api'};
-  var result = await api('GET', '/api/settings').catch(function(){ return null; });
-  if(!result || !result.settings) return {ok:false, reason:'auth'};
-  var remote = result.settings.receiving_log;
-  if(typeof remote === 'string'){ try { remote = JSON.parse(remote); } catch(e){ remote = null; } }
-  if(!Array.isArray(remote)) return {ok:true, empty:true};
+  var result = await api('GET', '/api/receiving').catch(function(){ return null; });
+  if(!result || !Array.isArray(result.receiving)) return {ok:false, reason:'auth'};
+  var remote = result.receiving.map(recvFromApi);
   recvMerge(remote);
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
-  return {ok:true};
+  return {ok:true, empty:!remote.length};
 }
 async function recvSave(){
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
   var api = recvApi();
   if(!api) return {ok:false, reason:'api'};
+  var pending = recvLog.filter(function(e){ return e && e.sku && !e.id; });
+  if(pending.length){
+    var saved = await api('POST', '/api/receiving', {
+      entries: pending.map(function(e){
+        return { sku:e.sku, location:e.location, qty:e.qty, received_date:e.date, received_time:e.time, scanned_by:e.by };
+      })
+    }).catch(function(){ return null; });
+    if(!saved || !saved.ok) return {ok:false, reason:'post', count:recvLog.length};
+  }
   await recvCloudPull();
-  var saved = await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){ return null; });
-  return saved && saved.ok ? {ok:true, count:recvLog.length} : {ok:false, reason:'post', count:recvLog.length};
+  return {ok:true, count:recvLog.length};
 }
 
 async function recvInitView(){
