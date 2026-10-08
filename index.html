@@ -7299,16 +7299,24 @@ function recvApi(){
   if(typeof window.apiCall === 'function') return window.apiCall;
   return null;
 }
+async function recvWaitForAuth(){
+  for(var i=0;i<20;i++){
+    if(window.Clerk && window.Clerk.session) return true;
+    await new Promise(function(r){ setTimeout(r, 300); });
+  }
+  return !!(window.Clerk && window.Clerk.user);
+}
 async function recvCloudPull(){
   var api = recvApi();
-  if(!api) return false;
+  if(!api) return {ok:false, reason:'api'};
   var result = await api('GET', '/api/settings').catch(function(){ return null; });
-  var remote = result && result.settings && result.settings.receiving_log;
+  if(!result || !result.settings) return {ok:false, reason:'auth'};
+  var remote = result.settings.receiving_log;
   if(typeof remote === 'string'){ try { remote = JSON.parse(remote); } catch(e){ remote = null; } }
-  if(!Array.isArray(remote)) return false;
+  if(!Array.isArray(remote)) return {ok:true, empty:true};
   recvMerge(remote);
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
-  return true;
+  return {ok:true};
 }
 async function recvSave(){
   recvLoad();
@@ -7327,15 +7335,25 @@ async function recvInitView(){
   var statusEl = document.getElementById('recv-status');
   if(statusEl) statusEl.textContent = 'Loading account log…';
   if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
+  await recvWaitForAuth();
   recvLoad();
-  var ok = await recvCloudPull();
+  var pulled = await recvCloudPull();
   var api = recvApi();
-  if(ok && recvLog.length && api) await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
+  var who = (window.Clerk && window.Clerk.user && (window.Clerk.user.primaryEmailAddress && window.Clerk.user.primaryEmailAddress.emailAddress)) || '';
+  if(pulled.ok && recvLog.length && api) await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
   recvRenderLog();
   recvRenderStats();
   if(statusEl){
-    statusEl.textContent = ok ? ('Account log: '+recvLog.length+' receipt(s)') : 'Not signed in — this screen cannot see the other device';
-    statusEl.style.color = ok ? '#4caf80' : '#fbbf24';
+    if(!pulled.ok){
+      statusEl.textContent = 'Signed-in call failed'+(who?' for '+who:'')+'. Stay on this tab a few seconds, then reopen Receiving.';
+      statusEl.style.color = '#fbbf24';
+    } else if(!recvLog.length){
+      statusEl.textContent = 'Signed in'+(who?' as '+who:'')+'. This account has no receiving log yet. Open Receiving on the device that has the receipts.';
+      statusEl.style.color = '#fbbf24';
+    } else {
+      statusEl.textContent = 'Account log: '+recvLog.length+' receipt(s)'+(who?' · '+who:'');
+      statusEl.style.color = '#4caf80';
+    }
   }
   setTimeout(function(){ if(skuEl) skuEl.focus(); }, 50);
 }
@@ -12613,6 +12631,7 @@ function aiDoActions(actions){
       }
     } catch(e) { /* keep existing token if refresh fails */ }
 
+    window._clerkToken = _clerkToken;
     if (!_clerkToken) throw new Error('Not authenticated');
     const opts = {
       method,
