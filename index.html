@@ -1623,12 +1623,12 @@ function gv(name){
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
-  if(name==='receiving'){ recvInitView(); }
   if(name==='fba'){ fbaPopulateSubmittedBy(); renderFbaLog(); renderFbaStats(); fbaReprintLoad(); fbaReprintRender(); fbaGridLoad(); }
   if((name==='returns' || name==='receiving' || name==='vehicle' || name==='fba') && !document.getElementById('view-'+name)){
     loadDeferredTabs().then(function(){ gv(name); });
     return;
   }
+  if(name==='receiving'){ recvInitView(); }
   if(name==='import'){ dzUpdateNeonDate(); }
   if(name==='exceptions'){ renderExceptions(); }
 }
@@ -7294,32 +7294,50 @@ function recvMerge(remote){
     return (String(b.date||'')+' '+String(b.time||'')).localeCompare(String(a.date||'')+' '+String(a.time||''));
   }).slice(0, 500);
 }
+function recvApi(){
+  if(typeof window.warehubApi === 'function') return window.warehubApi;
+  if(typeof window.apiCall === 'function') return window.apiCall;
+  return null;
+}
 async function recvCloudPull(){
-  if(typeof window.warehubApi !== 'function') return;
-  var result = await window.warehubApi('GET', '/api/settings').catch(function(){ return null; });
+  var api = recvApi();
+  if(!api) return false;
+  var result = await api('GET', '/api/settings').catch(function(){ return null; });
   var remote = result && result.settings && result.settings.receiving_log;
-  if(!Array.isArray(remote)) return;
+  if(typeof remote === 'string'){ try { remote = JSON.parse(remote); } catch(e){ remote = null; } }
+  if(!Array.isArray(remote)) return false;
   recvMerge(remote);
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+  return true;
 }
 async function recvSave(){
+  recvLoad();
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
-  if(typeof window.warehubApi !== 'function') return;
+  var api = recvApi();
+  if(!api) return;
   await recvCloudPull();
-  await window.warehubApi('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
+  await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
 }
 
 async function recvInitView(){
-  document.getElementById('recv-sku').value = '';
+  var skuEl = document.getElementById('recv-sku');
+  if(!skuEl) return;
   document.getElementById('recv-location').value = '';
   document.getElementById('recv-qty').value = '1';
-  document.getElementById('recv-status').textContent = '';
+  var statusEl = document.getElementById('recv-status');
+  if(statusEl) statusEl.textContent = 'Loading account log…';
   if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
-  await recvCloudPull();
-  if(recvLog.length) await window.warehubApi('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
+  recvLoad();
+  var ok = await recvCloudPull();
+  var api = recvApi();
+  if(ok && recvLog.length && api) await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
   recvRenderLog();
   recvRenderStats();
-  setTimeout(function(){ var el=document.getElementById('recv-sku'); if(el) el.focus(); }, 50);
+  if(statusEl){
+    statusEl.textContent = ok ? ('Account log: '+recvLog.length+' receipt(s)') : 'Not signed in — this screen cannot see the other device';
+    statusEl.style.color = ok ? '#4caf80' : '#fbbf24';
+  }
+  setTimeout(function(){ if(skuEl) skuEl.focus(); }, 50);
 }
 
 function recvSkuKeyHandler(e){
