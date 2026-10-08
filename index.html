@@ -7319,12 +7319,12 @@ async function recvCloudPull(){
   return {ok:true};
 }
 async function recvSave(){
-  recvLoad();
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
   var api = recvApi();
-  if(!api) return;
+  if(!api) return {ok:false, reason:'api'};
   await recvCloudPull();
-  await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
+  var saved = await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){ return null; });
+  return saved && saved.ok ? {ok:true, count:recvLog.length} : {ok:false, reason:'post', count:recvLog.length};
 }
 
 async function recvInitView(){
@@ -7400,14 +7400,21 @@ function recvSubmit(){
   recvLog.unshift({
     sku:sku, location:location, qty:qty,
     date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString(),
-    by: (typeof window._clerkUser!=='undefined' && window._clerkUser && window._clerkUser.fullName) || ''
+    by: (window.Clerk && window.Clerk.user && window.Clerk.user.primaryEmailAddress && window.Clerk.user.primaryEmailAddress.emailAddress) || ''
   });
-  recvSave();
   recvRenderLog();
   recvRenderStats();
-
-  statusEl.textContent = '✓ '+sku+' ×'+qty+' assigned to '+location;
-  statusEl.style.color = '#4caf80';
+  statusEl.textContent = 'Saving '+sku+' to the account…';
+  statusEl.style.color = '#fbbf24';
+  recvSave().then(function(saved){
+    if(saved && saved.ok){
+      statusEl.textContent = '✓ '+sku+' ×'+qty+' at '+location+' · synced '+saved.count+' receipt(s)';
+      statusEl.style.color = '#4caf80';
+    } else {
+      statusEl.textContent = 'Saved on this device only. Account upload failed — stay signed in and submit again.';
+      statusEl.style.color = '#f87171';
+    }
+  });
 
   // Reset for the next box — SKU and location clear, qty stays as a
   // convenience if the next box happens to be the same quantity.
