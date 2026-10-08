@@ -7281,8 +7281,32 @@ function recvLoad(){
   }catch(e){ recvLog = []; }
 }
 
-function recvSave(){
+function recvEntryKey(e){
+  return [e.date||'', e.time||'', e.sku||'', e.location||'', e.qty||''].join('|');
+}
+function recvMerge(remote){
+  var seen = {};
+  (recvLog||[]).concat(remote||[]).forEach(function(e){
+    if(!e || !e.sku) return;
+    seen[recvEntryKey(e)] = e;
+  });
+  recvLog = Object.values(seen).sort(function(a,b){
+    return (String(b.date||'')+' '+String(b.time||'')).localeCompare(String(a.date||'')+' '+String(a.time||''));
+  }).slice(0, 500);
+}
+async function recvCloudPull(){
+  if(typeof window.warehubApi !== 'function') return;
+  var result = await window.warehubApi('GET', '/api/settings').catch(function(){ return null; });
+  var remote = result && result.settings && result.settings.receiving_log;
+  if(!Array.isArray(remote)) return;
+  recvMerge(remote);
   try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+}
+async function recvSave(){
+  try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+  if(typeof window.warehubApi !== 'function') return;
+  await recvCloudPull();
+  await window.warehubApi('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
 }
 
 async function recvInitView(){
@@ -7291,6 +7315,8 @@ async function recvInitView(){
   document.getElementById('recv-qty').value = '1';
   document.getElementById('recv-status').textContent = '';
   if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
+  await recvCloudPull();
+  if(recvLog.length) await window.warehubApi('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
   recvRenderLog();
   recvRenderStats();
   setTimeout(function(){ var el=document.getElementById('recv-sku'); if(el) el.focus(); }, 50);
