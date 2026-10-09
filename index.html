@@ -7221,8 +7221,10 @@ function rackRenderConfig(){
   if(!_rackConfig || !_rackConfig.zones || !_rackConfig.zones.length){
     if(prompt)  prompt.style.display = 'block';
     if(svgWrap) svgWrap.style.display = 'none';
-    document.getElementById('rack-legend').innerHTML = '';
-    document.getElementById('rack-address-display').textContent = '—';
+    var legend = document.getElementById('rack-legend');
+    if(legend) legend.innerHTML = '';
+    var addr = document.getElementById('rack-address-display');
+    if(addr) addr.textContent = '—';
     return;
   }
 
@@ -7372,7 +7374,7 @@ async function recvInitView(){
   document.getElementById('recv-qty').value = '1';
   var statusEl = document.getElementById('recv-status');
   if(statusEl) statusEl.textContent = 'Loading account log…';
-  if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList();
+  try { if(typeof returnsPopulateLocationList === 'function') await returnsPopulateLocationList(); } catch(e){}
   await recvWaitForAuth();
   recvLoad();
   var pulled = await recvCloudPull();
