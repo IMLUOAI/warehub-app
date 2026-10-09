@@ -232,8 +232,9 @@
 
       <!-- Receiving log -->
       <div style="flex-shrink:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <div style="font-size:8px;letter-spacing:2px;color:var(--td);">RECEIVING LOG</div>
+          <input id="recv-search" placeholder="Search SKU or location…" oninput="recvRenderLog()" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:6px 8px;font-size:11px;font-family:inherit;outline:none;"/>
           <button onclick="recvExportExcel()" style="font-size:9px;padding:5px 10px;border-radius:6px;cursor:pointer;background:#1D6F4215;border:1px solid #1D6F42;color:#1D6F42;font-family:inherit;">📊 EXPORT EXCEL</button>
         </div>
         <div id="recv-log" style="display:flex;flex-direction:column;gap:6px;"></div>

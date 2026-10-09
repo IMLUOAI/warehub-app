@@ -5437,13 +5437,17 @@ async function locationsRefreshFromAccount(){
         });
       });
     }
+    var rows = [];
     var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
-    if(rec && Array.isArray(rec.receiving)){
-      rec.receiving.forEach(function(row){
-        addSkuToLocation(row.location, row.sku, row.qty);
-      });
-      if(typeof inventorySync === 'function') inventorySync();
-    }
+    if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
+    var settingsLog = settingsResult && settingsResult.settings && settingsResult.settings.receiving_log;
+    if(Array.isArray(settingsLog)) rows = rows.concat(settingsLog);
+    if(typeof recvLog !== 'undefined' && Array.isArray(recvLog)) rows = rows.concat(recvLog);
+    window._receivedRows = rows;
+    rows.forEach(function(row){
+      addSkuToLocation(row.location, row.sku, row.qty);
+    });
+    if(rows.length && typeof inventorySync === 'function') inventorySync();
   }
   renderLocations();
 }
@@ -5475,7 +5479,14 @@ function locationsRenderByLocation(inv, q){
   }
   var html = '';
   locs.forEach(function(loc){
-    var skus = ((inv[loc] && inv[loc].skus) || []).filter(function(s){
+    var skus = ((inv[loc] && inv[loc].skus) || []).slice();
+    (window._receivedRows || []).forEach(function(row){
+      if(locationKey(row.location) !== loc || !row.sku) return;
+      if(!skus.some(function(s){ return String(s.sku).toUpperCase()===String(row.sku).toUpperCase(); })){
+        skus.push({sku:row.sku, qty:row.qty||1, received:true});
+      }
+    });
+    skus = skus.filter(function(s){
       if(!q) return true;
       return (s.sku || '').toUpperCase().indexOf(q) >= 0 || loc.toUpperCase().indexOf(q) >= 0;
     });
@@ -7484,11 +7495,16 @@ function recvSubmit(){
 function recvRenderLog(){
   var el = document.getElementById('recv-log');
   if(!el) return;
-  if(!recvLog.length){
-    el.innerHTML = '<div style="color:var(--td);font-size:11px;padding:16px;">Nothing received yet.</div>';
+  var q = ((document.getElementById('recv-search') || {}).value || '').trim().toUpperCase();
+  var rows = recvLog.filter(function(r){
+    if(!q) return true;
+    return String(r.sku||'').toUpperCase().indexOf(q) >= 0 || String(r.location||'').toUpperCase().indexOf(q) >= 0;
+  });
+  if(!rows.length){
+    el.innerHTML = '<div style="color:var(--td);font-size:11px;padding:16px;">'+(q?'No receipts match '+q:'Nothing received yet.')+'</div>';
     return;
   }
-  el.innerHTML = recvLog.slice(0, 100).map(function(r){
+  el.innerHTML = rows.slice(0, 100).map(function(r){
     return '<div style="background:var(--sur);border:1px solid var(--bdr);padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:11px;flex-wrap:wrap;">'
       + '<span style="color:var(--cy);font-family:monospace;font-weight:700;">'+r.sku+'</span>'
       + '<span style="color:var(--gn);font-family:monospace;">📍 '+r.location+'</span>'
