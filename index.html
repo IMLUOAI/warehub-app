@@ -1614,6 +1614,7 @@ function gv(name){
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
   if(name==='locations'){ locationsRefreshFromAccount(); }
+  if(name==='receiving'){ /* inventory refresh after receive */ }
   if(name==='rackmap'){ /* legacy map removed — redirect */ gv('locations'); return; }
   if(name==='floor'){ /* legacy floor removed — redirect */ gv('locations'); return; }
   if(name==='devpanel'){ devRender(); }
@@ -5410,23 +5411,38 @@ function locationsGetInventory(){
   return window._inventoryData && typeof window._inventoryData === 'object' ? window._inventoryData : {};
 }
 
+function locationKey(loc){
+  var key = (typeof rackNormalise === 'function') ? rackNormalise(loc || '') : String(loc || '').trim().toUpperCase();
+  return key || 'UNASSIGNED';
+}
+function addSkuToLocation(loc, sku, qty){
+  if(!sku) return;
+  if(!window._inventoryData) window._inventoryData = {};
+  var key = locationKey(loc);
+  if(!window._inventoryData[key]) window._inventoryData[key] = {skus:[]};
+  var existing = window._inventoryData[key].skus.find(function(s){ return String(s.sku).toUpperCase()===String(sku).toUpperCase(); });
+  if(existing) existing.qty = Math.max(parseInt(existing.qty)||0, parseInt(qty)||0);
+  else window._inventoryData[key].skus.push({sku:sku, name:'', qty:qty||1, unit:'PCS'});
+}
 async function locationsRefreshFromAccount(){
   var api = (typeof window.warehubApi === 'function') ? window.warehubApi : null;
   if(api){
     var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
     var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
-    if(serverInv && typeof serverInv === 'object') window._inventoryData = serverInv;
+    if(serverInv && typeof serverInv === 'object'){
+      window._inventoryData = {};
+      Object.keys(serverInv).forEach(function(loc){
+        ((serverInv[loc] && serverInv[loc].skus) || []).forEach(function(s){
+          addSkuToLocation(loc, s.sku, s.qty);
+        });
+      });
+    }
     var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
     if(rec && Array.isArray(rec.receiving)){
-      if(!window._inventoryData) window._inventoryData = {};
       rec.receiving.forEach(function(row){
-        var loc = row.location || 'UNASSIGNED';
-        var sku = row.sku;
-        if(!sku) return;
-        if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
-        var existing = window._inventoryData[loc].skus.find(function(s){ return s.sku===sku; });
-        if(!existing) window._inventoryData[loc].skus.push({sku:sku, name:'', qty:row.qty||1, unit:'PCS'});
+        addSkuToLocation(row.location, row.sku, row.qty);
       });
+      if(typeof inventorySync === 'function') inventorySync();
     }
   }
   renderLocations();
@@ -7448,6 +7464,8 @@ function recvSubmit(){
   statusEl.style.color = '#fbbf24';
   recvSave().then(function(saved){
     if(saved && saved.ok){
+      addSkuToLocation(location, sku, qty);
+      if(typeof inventorySync === 'function') inventorySync();
       statusEl.textContent = '✓ '+sku+' ×'+qty+' at '+location+' · synced '+saved.count+' receipt(s)';
       statusEl.style.color = '#4caf80';
     } else {
