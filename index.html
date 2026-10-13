@@ -3206,10 +3206,14 @@ function removePacker(id){
   var p = packers.find(function(x){ return x.id===id; });
   if(!p) return;
   if(!confirm('Remove '+p.name+' from this account?')) return;
-  packers=packers.filter(function(x){ return x.id!==id; });
-  if(currentPacker && currentPacker.id===id) currentPacker=null;
+  var name = (p.name||'').trim().toLowerCase();
+  packers=packers.filter(function(x){ return x.id!==id && (x.name||'').trim().toLowerCase()!==name; });
+  if(currentPacker && (currentPacker.id===id || (currentPacker.name||'').trim().toLowerCase()===name)) currentPacker=null;
   orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
   saveStaff();
+  if(window.warehubApi && window._clerkToken){
+    window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(id)).catch(function(){});
+  }
   renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
 }
 
@@ -5462,12 +5466,11 @@ async function locationsRefreshFromAccount(){
     if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
     var settingsLog = settingsResult && settingsResult.settings && settingsResult.settings.receiving_log;
     if(Array.isArray(settingsLog)) rows = rows.concat(settingsLog);
-    if(typeof recvLog !== 'undefined' && Array.isArray(recvLog)) rows = rows.concat(recvLog);
+    if(typeof recvLog !== 'undefined' && Array.isArray(recvLog) && window._recvOwner === (window._clerkUser && window._clerkUser.id)) rows = rows.concat(recvLog);
     window._receivedRows = rows;
     rows.forEach(function(row){
       addSkuToLocation(row.location, row.sku, row.qty);
     });
-    if(rows.length && typeof inventorySync === 'function') inventorySync();
   }
   renderLocations();
 }
@@ -7366,10 +7369,13 @@ async function rackConfigLoad(){
   // location on one device never showed up on another (including a
   // dedicated Floor Display monitor).
   var serverInv = result && result.settings && result.settings.rack_inventory;
-  if(serverInv && JSON.stringify(serverInv) !== JSON.stringify(window._inventoryData)){
+  var owner = window._clerkUser && window._clerkUser.id;
+  if(serverInv && owner && result.settings.inventory_clerk_id === owner){
     window._inventoryData = serverInv;
-    try { localStorage.setItem('warehub_inventory', JSON.stringify(serverInv)); } catch(e){}
-    if(typeof rackHighlightInventory === 'function') rackHighlightInventory();
+    window._inventoryOwner = owner;
+    try { localStorage.setItem('warehub_inventory:'+owner, JSON.stringify(serverInv)); } catch(e){}
+  } else if(owner && window._inventoryOwner !== owner){
+    window._inventoryData = {};
   }
 }
 
@@ -7377,10 +7383,16 @@ async function rackConfigLoad(){
 // by returns put-away, auto-collection from daily label imports, and
 // manual edits on a spot's info panel, so all three stay consistent.
 function inventorySync(){
-  try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData||{})); } catch(e){}
+  var owner = window._clerkUser && window._clerkUser.id;
+  if(!owner || window._inventoryOwner !== owner) return;
+  try { localStorage.setItem('warehub_inventory:'+owner, JSON.stringify(window._inventoryData||{})); } catch(e){}
+  try { localStorage.removeItem('warehub_inventory'); } catch(e){}
   if(!window._tenantInventoryReady) return;
   if(typeof window.warehubApi === 'function'){
-    window.warehubApi('POST', '/api/settings', { rack_inventory: window._inventoryData }).catch(function(e){
+    window.warehubApi('POST', '/api/settings', {
+      rack_inventory: window._inventoryData,
+      inventory_clerk_id: owner
+    }).catch(function(e){
       console.error('[inventory] cloud save failed:', e);
     });
   }
@@ -7394,10 +7406,16 @@ function inventorySync(){
 // data; the log itself is localStorage, matching how Returns is stored).
 var recvLog = [];
 
+function recvStorageKey(){
+  var id = window._clerkUser && window._clerkUser.id;
+  return id ? ('warehub_receiving_log:'+id) : null;
+}
 function recvLoad(){
   try{
-    var d = localStorage.getItem('warehub_receiving_log');
+    var key = recvStorageKey();
+    var d = key ? localStorage.getItem(key) : null;
     recvLog = d ? (JSON.parse(d)||[]) : [];
+    window._recvOwner = key ? window._clerkUser.id : null;
   }catch(e){ recvLog = []; }
 }
 
@@ -7444,11 +7462,11 @@ async function recvCloudPull(){
   if(!result || !Array.isArray(result.receiving)) return {ok:false, reason:'auth'};
   var remote = result.receiving.map(recvFromApi);
   recvMerge(remote);
-  try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+  try{ var _rk=recvStorageKey(); if(_rk) localStorage.setItem(_rk, JSON.stringify(recvLog)); }catch(e){}
   return {ok:true, empty:!remote.length};
 }
 async function recvSave(){
-  try{ localStorage.setItem('warehub_receiving_log', JSON.stringify(recvLog)); }catch(e){}
+  try{ var _rk=recvStorageKey(); if(_rk) localStorage.setItem(_rk, JSON.stringify(recvLog)); }catch(e){}
   var api = recvApi();
   if(!api) return {ok:false, reason:'api'};
   var pending = recvLog.filter(function(e){ return e && e.sku && !e.id; });
@@ -8992,74 +9010,12 @@ async function kvTestConnection(){
 }
 
 async function kvSaveStaff(){
-  var proxy = kvGetProxy();
-  if(!proxy) return;
-  // Safety guard: never overwrite KV with empty data
-  if(!packers.length && !managers.length){
-    return;
-  }
-  var dot = document.getElementById('cloud-status');
-  try{
-    if(dot) dot.style.color = 'var(--am)';
-    var payload = JSON.stringify({
-      packers:  packers,
-      managers: managers,
-      savedAt:  new Date().toISOString()
-    });
-    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: payload
-    });
-    if(r.ok){
-      if(dot){ dot.style.color='var(--gn)'; dot.title='Cloud sync: saved '+new Date().toLocaleTimeString(); }
-    } else {
-      if(dot) dot.style.color = 'var(--rd)';
-      console.warn('[Warehub] KV save error:', r.status);
-    }
-  }catch(e){
-    if(dot) dot.style.color = 'var(--rd)';
-    console.warn('[Warehub] KV save failed:', e.message);
-  }
+  if(window.apiSavePackers) return window.apiSavePackers();
 }
 
 async function kvLoadStaff(){
-  var proxy = kvGetProxy();
-  if(!proxy){ console.warn('[Warehub KV] No proxy URL'); return false; }
-  var dot = document.getElementById('cloud-status');
-  try{
-    if(dot){ dot.style.color='var(--am)'; dot.title='Cloud sync: connecting…'; }
-    var r = await fetch(proxy.replace(/\/+$/, '') + '/staff', {mode:'cors'});
-    if(!r.ok){ if(dot) dot.style.color='var(--rd)'; return false; }
-    var data = await r.json();
-    if(dot) dot.style.color = 'var(--gn)';
-    if(!data.packers || !data.packers.length){
-      if(dot) dot.title = 'Cloud sync: connected, no staff yet';
-      return false;
-    }
-    packers  = data.packers;
-    managers = data.managers || managers;
-    localStorage.setItem('warehub_packers',  JSON.stringify(packers));
-    localStorage.setItem('warehub_managers', JSON.stringify(managers));
-    renderManagerPanel();
-    renderPackerPanel();
-    renderAssignPanel();
-    renderQuickLoginBtns();
-    if(dot) dot.title = 'Cloud sync: loaded '+packers.length+' packers at '+new Date().toLocaleTimeString();
-    pm('✓ Staff loaded from cloud ('+packers.length+' packers)');
-    // Re-render panels with cloud data
-    renderManagerPanel();
-    renderPackerPanel();
-    renderAssignPanel();
-    renderQuickLoginBtns();
-    return true;
-  }catch(e){
-    if(dot){ dot.style.color='var(--rd)'; dot.title='Cloud sync error: '+e.message; }
-    console.warn('[Warehub] KV load failed:', e.message);
-    if(dot){ dot.title = 'KV error: '+e.message+' — Check Worker URL and CORS settings'; }
-    pm('⚠ Staff cloud sync failed: '+e.message);
-    return false;
-  }
+  if(window.apiLoadPackers) return window.apiLoadPackers();
+  return false;
 }
 
 function syncStaffWithFeedback(){
@@ -12174,7 +12130,11 @@ async function fbaSaveExcel(){
 
 window._appInitFn = async function(){try{
 
-  try{ var inv=localStorage.getItem('warehub_inventory'); if(inv) window._inventoryData=JSON.parse(inv); }catch(e){}
+  try{
+    var owner = window._clerkUser && window._clerkUser.id;
+    var inv = owner ? localStorage.getItem('warehub_inventory:'+owner) : null;
+    if(inv && window._inventoryOwner === owner) window._inventoryData=JSON.parse(inv);
+  }catch(e){}
   loadStaff();         // 1. load from localStorage first (instant)
   returnsLoad();
   recvLoad();
@@ -13040,6 +13000,14 @@ function aiDoActions(actions){
     var result = await apiCall('GET', '/api/packers');
     if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
     var all = result.packers;
+    var seen = {};
+    all = all.filter(function(p){
+      var key = ((p.name||'').trim().toLowerCase()) || p.id;
+      if(!p.id || seen[key]) return false;
+      seen[key] = p.id;
+      return true;
+    });
+    if(all.length !== result.packers.length) window._packersNeedDedupe = true;
     if(!all.length){
       packers = [];
       managers = [];
@@ -13070,6 +13038,10 @@ function aiDoActions(actions){
     localStorage.setItem('warehub_packers',  JSON.stringify(packers));
     localStorage.setItem('warehub_managers', JSON.stringify(managers));
     renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+    if(window._packersNeedDedupe){
+      window._packersNeedDedupe = false;
+      window.apiSavePackers();
+    }
     setCloudDot('var(--gn)', 'Cloud sync: loaded ' + all.length + ' packers');
     pm('✓ Staff loaded from cloud (' + packers.length + ' packers)');
     return true;
@@ -13079,7 +13051,6 @@ function aiDoActions(actions){
   var _origSaveStaff = window.saveStaff;
   window.saveStaff = function(){
     if(_origSaveStaff) _origSaveStaff.apply(this, arguments);
-    window.apiSavePackers();
   };
 
   // Replace kvSaveStaff and kvLoadStaff with API versions
@@ -13428,8 +13399,11 @@ function aiDoActions(actions){
       window._companyInfo = s.company_info;
       try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
     }
-    window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
-    try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); } catch(e){}
+    window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object' && s.inventory_clerk_id === (window._clerkUser && window._clerkUser.id)) ? s.rack_inventory : (s.inventory_clerk_id ? {} : (s.rack_inventory || {}));
+    window._inventoryOwner = window._clerkUser && window._clerkUser.id;
+    if(window._inventoryOwner){
+      try { localStorage.setItem('warehub_inventory:'+window._inventoryOwner, JSON.stringify(window._inventoryData)); } catch(e){}
+    }
     window._tenantInventoryReady = true;
     if(typeof renderLocations === 'function') renderLocations();
   };
