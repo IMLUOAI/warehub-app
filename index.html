@@ -3191,6 +3191,10 @@ function removePacker(id){
   var removed = packers.filter(function(x){ return x.id===id || (x.name||'').trim().toLowerCase()===name; });
   if(!window._removedPackerIds) window._removedPackerIds = {};
   removed.forEach(function(x){ window._removedPackerIds[x.id] = true; });
+  try {
+    var me = window._clerkUser && window._clerkUser.id;
+    if(me) localStorage.setItem('warehub_removed_packers:'+me, JSON.stringify(window._removedPackerIds));
+  } catch(e){}
   packers=packers.filter(function(x){ return removed.indexOf(x)<0; });
   if(currentPacker && (currentPacker.id===id || (currentPacker.name||'').trim().toLowerCase()===name)) currentPacker=null;
   orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
@@ -3206,7 +3210,7 @@ function removePacker(id){
     for(var i=0;i<removed.length;i++){
       if(window.warehubApi) await window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(removed[i].id)).catch(function(){ return null; });
     }
-    if(window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, replace: true }).catch(function(){ return null; });
+    if(window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, replace: true, deleteIds: removed.map(function(x){ return x.id; }) }).catch(function(){ return null; });
   });
 }
 
@@ -5446,8 +5450,21 @@ async function locationsRefreshFromAccount(){
   if(api){
     var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
     var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
+    var me = window._clerkUser && window._clerkUser.id;
+    var stamp = settingsResult && settingsResult.settings && settingsResult.settings.inventory_clerk_id;
+    var blocked = false;
+    var hasOwn = false;
+    try {
+      blocked = !!(me && localStorage.getItem('warehub_block_inventory:'+me)==='1');
+      hasOwn = !!(me && localStorage.getItem('warehub_inventory:'+me));
+    } catch(e){}
+    if(me && window._accountSwitched && stamp !== me && !hasOwn){
+      blocked = true;
+      try { localStorage.setItem('warehub_block_inventory:'+me,'1'); } catch(e){}
+      api('POST', '/api/settings', { rack_inventory: {}, inventory_clerk_id: me }).catch(function(){});
+    }
     window._inventoryData = {};
-    if(serverInv && typeof serverInv === 'object'){
+    if(!blocked && stamp === me && serverInv && typeof serverInv === 'object'){
       Object.keys(serverInv).forEach(function(loc){
         ((serverInv[loc] && serverInv[loc].skus) || []).forEach(function(s){
           addSkuToLocation(loc, s.sku, s.qty);
@@ -5455,11 +5472,10 @@ async function locationsRefreshFromAccount(){
       });
     }
     var rows = [];
-    var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
-    if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
-    var settingsLog = settingsResult && settingsResult.settings && settingsResult.settings.receiving_log;
-    if(Array.isArray(settingsLog)) rows = rows.concat(settingsLog);
-    if(typeof recvLog !== 'undefined' && Array.isArray(recvLog) && window._recvOwner === (window._clerkUser && window._clerkUser.id)) rows = rows.concat(recvLog);
+    if(!blocked){
+      var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
+      if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
+    }
     window._receivedRows = rows;
     rows.forEach(function(row){
       addSkuToLocation(row.location, row.sku, row.qty);
@@ -13000,7 +13016,17 @@ function aiDoActions(actions){
     setCloudDot('var(--am)', 'Loading from cloud…');
     var result = await apiCall('GET', '/api/packers');
     if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
+    try {
+      var me = window._clerkUser && window._clerkUser.id;
+      var saved = me && localStorage.getItem('warehub_removed_packers:'+me);
+      if(saved) window._removedPackerIds = Object.assign(window._removedPackerIds||{}, JSON.parse(saved));
+    } catch(e){}
     var all = result.packers.filter(function(p){ return !(window._removedPackerIds && window._removedPackerIds[p.id]); });
+    result.packers.forEach(function(p){
+      if(window._removedPackerIds && window._removedPackerIds[p.id] && window.warehubApi){
+        window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(p.id)).catch(function(){});
+      }
+    });
     var seen = {};
     all = all.filter(function(p){
       var key = ((p.name||'').trim().toLowerCase()) || p.id;
