@@ -2368,6 +2368,8 @@ async function idbSaveBatch(pdfArrayBuffer, ordersArray){
       var m = {}; for(var k in o){ if(k !== 'pageImg') m[k] = o[k]; } return m;
     });
     await idbPut('orders', meta);
+    var me = (window._clerkUser && window._clerkUser.id) || '';
+    if(me) await idbPut('ordersOwner', me);
   }catch(e){ console.warn('[idbSaveBatch]', e); }
 }
 
@@ -2382,6 +2384,10 @@ async function idbRestoreBatch(){
   try{
     var meta = await idbGet('orders');
     if(!meta || !meta.length) return;
+    var owner = '';
+    try { owner = await idbGet('ordersOwner') || ''; } catch(e){}
+    var me = (window._clerkUser && window._clerkUser.id) || (window.Clerk && window.Clerk.user && window.Clerk.user.id) || '';
+    if (!me || (owner && owner !== me)) { await idbClearBatch(); return; }
     var pdfAb = await idbGet('pdf');
     if(!pdfAb) return;
     initOrders(meta);
@@ -2971,31 +2977,6 @@ function initOrders(parsed){
     : new Date();
   dzUpdateNeonDate();
 
-  // Auto-collect SKU→location associations straight from this batch's
-  // labels (their own shelf field), instead of relying solely on xlwms sync
-  // or manually-logged returns. Best-effort — each label only tells us "this
-  // SKU passed through this shelf," not an exact, verified stock count, so
-  // this fills in a starting point rather than authoritative quantities.
-  // The Edit button on a spot's info panel is there specifically to correct
-  // or refine these over time.
-  var invChanged = false;
-  parsed.forEach(function(o){
-    if(!o.shelf || !o.skus || !o.skus.length) return;
-    var loc = rackNormalise(o.shelf);
-    if(!loc) return;
-    if(!window._inventoryData) window._inventoryData = {};
-    if(!window._inventoryData[loc]) window._inventoryData[loc] = {skus:[]};
-    o.skus.forEach(function(s){
-      if(!s.sku) return;
-      var existing = window._inventoryData[loc].skus.find(function(x){ return x.sku===s.sku; });
-      if(!existing){
-        window._inventoryData[loc].skus.push({sku:s.sku, name:'', qty:s.qty||1, unit:'PCS'});
-        invChanged = true;
-      }
-    });
-  });
-  if(invChanged) inventorySync();
-
   document.getElementById('dot').classList.add('live');
   var cars=[...new Set(orders.map(function(o){return o.carrier;}))];
   document.getElementById('badge').textContent=orders.length+' ORDERS · '+cars.join(' · ');
@@ -3207,14 +3188,26 @@ function removePacker(id){
   if(!p) return;
   if(!confirm('Remove '+p.name+' from this account?')) return;
   var name = (p.name||'').trim().toLowerCase();
-  packers=packers.filter(function(x){ return x.id!==id && (x.name||'').trim().toLowerCase()!==name; });
+  var removed = packers.filter(function(x){ return x.id===id || (x.name||'').trim().toLowerCase()===name; });
+  if(!window._removedPackerIds) window._removedPackerIds = {};
+  removed.forEach(function(x){ window._removedPackerIds[x.id] = true; });
+  packers=packers.filter(function(x){ return removed.indexOf(x)<0; });
   if(currentPacker && (currentPacker.id===id || (currentPacker.name||'').trim().toLowerCase()===name)) currentPacker=null;
   orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
-  saveStaff();
-  if(window.warehubApi && window._clerkToken){
-    window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(id)).catch(function(){});
-  }
+  try{
+    localStorage.setItem('warehub_packers', JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+    localStorage.removeItem('warehub_currentPacker');
+  }catch(e){}
   renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+  var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
+  var write = window.packerWrite || function(fn){ return fn(); };
+  write(async function(){
+    for(var i=0;i<removed.length;i++){
+      if(window.warehubApi) await window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(removed[i].id)).catch(function(){ return null; });
+    }
+    if(window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, replace: true }).catch(function(){ return null; });
+  });
 }
 
 function renderPackerPanel(){
@@ -12734,13 +12727,16 @@ function aiDoActions(actions){
   var _warehubTenantId = null;
   
   async function warehubApiCall(method, path, body) {
-    // Always get a fresh token — Clerk caches it and silently refreshes
-    // before expiry, so this is safe to call on every request.
+    var userAtStart = (window.Clerk && window.Clerk.user && window.Clerk.user.id) || '';
     try {
       if (window.Clerk && window.Clerk.session) {
         _clerkToken = await window.Clerk.session.getToken();
       }
     } catch(e) { /* keep existing token if refresh fails */ }
+    var userNow = (window.Clerk && window.Clerk.user && window.Clerk.user.id) || '';
+    if (userAtStart && userNow && userAtStart !== userNow) {
+      throw new Error('account changed');
+    }
 
     window._clerkToken = _clerkToken;
     if (!_clerkToken) throw new Error('Not authenticated');
@@ -12833,6 +12829,7 @@ function aiDoActions(actions){
       try { localStorage.removeItem(k); } catch(e){}
     });
     try { localStorage.setItem('warehub_active_user', userId); } catch(e){}
+    window._accountSwitched = !!(last && last !== userId);
     packers = [];
     managers = [];
     currentPacker = null;
@@ -12980,18 +12977,22 @@ function aiDoActions(actions){
   //  PACKERS — replace KV sync with D1 API sync
   // ════════════════════════════════════════════════════════════════
 
-  window.apiSavePackers = async function(){
-    if(!apiReady()) return;
-    setCloudDot('var(--am)', 'Syncing packers…');
-    var result = await apiCall('POST', '/api/packers/sync', {
-      packers: packers.concat(managers),
-      replace: true
+  window._packerWrite = Promise.resolve();
+  window.packerWrite = function packerWrite(fn){
+    var run = window._packerWrite.then(fn, fn);
+    window._packerWrite = run.then(function(){}, function(){});
+    return run;
+  }
+  window.apiSavePackers = function(){
+    if(!apiReady()) return Promise.resolve();
+    var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
+    return window.packerWrite(async function(){
+      setCloudDot('var(--am)', 'Syncing packers…');
+      var result = await apiCall('POST', '/api/packers/sync', { packers: snapshot, replace: true });
+      if(result && result.ok) setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
+      else setCloudDot('var(--rd)', 'Cloud sync failed');
+      return result;
     });
-    if(result && result.ok){
-      setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
-    } else {
-      setCloudDot('var(--rd)', 'Cloud sync failed');
-    }
   };
 
   window.apiLoadPackers = async function(){
@@ -12999,7 +13000,7 @@ function aiDoActions(actions){
     setCloudDot('var(--am)', 'Loading from cloud…');
     var result = await apiCall('GET', '/api/packers');
     if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
-    var all = result.packers;
+    var all = result.packers.filter(function(p){ return !(window._removedPackerIds && window._removedPackerIds[p.id]); });
     var seen = {};
     all = all.filter(function(p){
       var key = ((p.name||'').trim().toLowerCase()) || p.id;
@@ -13399,12 +13400,26 @@ function aiDoActions(actions){
       window._companyInfo = s.company_info;
       try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
     }
-    window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object' && s.inventory_clerk_id === (window._clerkUser && window._clerkUser.id)) ? s.rack_inventory : (s.inventory_clerk_id ? {} : (s.rack_inventory || {}));
-    window._inventoryOwner = window._clerkUser && window._clerkUser.id;
-    if(window._inventoryOwner){
-      try { localStorage.setItem('warehub_inventory:'+window._inventoryOwner, JSON.stringify(window._inventoryData)); } catch(e){}
+    var me = window._clerkUser && window._clerkUser.id;
+    var stamp = s.inventory_clerk_id || '';
+    var inv = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
+    if(stamp && stamp !== me) inv = {};
+    if(!stamp && window._accountSwitched){
+      inv = {};
+      if(me && window.warehubApi){
+        window.warehubApi('GET', '/api/receiving').then(function(rec){
+          if(window._clerkUser && window._clerkUser.id !== me) return;
+          if(rec && rec.receiving && rec.receiving.length) return;
+          window.warehubApi('POST', '/api/settings', { rack_inventory: {}, inventory_clerk_id: me }).catch(function(){});
+        }).catch(function(){});
+      }
     }
-    window._tenantInventoryReady = true;
+    window._inventoryData = inv;
+    window._inventoryOwner = me;
+    if(me && !window._accountSwitched){
+      try { localStorage.setItem('warehub_inventory:'+me, JSON.stringify(window._inventoryData)); } catch(e){}
+    }
+    window._tenantInventoryReady = !window._accountSwitched || !!stamp;
     if(typeof renderLocations === 'function') renderLocations();
   };
 
