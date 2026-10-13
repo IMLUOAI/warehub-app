@@ -757,27 +757,11 @@ body.station-mode #pack-left{font-size:120px;}
           ">Add Webhook</button>
 
           <!-- Per-tenant ERP connectors -->
-          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">ERP CONNECTORS</div>
+          <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">ERP AND AUTOMATION</div>
           <div style="font-size:10px;color:var(--td);margin-bottom:10px;line-height:1.5;">
-            Connect your own warehouse system with <b>your</b> API credentials. Each account uses its own keys — nothing is shared across customers.
+            No warehouse system is built in. Give your ERP an API key above so it can send orders in, and add a webhook so Warehub can tell it when a package is packed. A named connection is added only when that account needs it.
           </div>
           <div id="connectors-list" style="margin-bottom:12px;"></div>
-          <div style="background:var(--bg,#0a0f18);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:8px;">Lingxing WMS (xlwms)</div>
-            <input id="xlwms-app-key" type="text" placeholder="App Key" autocomplete="off" style="
-              width:100%;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:6px;box-sizing:border-box;
-              background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
-            "/>
-            <input id="xlwms-app-secret" type="password" placeholder="App Secret" autocomplete="off" style="
-              width:100%;padding:8px 10px;font-size:12px;border-radius:6px;margin-bottom:8px;box-sizing:border-box;
-              background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;
-            "/>
-            <button onclick="connectorSaveXlwms()" style="
-              width:100%;padding:9px;font-size:11px;font-weight:700;border-radius:7px;cursor:pointer;
-              background:linear-gradient(135deg,#4a9eff,#c77dff);border:none;color:#fff;font-family:inherit;
-            ">Save / Update Lingxing connection</button>
-            <div id="connector-xlwms-status" style="font-size:10px;color:var(--td);margin-top:6px;min-height:14px;"></div>
-          </div>
 
           <div style="font-size:9px;letter-spacing:1.5px;color:var(--td);margin:20px 0 8px;border-top:1px solid var(--bdr);padding-top:16px;">API REFERENCE</div>
           <div style="font-size:10px;color:var(--td);line-height:1.7;font-family:monospace;background:var(--bg,#0a0f18);padding:10px;border-radius:6px;">
@@ -1003,18 +987,6 @@ body.station-mode #pack-left{font-size:120px;}
       <div id="sync-status" style="font-size:10px;color:var(--td);margin-top:4px;"></div>
     </div>
     <input id="fi" type="file" accept="application/pdf" style="display:none" onchange="if(this.files[0]) parsePdf(this.files[0]);this.value='';">
-
-    <!-- ── xlwms sync (owner only) ── -->
-    <div id="xlwms-sync-panel" style="display:none;background:var(--sur);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;margin-bottom:14px;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-      <div>
-        <div style="font-size:9px;letter-spacing:2px;color:var(--td);">XLWMS INTEGRATION</div>
-        <div id="xlwms-sync-status" style="font-size:11px;color:var(--tx);margin-top:2px;">Pull today's outbound orders directly from xlwms.</div>
-      </div>
-      <button class="btn" id="xlwms-sync-btn" onclick="xlwmsSyncNow()" style="font-size:9px;white-space:nowrap;border-color:var(--cy);color:var(--cy);background:#00e5ff10;">🔄 SYNC FROM XLWMS</button>
-      <button class="btn" id="xlwms-inv-sync-btn" onclick="xlwmsSyncInventoryNow()" style="font-size:9px;white-space:nowrap;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);background:#c77dff10;">📍 SYNC BIN LOCATIONS</button>
-    </div>
-
-    <div id="xlwms-inv-sync-status" style="display:none;font-size:10px;color:var(--td);margin:-6px 0 14px 2px;"></div>
 
     <!-- ── Missing Labels Panel — populated by renderSkippedPanel() after parse ── -->
     <div id="import-skipped-panel" style="display:none;background:var(--sur);border:1px solid var(--rd);margin-bottom:14px;">
@@ -1376,11 +1348,10 @@ body.station-mode #pack-left{font-size:120px;}
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">INVENTORY</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">📍 Locations</div>
           <div style="font-size:11px;color:var(--td);margin-top:4px;line-height:1.5;max-width:420px;">
-            SKU → bin locations from Lingxing sync and label imports. Pack Station uses this map first, then the order’s shelf from the label.
+            SKU → bin locations from receiving and CSV import. Pack Station uses this map first, then the shelf printed on the label.
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn" id="loc-xlwms-sync-btn" onclick="xlwmsSyncInventoryNow()" style="font-size:9px;border-color:var(--pu,#c77dff);color:var(--pu,#c77dff);">📍 SYNC FROM LINGXING</button>
           <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
           <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
         </div>
@@ -3187,30 +3158,19 @@ function removePacker(id){
   var p = packers.find(function(x){ return x.id===id; });
   if(!p) return;
   if(!confirm('Remove '+p.name+' from this account?')) return;
-  var name = (p.name||'').trim().toLowerCase();
-  var removed = packers.filter(function(x){ return x.id===id || (x.name||'').trim().toLowerCase()===name; });
-  if(!window._removedPackerIds) window._removedPackerIds = {};
-  removed.forEach(function(x){ window._removedPackerIds[x.id] = true; });
-  try {
-    var me = window._clerkUser && window._clerkUser.id;
-    if(me) localStorage.setItem('warehub_removed_packers:'+me, JSON.stringify(window._removedPackerIds));
-  } catch(e){}
-  packers=packers.filter(function(x){ return removed.indexOf(x)<0; });
-  if(currentPacker && (currentPacker.id===id || (currentPacker.name||'').trim().toLowerCase()===name)) currentPacker=null;
+  packers = packers.filter(function(x){ return x.id!==id; });
+  if(currentPacker && currentPacker.id===id) currentPacker=null;
   orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
   try{
     localStorage.setItem('warehub_packers', JSON.stringify(packers));
     localStorage.setItem('warehub_managers', JSON.stringify(managers));
-    localStorage.removeItem('warehub_currentPacker');
   }catch(e){}
   renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
   var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
   var write = window.packerWrite || function(fn){ return fn(); };
   write(async function(){
-    for(var i=0;i<removed.length;i++){
-      if(window.warehubApi) await window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(removed[i].id)).catch(function(){ return null; });
-    }
-    if(window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, replace: true, deleteIds: removed.map(function(x){ return x.id; }) }).catch(function(){ return null; });
+    if(window.warehubApi) await window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(id)).catch(function(){ return null; });
+    if(snapshot.length && window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, deleteIds: [id] }).catch(function(){ return null; });
   });
 }
 
@@ -3251,6 +3211,7 @@ function renderPackerPanel(){
 
 function renderAssignPanel(){
   var el=document.getElementById('assign-panel');
+  if(!el) return;
   if(!orders.length){
     el.innerHTML='<div style="color:var(--td);font-size:11px;padding:8px;">Import a PDF first.</div>';
     return;
@@ -4571,7 +4532,7 @@ function completeOrder(order, scannedTracking){
       }
     }
   });
-  if(typeof inventorySync === 'function') inventorySync();
+  if(typeof inventorySync === 'function') window._inventoryDirty=true; inventorySync();
 
   activeOrder=null; verifySkus=[];
   lastCompletedOrderForDisplay = order; // shown briefly until the next scan starts
@@ -4747,13 +4708,7 @@ function userMenuPopulate(){
   if(teamBtn) teamBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
   var apiBtn = document.getElementById('user-menu-api-btn');
   if(apiBtn) apiBtn.style.display = (window._tenantRole === 'owner') ? 'flex' : 'none';
-  // XLWMS sync panel only when this tenant has connected their own credentials
-  if(typeof connectorsRender === 'function' && window._tenantRole === 'owner'){
-    connectorsRender(); // sets _xlwmsConnected + panel visibility
-  } else {
-    var xlwmsPanel = document.getElementById('xlwms-sync-panel');
-    if(xlwmsPanel) xlwmsPanel.style.display = 'none';
-  }
+  if(typeof connectorsRender === 'function' && window._tenantRole === 'owner') connectorsRender();
   applyPlanUIGating();
   if(pl){
     var planLabels = { basic:'Basic Plan', starter:'Starter Plan', pro:'Pro Plan', trial:'Trial' };
@@ -5054,80 +5009,23 @@ async function webhookDelete(id){
   webhooksRender();
 }
 
-// ── Per-tenant ERP connectors ─────────────────────────────────────
-window._xlwmsConnected = false;
-
+// ── Saved ERP connections (disconnect only; nothing is hardcoded) ──
 async function connectorsRender(){
   var list = document.getElementById('connectors-list');
   if(!list) return;
-  list.innerHTML = '<div style="font-size:11px;color:var(--td);">Loading…</div>';
   var result = await window.warehubApi('GET', '/api/integrations/connectors').catch(function(){ return null; });
-  if(!result){
-    list.innerHTML = '<div style="font-size:11px;color:#f87171;">Could not load connectors. Run integrations_migration.sql if this is a new install.</div>';
-    window._xlwmsConnected = false;
-    updateXlwmsPanelVisibility();
-    return;
-  }
+  if(!result){ list.innerHTML = ''; return; }
   var items = result.connectors || [];
-  window._xlwmsConnected = items.some(function(c){ return c.provider === 'xlwms' && c.active && c.has_credentials; });
-  updateXlwmsPanelVisibility();
-
-  if(!items.length){
-    list.innerHTML = '<div style="font-size:11px;color:var(--td);">No connectors saved yet — add Lingxing credentials below.</div>';
-    return;
-  }
-  var html = '';
-  items.forEach(function(c){
-    var syncInfo = c.last_sync_at
-      ? ('Last sync: ' + c.last_sync_at + (c.last_sync_status && c.last_sync_status !== 'ok' ? ' · ' + c.last_sync_status : ' · ok'))
-      : 'Never synced';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);">'
-      + '<div style="min-width:0;">'
-      +   '<div style="font-size:12px;font-weight:700;color:var(--tx);">' + (c.display_name || c.provider) + ' <span style="font-size:10px;color:var(--td);font-weight:500;">(' + c.provider + ')</span></div>'
-      +   '<div style="font-size:10px;color:var(--td);">' + syncInfo + '</div>'
-      + '</div>'
-      + '<button onclick="connectorDelete(\'' + c.id + '\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;">Disconnect</button>'
+  if(!items.length){ list.innerHTML = ''; return; }
+  list.innerHTML = items.map(function(c){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--tx);">' + (c.display_name || c.provider) + '</div>'
+      + '<button onclick="connectorDelete(\'' + c.id + '\')" style="background:transparent;border:none;color:#f87171;font-size:10.5px;cursor:pointer;font-family:inherit;">Disconnect</button>'
       + '</div>';
-  });
-  list.innerHTML = html;
+  }).join('');
 }
-
-function updateXlwmsPanelVisibility(){
-  var panel = document.getElementById('xlwms-sync-panel');
-  if(!panel) return;
-  // Only show sync buttons when this tenant has connected their own xlwms account
-  panel.style.display = (window._tenantRole === 'owner' && window._xlwmsConnected) ? 'flex' : 'none';
-}
-
-async function connectorSaveXlwms(){
-  var keyEl = document.getElementById('xlwms-app-key');
-  var secEl = document.getElementById('xlwms-app-secret');
-  var status = document.getElementById('connector-xlwms-status');
-  var appKey = (keyEl && keyEl.value || '').trim();
-  var appSecret = (secEl && secEl.value || '').trim();
-  if(!appKey || !appSecret){
-    if(status){ status.style.color = '#f87171'; status.textContent = 'Both App Key and App Secret are required.'; }
-    return;
-  }
-  if(status){ status.style.color = 'var(--td)'; status.textContent = 'Saving…'; }
-  var result = await window.warehubApi('POST', '/api/integrations/connectors', {
-    provider: 'xlwms',
-    display_name: 'Lingxing WMS',
-    app_key: appKey,
-    app_secret: appSecret
-  }).catch(function(e){ return { error: e.message }; });
-  if(!result || result.error){
-    if(status){ status.style.color = '#f87171'; status.textContent = (result && result.error) || 'Save failed'; }
-    return;
-  }
-  if(status){ status.style.color = '#4caf80'; status.textContent = '✓ Connected. You can now use SYNC FROM XLWMS on the Import tab.'; }
-  if(keyEl) keyEl.value = '';
-  if(secEl) secEl.value = '';
-  connectorsRender();
-}
-
 async function connectorDelete(id){
-  if(!confirm('Disconnect this ERP? Sync buttons will be hidden until you reconnect.')) return;
+  if(!confirm('Remove this connection from the account?')) return;
   await window.warehubApi('DELETE', '/api/integrations/connectors/' + id).catch(function(){});
   connectorsRender();
 }
@@ -5345,71 +5243,6 @@ function oosExportExcel(){
   });
 }
 
-// ── xlwms sync (owner only) ───────────────────────────────────────
-async function xlwmsSyncNow(){
-  var btn = document.getElementById('xlwms-sync-btn');
-  var status = document.getElementById('xlwms-sync-status');
-  btn.disabled = true;
-  btn.textContent = '⟳ Syncing…';
-  status.textContent = 'Pulling recent outbound orders from xlwms…';
-  status.style.color = 'var(--td)';
-  var result = await window.warehubApi('POST', '/api/integrations/xlwms/sync', {})
-    .catch(function(e){ return { error: e.message }; });
-  btn.disabled = false;
-  btn.textContent = '🔄 SYNC FROM XLWMS';
-  if(!result || result.error){
-    var detail = (result && result.error) || 'Sync failed — check console/Worker logs.';
-    if(result && result.code) detail += ' (code: ' + result.code + ')';
-    if(result && result.raw) detail += ' — ' + result.raw;
-    status.textContent = '✗ ' + detail;
-    status.style.color = '#f87171';
-    return;
-  }
-  status.textContent = '✓ Synced ' + (result.imported || 0) + ' new order(s) from xlwms.'
-    + (result.imported > 0 ? ' Refresh the page to see them in your queue.' : '');
-  status.style.color = '#4caf80';
-}
-
-// Pulls bin/shelf location data from xlwms's own WMS inventory ledger, so
-// Rack Map's SKU search reflects the real ERP-tracked locations instead of
-// relying solely on manually-logged return put-aways.
-async function xlwmsSyncInventoryNow(){
-  var btn = document.getElementById('xlwms-inv-sync-btn') || document.getElementById('loc-xlwms-sync-btn');
-  var status = document.getElementById('xlwms-inv-sync-status') || document.getElementById('loc-sync-status');
-  if(btn){ btn.disabled = true; btn.textContent = '⟳ Syncing…'; }
-  if(status){
-    status.style.display = 'block';
-    status.textContent = 'Pulling bin-level inventory from Lingxing (deriving current locations)…';
-    status.style.color = 'var(--td)';
-  }
-  var result = await window.warehubApi('POST', '/api/integrations/xlwms/sync-inventory', {})
-    .catch(function(e){ return { error: e.message }; });
-  if(btn){ btn.disabled = false; btn.textContent = '📍 SYNC FROM LINGXING'; }
-  if(!result || result.error){
-    var detail = (result && result.error) || 'Sync failed — check console/Worker logs.';
-    if(result && result.code) detail += ' (code: ' + result.code + ')';
-    if(result && result.raw) detail += ' — ' + result.raw;
-    if(status){ status.textContent = '✗ ' + detail; status.style.color = '#f87171'; }
-    return;
-  }
-  if(status){
-    status.textContent = '✓ Synced ' + (result.locations||0) + ' location(s), ' + (result.skus||0) + ' SKU record(s) from Lingxing.';
-    status.style.color = '#4caf80';
-  }
-  // Reload inventory into _inventoryData from cloud settings, then refresh UI
-  try {
-    if(typeof window.warehubApi === 'function'){
-      var settingsResult = await window.warehubApi('GET', '/api/settings').catch(function(){ return null; });
-      var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
-      if(serverInv){
-        window._inventoryData = serverInv;
-        try { localStorage.setItem('warehub_inventory', JSON.stringify(serverInv)); } catch(e){}
-      }
-    }
-  } catch(e){}
-  if(typeof renderLocations === 'function') renderLocations();
-}
-
 // Close menu when clicking outside
 document.addEventListener('click', function(e){
   var wrap = document.getElementById('user-menu-wrap');
@@ -5450,21 +5283,9 @@ async function locationsRefreshFromAccount(){
   if(api){
     var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
     var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
-    var me = window._clerkUser && window._clerkUser.id;
-    var stamp = settingsResult && settingsResult.settings && settingsResult.settings.inventory_clerk_id;
-    var blocked = false;
-    var hasOwn = false;
-    try {
-      blocked = !!(me && localStorage.getItem('warehub_block_inventory:'+me)==='1');
-      hasOwn = !!(me && localStorage.getItem('warehub_inventory:'+me));
-    } catch(e){}
-    if(me && window._accountSwitched && stamp !== me && !hasOwn){
-      blocked = true;
-      try { localStorage.setItem('warehub_block_inventory:'+me,'1'); } catch(e){}
-      api('POST', '/api/settings', { rack_inventory: {}, inventory_clerk_id: me }).catch(function(){});
-    }
     window._inventoryData = {};
-    if(!blocked && stamp === me && serverInv && typeof serverInv === 'object'){
+    window._inventoryDirty = false;
+    if(serverInv && typeof serverInv === 'object'){
       Object.keys(serverInv).forEach(function(loc){
         ((serverInv[loc] && serverInv[loc].skus) || []).forEach(function(s){
           addSkuToLocation(loc, s.sku, s.qty);
@@ -5472,10 +5293,8 @@ async function locationsRefreshFromAccount(){
       });
     }
     var rows = [];
-    if(!blocked){
-      var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
-      if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
-    }
+    var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
+    if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
     window._receivedRows = rows;
     rows.forEach(function(row){
       addSkuToLocation(row.location, row.sku, row.qty);
@@ -5506,7 +5325,7 @@ function locationsRenderByLocation(inv, q){
   if(!el) return;
   var locs = Object.keys(inv).sort();
   if(!locs.length){
-    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;line-height:1.6;">No inventory locations yet.<br/>Sync from Lingxing or import a CSV / receive stock.</div>';
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;line-height:1.6;">No inventory locations yet.<br/>Import a CSV or receive stock.</div>';
     return;
   }
   var html = '';
@@ -7393,7 +7212,8 @@ async function rackConfigLoad(){
 // manual edits on a spot's info panel, so all three stay consistent.
 function inventorySync(){
   var owner = window._clerkUser && window._clerkUser.id;
-  if(!owner || window._inventoryOwner !== owner) return;
+  if(!owner || window._inventoryOwner !== owner || !window._inventoryDirty) return;
+  window._inventoryDirty = false;
   try { localStorage.setItem('warehub_inventory:'+owner, JSON.stringify(window._inventoryData||{})); } catch(e){}
   try { localStorage.removeItem('warehub_inventory'); } catch(e){}
   if(!window._tenantInventoryReady) return;
@@ -7470,7 +7290,10 @@ async function recvCloudPull(){
   var result = await api('GET', '/api/receiving').catch(function(){ return null; });
   if(!result || !Array.isArray(result.receiving)) return {ok:false, reason:'auth'};
   var remote = result.receiving.map(recvFromApi);
+  var me = window._clerkUser && window._clerkUser.id;
+  if(window._recvOwner && me && window._recvOwner !== me) recvLog = [];
   recvMerge(remote);
+  window._recvOwner = me || window._recvOwner;
   try{ var _rk=recvStorageKey(); if(_rk) localStorage.setItem(_rk, JSON.stringify(recvLog)); }catch(e){}
   return {ok:true, empty:!remote.length};
 }
@@ -7504,7 +7327,6 @@ async function recvInitView(){
   var pulled = await recvCloudPull();
   var api = recvApi();
   var who = (window.Clerk && window.Clerk.user && (window.Clerk.user.primaryEmailAddress && window.Clerk.user.primaryEmailAddress.emailAddress)) || '';
-  if(pulled.ok && recvLog.length && api) await api('POST', '/api/settings', { receiving_log: recvLog }).catch(function(){});
   recvRenderLog();
   recvRenderStats();
   if(statusEl){
@@ -7559,7 +7381,7 @@ function recvSubmit(){
   var existing = inv.skus.find(function(s){ return s.sku===sku; });
   if(existing){ existing.qty = (parseInt(existing.qty)||0) + qty; }
   else { inv.skus.push({sku:sku, name:'', qty:qty, unit:'PCS'}); }
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
 
   recvLog.unshift({
     sku:sku, location:location, qty:qty,
@@ -7573,7 +7395,7 @@ function recvSubmit(){
   recvSave().then(function(saved){
     if(saved && saved.ok){
       addSkuToLocation(location, sku, qty);
-      if(typeof inventorySync === 'function') inventorySync();
+      if(typeof inventorySync === 'function') window._inventoryDirty=true; inventorySync();
       statusEl.textContent = '✓ '+sku+' ×'+qty+' at '+location+' · synced '+saved.count+' receipt(s)';
       statusEl.style.color = '#4caf80';
     } else {
@@ -8301,7 +8123,7 @@ function rackInvUpdateQty(spotId, sku, qty){
   if(!item) return;
   var n = parseInt(qty);
   item.qty = isNaN(n) ? 0 : Math.max(0, n);
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
 }
 
 function rackInvDeleteSku(spotId, sku){
@@ -8309,7 +8131,7 @@ function rackInvDeleteSku(spotId, sku){
   var inv = window._inventoryData && window._inventoryData[loc];
   if(!inv) return;
   inv.skus = (inv.skus||[]).filter(function(s){ return s.sku!==sku; });
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
   spotClick(spotId);
 }
 
@@ -8325,7 +8147,7 @@ function rackInvAddSku(spotId){
   var existing = window._inventoryData[loc].skus.find(function(s){ return s.sku===sku; });
   if(existing){ existing.qty = (parseInt(existing.qty)||0) + qty; }
   else { window._inventoryData[loc].skus.push({sku:sku, name:'', qty:qty, unit:'PCS'}); }
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
   spotClick(spotId); // re-render with the new row, still in edit mode
 }
 
@@ -8789,7 +8611,7 @@ function inventoryLoadCSV(text){
     window._inventoryData[loc] = data[loc];
   });
   var count = Object.keys(data).length;
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
   pm('✓ Inventory loaded — '+count+' locations merged in and saved. Click any spot to view contents.');
   rackHighlightInventory();
 }
@@ -9138,24 +8960,30 @@ var CONDITION_COLORS = {
 // Conditions that require manager review
 var MGR_REVIEW_CONDITIONS = ['damaged','missing_items','counterfeit','open_damaged'];
 
+function returnsStorageKey(){
+  var id = window._clerkUser && window._clerkUser.id;
+  return id ? 'warehub_returns:'+id : null;
+}
 function returnsSave(){
   try{
-    // Save without photos (base64 too large for localStorage)
+    var key = returnsStorageKey();
+    if(!key) return;
     var light = returnsList.map(function(r){
       var copy = Object.assign({},r);
       delete copy.photos;
       return copy;
     });
-    localStorage.setItem('warehub_returns', JSON.stringify(light));
+    localStorage.setItem(key, JSON.stringify(light));
+    localStorage.removeItem('warehub_returns');
   }catch(e){}
 }
 function returnsLoad(){
   try{
-    var d = localStorage.getItem('warehub_returns');
-    if(d){
-      var parsed = JSON.parse(d);
-      returnsList = Array.isArray(parsed) ? parsed : [];
-    }
+    var key = returnsStorageKey();
+    if(!key){ returnsList = []; return; }
+    var d = localStorage.getItem(key);
+    returnsList = d ? (JSON.parse(d)||[]) : [];
+    if(!Array.isArray(returnsList)) returnsList = [];
   }catch(e){ returnsList = []; }
 }
 
@@ -9373,7 +9201,7 @@ function returnsSubmit(){
     var ex  = (inv.skus||[]).find(function(s){return s.sku===sku;});
     if(ex){ ex.qty=(parseInt(ex.qty)||0)+qty; }
     else { inv.skus.push({sku:sku,name:'RETURN',qty:qty,unit:'PCS'}); }
-    inventorySync();
+    window._inventoryDirty=true; inventorySync();
   }
 
   // Manager notification
@@ -9593,7 +9421,7 @@ function returnsEditSave(id){
     if(existing){ existing.qty = (parseInt(existing.qty)||0) + r.qty; }
     else { inv.skus.push({sku:r.sku, name:'RETURN', qty:r.qty, unit:'PCS'}); }
   }
-  inventorySync();
+  window._inventoryDirty=true; inventorySync();
 
   _returnsEditingId = null;
   returnsSave();
@@ -10015,19 +9843,32 @@ function renderProductivity(){
 var vehicleTrips = [];
 var _vehicleConfig = {model:'', plate:''};
 
+function vehicleStorageKey(){
+  var id = window._clerkUser && window._clerkUser.id;
+  return id ? 'warehub_vehicle:'+id : null;
+}
 function vehicleLoad(){
-  try{ vehicleTrips = JSON.parse(localStorage.getItem('warehub_vehicle')||'[]'); }
-  catch(e){ vehicleTrips = []; }
+  try{
+    var key = vehicleStorageKey();
+    vehicleTrips = key ? JSON.parse(localStorage.getItem(key)||'[]') : [];
+    if(!Array.isArray(vehicleTrips)) vehicleTrips = [];
+  }catch(e){ vehicleTrips = []; }
 }
 
 function vehicleSave(){
-  try{ localStorage.setItem('warehub_vehicle', JSON.stringify(vehicleTrips)); }
-  catch(e){}
+  try{
+    var key = vehicleStorageKey();
+    if(!key) return;
+    localStorage.setItem(key, JSON.stringify(vehicleTrips));
+    localStorage.removeItem('warehub_vehicle');
+  }catch(e){}
 }
 
 function vehicleConfigLoad(){
   try{
-    var v = JSON.parse(localStorage.getItem('warehub_vehicle_config')||'{}');
+    var id = window._clerkUser && window._clerkUser.id;
+    var raw = id ? localStorage.getItem('warehub_vehicle_config:'+id) : null;
+    var v = raw ? JSON.parse(raw) : {};
     _vehicleConfig = {model: v.model||'', plate: v.plate||''};
   }catch(e){ _vehicleConfig = {model:'', plate:''}; }
   var mEl = document.getElementById('veh-config-model');
@@ -10041,7 +9882,11 @@ function vehicleConfigSave(){
   var pEl = document.getElementById('veh-config-plate');
   _vehicleConfig.model = mEl ? mEl.value.trim() : '';
   _vehicleConfig.plate = pEl ? pEl.value.trim() : '';
-  try{ localStorage.setItem('warehub_vehicle_config', JSON.stringify(_vehicleConfig)); }catch(e){}
+  try{
+    var id = window._clerkUser && window._clerkUser.id;
+    if(id) localStorage.setItem('warehub_vehicle_config:'+id, JSON.stringify(_vehicleConfig));
+    localStorage.removeItem('warehub_vehicle_config');
+  }catch(e){}
   pm('✓ Vehicle info saved.');
 }
 
@@ -10250,6 +10095,7 @@ function vehicleAddTrip(){
 
   var trip = {
     id:      'TRIP-'+Date.now(),
+    _accountId: (window._clerkUser && window._clerkUser.id) || '',
     date:    new Date().toISOString().slice(0,10),  // ISO "YYYY-MM-DD" — consistent with D1
     driver:  driver === '__other__'
                ? (document.getElementById('veh-driver-other')
@@ -10353,6 +10199,9 @@ function renderVehicleLog(){
     btn.onclick = function(){
       vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== tid; });
       vehicleSave();
+      if(window.warehubApi && String(tid).indexOf('TRIP-')!==0){
+        window.warehubApi('DELETE', '/api/vehicle/trips/'+encodeURIComponent(tid)).catch(function(){});
+      }
       renderVehicleLog();
       renderVehicleStats();
     };
@@ -10460,6 +10309,9 @@ function devRender(){
 function vehicleDeleteTrip(id){
   vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
   vehicleSave();
+  if(window.warehubApi && String(id).indexOf('TRIP-')!==0){
+    window.warehubApi('DELETE', '/api/vehicle/trips/'+encodeURIComponent(id)).catch(function(){});
+  }
   renderVehicleLog();
   renderVehicleStats();
 }
@@ -10694,20 +10546,31 @@ function fbaAdjustInventory(skus, direction){
       }
     }
   });
-  if(typeof inventorySync === 'function') inventorySync();
+  if(typeof inventorySync === 'function') window._inventoryDirty=true; inventorySync();
 }
 var fbaReprints = [];   // persistent reprint queue — saved to warehub_fba_reprints
 var _fbaSkuSeq = 0;
 var _fbaEditingId = null;  // id of the logged record currently being edited, or null for a new entry
 
+function fbaStorageKey(){
+  var id = window._clerkUser && window._clerkUser.id;
+  return id ? 'warehub_fba:'+id : null;
+}
 function fbaLoadLocal(){
-  try{ fbaRecords = JSON.parse(localStorage.getItem('warehub_fba')||'[]'); }
-  catch(e){ fbaRecords = []; }
+  try{
+    var key = fbaStorageKey();
+    fbaRecords = key ? JSON.parse(localStorage.getItem(key)||'[]') : [];
+    if(!Array.isArray(fbaRecords)) fbaRecords = [];
+  }catch(e){ fbaRecords = []; }
 }
 
 function fbaSaveLocal(){
-  try{ localStorage.setItem('warehub_fba', JSON.stringify(fbaRecords)); }
-  catch(e){}
+  try{
+    var key = fbaStorageKey();
+    if(!key) return;
+    localStorage.setItem(key, JSON.stringify(fbaRecords));
+    localStorage.removeItem('warehub_fba');
+  }catch(e){}
 }
 
 function fbaPopulateSubmittedBy(){
@@ -11775,13 +11638,20 @@ function fbaCopyMissingList(){
 // ── Persistent Reprint Queue ──────────────────────────────────────
 
 function fbaReprintLoad(){
-  try{ fbaReprints = JSON.parse(localStorage.getItem('warehub_fba_reprints')||'[]'); }
-  catch(e){ fbaReprints = []; }
+  try{
+    var id = window._clerkUser && window._clerkUser.id;
+    fbaReprints = id ? JSON.parse(localStorage.getItem('warehub_fba_reprints:'+id)||'[]') : [];
+    if(!Array.isArray(fbaReprints)) fbaReprints = [];
+  }catch(e){ fbaReprints = []; }
 }
 
 function fbaReprintSave(){
-  try{ localStorage.setItem('warehub_fba_reprints', JSON.stringify(fbaReprints)); }
-  catch(e){}
+  try{
+    var id = window._clerkUser && window._clerkUser.id;
+    if(!id) return;
+    localStorage.setItem('warehub_fba_reprints:'+id, JSON.stringify(fbaReprints));
+    localStorage.removeItem('warehub_fba_reprints');
+  }catch(e){}
 }
 
 // Called from fbaShowBatchEdit whenever missing boxes are detected
@@ -12851,6 +12721,11 @@ function aiDoActions(actions){
     currentPacker = null;
     orders = [];
     if(typeof recvLog !== 'undefined') recvLog = [];
+    if(typeof returnsList !== 'undefined') returnsList = [];
+    if(typeof fbaRecords !== 'undefined') fbaRecords = [];
+    if(typeof fbaReprints !== 'undefined') fbaReprints = [];
+    if(typeof vehicleTrips !== 'undefined') vehicleTrips = [];
+    _vehicleConfig = {model:'', plate:''};
     window._inventoryData = {};
     window._accountTodayOrders = [];
     window._receivedRows = [];
@@ -13002,9 +12877,10 @@ function aiDoActions(actions){
   window.apiSavePackers = function(){
     if(!apiReady()) return Promise.resolve();
     var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
+    if(!snapshot.length) return Promise.resolve();
     return window.packerWrite(async function(){
       setCloudDot('var(--am)', 'Syncing packers…');
-      var result = await apiCall('POST', '/api/packers/sync', { packers: snapshot, replace: true });
+      var result = await apiCall('POST', '/api/packers/sync', { packers: snapshot });
       if(result && result.ok) setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
       else setCloudDot('var(--rd)', 'Cloud sync failed');
       return result;
@@ -13016,25 +12892,7 @@ function aiDoActions(actions){
     setCloudDot('var(--am)', 'Loading from cloud…');
     var result = await apiCall('GET', '/api/packers');
     if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
-    try {
-      var me = window._clerkUser && window._clerkUser.id;
-      var saved = me && localStorage.getItem('warehub_removed_packers:'+me);
-      if(saved) window._removedPackerIds = Object.assign(window._removedPackerIds||{}, JSON.parse(saved));
-    } catch(e){}
-    var all = result.packers.filter(function(p){ return !(window._removedPackerIds && window._removedPackerIds[p.id]); });
-    result.packers.forEach(function(p){
-      if(window._removedPackerIds && window._removedPackerIds[p.id] && window.warehubApi){
-        window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(p.id)).catch(function(){});
-      }
-    });
-    var seen = {};
-    all = all.filter(function(p){
-      var key = ((p.name||'').trim().toLowerCase()) || p.id;
-      if(!p.id || seen[key]) return false;
-      seen[key] = p.id;
-      return true;
-    });
-    if(all.length !== result.packers.length) window._packersNeedDedupe = true;
+    var all = result.packers;
     if(!all.length){
       packers = [];
       managers = [];
@@ -13065,10 +12923,6 @@ function aiDoActions(actions){
     localStorage.setItem('warehub_packers',  JSON.stringify(packers));
     localStorage.setItem('warehub_managers', JSON.stringify(managers));
     renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
-    if(window._packersNeedDedupe){
-      window._packersNeedDedupe = false;
-      window.apiSavePackers();
-    }
     setCloudDot('var(--gn)', 'Cloud sync: loaded ' + all.length + ' packers');
     pm('✓ Staff loaded from cloud (' + packers.length + ' packers)');
     return true;
@@ -13126,8 +12980,15 @@ function aiDoActions(actions){
   };
 
   window.apiCompleteOrder = async function(order){
-    if(!apiReady() || !order.apiId) return;
-    await apiCall('PATCH', '/api/orders/' + order.apiId, {
+    if(!apiReady() || !order) return;
+    var id = order.apiId;
+    if(!id){
+      var fresh = await apiCall('GET', '/api/orders');
+      var hit = fresh && fresh.orders && fresh.orders.find(function(o){ return o.tracking===order.tracking; });
+      if(hit){ id = hit.id; order.apiId = id; }
+    }
+    if(!id) return;
+    await apiCall('PATCH', '/api/orders/' + id, {
       status:       'done',
       packed_by:    order.packedBy    || null,
       assigned_to:  order.assignedTo  || null,
@@ -13202,7 +13063,15 @@ function aiDoActions(actions){
   window.apiLoadReturns = async function(){
     if(!apiReady()) return;
     var result = await apiCall('GET', '/api/returns');
-    if(!result || !result.returns || !result.returns.length) return;
+    if(!result || !result.returns) return;
+    if(!result.returns.length){
+      var meEmpty = window._clerkUser && window._clerkUser.id;
+      returnsList = (returnsList||[]).filter(function(r){ return r._accountId && r._accountId===meEmpty; });
+      returnsSave();
+      if(typeof renderReturnsList === 'function') renderReturnsList();
+      if(typeof renderReturnsStats === 'function') renderReturnsStats();
+      return;
+    }
     var apiReturns = result.returns.map(function(r){
       return {
         id: r.id, tracking: r.tracking, carrier: r.carrier,
@@ -13214,8 +13083,9 @@ function aiDoActions(actions){
       };
     });
     // Merge: API is source of truth, keep local entries not in API
+    var me = window._clerkUser && window._clerkUser.id;
     var apiIds = new Set(apiReturns.map(function(r){ return r.id; }));
-    var localOnly = (returnsList||[]).filter(function(r){ return !apiIds.has(r.id); });
+    var localOnly = (returnsList||[]).filter(function(r){ return r._accountId && r._accountId===me && !apiIds.has(r.id); });
     returnsList = apiReturns.concat(localOnly);
     returnsSave();
     if(typeof renderReturnsList === 'function') renderReturnsList();
@@ -13230,6 +13100,7 @@ function aiDoActions(actions){
     // After submit, the newest entry is at index 0 (unshifted)
     if(returnsList && returnsList.length > prevLen){
       var entry = returnsList[0];
+      entry._accountId = window._clerkUser && window._clerkUser.id;
       window.apiSaveReturn(entry);
       // AI telemetry
       if(typeof window.trackEvent === 'function'){
@@ -13248,7 +13119,7 @@ function aiDoActions(actions){
 
   window.apiSaveTrip = async function(trip){
     if(!apiReady() || !trip) return;
-    await apiCall('POST', '/api/vehicle/trips', {
+    var result = await apiCall('POST', '/api/vehicle/trips', {
       driver:      trip.driver||'',
       destination: trip.dest||trip.destination||'',
       depart_time: trip.depart||trip.depart_time||null,
@@ -13259,12 +13130,21 @@ function aiDoActions(actions){
       notes:       trip.notes||null,
       trip_date:   new Date().toISOString().slice(0,10)
     });
+    if(result && result.id){ trip.id = result.id; vehicleSave(); }
   };
 
   window.apiLoadVehicle = async function(){
     if(!apiReady()) return;
     var result = await apiCall('GET', '/api/vehicle/trips');
-    if(!result || !result.trips || !result.trips.length) return;
+    if(!result || !result.trips) return;
+    var me = window._clerkUser && window._clerkUser.id;
+    if(!result.trips.length){
+      vehicleTrips = (vehicleTrips||[]).filter(function(t){ return t._accountId && t._accountId===me; });
+      vehicleSave();
+      if(typeof renderVehicleLog === 'function') renderVehicleLog();
+      if(typeof renderVehicleStats === 'function') renderVehicleStats();
+      return;
+    }
     var apiTrips = result.trips.map(function(t){
       return {
         id: t.id||('TRIP-'+Date.now()),
@@ -13279,16 +13159,9 @@ function aiDoActions(actions){
         notes: t.notes||''
       };
     });
-    if(!apiTrips.length) return;
-    // MERGE: add D1 trips not already in local array (match by id, then by date+driver+dest)
-    var localIds  = vehicleTrips.map(function(t){ return t.id; });
-    var localKeys = vehicleTrips.map(function(t){ return normDate(t.date)+'|'+t.driver+'|'+t.dest; });
-    apiTrips.forEach(function(at){
-      var dupById  = localIds.indexOf(at.id) >= 0;
-      var dupByKey = localKeys.indexOf(normDate(at.date)+'|'+at.driver+'|'+at.dest) >= 0;
-      if(!dupById && !dupByKey) vehicleTrips.push(at);
-    });
-    // Sort newest-first
+    var apiIds = new Set(apiTrips.map(function(t){ return t.id; }));
+    var localOnly = (vehicleTrips||[]).filter(function(t){ return t._accountId && t._accountId===me && !apiIds.has(t.id); });
+    vehicleTrips = apiTrips.concat(localOnly);
     vehicleTrips.sort(function(a,b){ return normDate(b.date) > normDate(a.date) ? 1 : -1; });
     vehicleSave();
     if(typeof renderVehicleLog  === 'function') renderVehicleLog();
@@ -13302,7 +13175,7 @@ function aiDoActions(actions){
     if(_origVehicleAddTrip) _origVehicleAddTrip.apply(this, arguments);
     if(vehicleTrips && vehicleTrips.length > prevLen){
       var trip = vehicleTrips[0];
-      window.apiSaveTrip(trip);
+      // The trip is already posted inside vehicleAddTrip. Do not post it again.
       // AI telemetry
       if(typeof window.trackEvent === 'function'){
         window.trackEvent('vehicle_trip', 'trip', trip.id, {
@@ -13340,6 +13213,14 @@ function aiDoActions(actions){
     if(!apiReady()) return;
     var result = await apiCall('GET', '/api/fba');
     if(!result || !result.shipments) return;
+    if(!result.shipments.length){
+      var meEmpty = window._clerkUser && window._clerkUser.id;
+      fbaRecords = (fbaRecords||[]).filter(function(r){ return r._accountId && r._accountId===meEmpty; });
+      fbaSaveLocal();
+      if(typeof renderFbaLog === 'function') renderFbaLog();
+      if(typeof renderFbaStats === 'function') renderFbaStats();
+      return;
+    }
 
     var apiRecs = result.shipments.map(function(s){
       return {
@@ -13363,18 +13244,11 @@ function aiDoActions(actions){
     // Match by shipment_id (the human-readable FBA ID the user typed).
     // This preserves records that were saved locally but whose API POST
     // failed silently (network drop, auth hiccup, etc.).
+    var me = window._clerkUser && window._clerkUser.id;
     var apiShipIds = new Set(apiRecs.map(function(r){ return r.shipId; }).filter(Boolean));
     var localOnly  = (fbaRecords||[]).filter(function(r){
-      return r.shipId && !apiShipIds.has(r.shipId);
+      return r._accountId && r._accountId===me && r.shipId && !apiShipIds.has(r.shipId);
     });
-
-    // Re-queue any unsynced local records to the API now
-    localOnly.forEach(function(r){
-      console.warn('[WH-FBA] Re-syncing local-only record to API:', r.shipId);
-      window.apiSaveFba(r);
-    });
-
-    // API records are authoritative; local-only records appended as buffer
     fbaRecords = apiRecs.concat(localOnly);
     fbaSaveLocal();
     if(typeof renderFbaLog   === 'function') renderFbaLog();
@@ -13388,6 +13262,7 @@ function aiDoActions(actions){
     if(_origFbaSubmit) _origFbaSubmit.apply(this, arguments);
     if(fbaRecords && fbaRecords.length > prevLen){
       var rec = fbaRecords[0];
+      rec._accountId = window._clerkUser && window._clerkUser.id;
       window.apiSaveFba(rec);
       // AI telemetry
       if(typeof window.trackEvent === 'function'){
@@ -13416,8 +13291,15 @@ function aiDoActions(actions){
     var s = result.settings;
     if(s.vehicle_config){
       _vehicleConfig = s.vehicle_config;
-      try{ localStorage.setItem('warehub_vehicle_config', JSON.stringify(_vehicleConfig)); }catch(e){}
+    } else {
+      _vehicleConfig = {model:'', plate:''};
     }
+    try{
+      var vid = window._clerkUser && window._clerkUser.id;
+      if(vid) localStorage.setItem('warehub_vehicle_config:'+vid, JSON.stringify(_vehicleConfig));
+      localStorage.removeItem('warehub_vehicle_config');
+    }catch(e){}
+    if(typeof vehicleConfigLoad === 'function') vehicleConfigLoad();
     if(s.fedex_config){
       _fedexConfig = s.fedex_config;
       try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
@@ -13427,25 +13309,10 @@ function aiDoActions(actions){
       try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
     }
     var me = window._clerkUser && window._clerkUser.id;
-    var stamp = s.inventory_clerk_id || '';
-    var inv = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
-    if(stamp && stamp !== me) inv = {};
-    if(!stamp && window._accountSwitched){
-      inv = {};
-      if(me && window.warehubApi){
-        window.warehubApi('GET', '/api/receiving').then(function(rec){
-          if(window._clerkUser && window._clerkUser.id !== me) return;
-          if(rec && rec.receiving && rec.receiving.length) return;
-          window.warehubApi('POST', '/api/settings', { rack_inventory: {}, inventory_clerk_id: me }).catch(function(){});
-        }).catch(function(){});
-      }
-    }
-    window._inventoryData = inv;
+    window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
     window._inventoryOwner = me;
-    if(me && !window._accountSwitched){
-      try { localStorage.setItem('warehub_inventory:'+me, JSON.stringify(window._inventoryData)); } catch(e){}
-    }
-    window._tenantInventoryReady = !window._accountSwitched || !!stamp;
+    window._inventoryDirty = false;
+    window._tenantInventoryReady = true;
     if(typeof renderLocations === 'function') renderLocations();
   };
 
@@ -13838,8 +13705,11 @@ function confirmExceptionOrder(tracking){
   renderExceptions();
 }
 function refreshExceptions(){
-  renderExceptions();
-  renderPackRemaining();
+  var reload = (window.apiLoadOrders ? window.apiLoadOrders() : Promise.resolve());
+  Promise.resolve(reload).then(function(){
+    renderExceptions();
+    renderPackRemaining();
+  });
 }
 function exportPackHandoff(){
   var header = ['tracking','carrier','sku','qty','shelf','status','completedAt','lastScanRaw'];
