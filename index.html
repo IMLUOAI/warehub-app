@@ -1239,6 +1239,21 @@ body.station-mode #pack-left{font-size:120px;}
         </div>
       </div>
 
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+        <div>
+          <div class="lbl">TODAY · BY PACKER</div>
+          <div id="d-bar-packers"></div>
+        </div>
+        <div>
+          <div class="lbl">TODAY · BY CARRIER</div>
+          <div id="d-bar-carriers"></div>
+        </div>
+        <div>
+          <div class="lbl">TODAY · LEFT VS DONE</div>
+          <div id="d-bar-left"></div>
+        </div>
+      </div>
+
       <!-- Packer leaderboard -->
       <div style="display:flex;flex-direction:column;gap:8px;">
         <div class="lbl">PACKER PERFORMANCE</div>
@@ -3188,9 +3203,14 @@ function addPacker(){
 }
 
 function removePacker(id){
-  packers=packers.filter(function(p){return p.id!==id;});
-  orders.forEach(function(o){if(o.assignedTo===id) o.assignedTo=null;});
-  renderPackerPanel(); renderAssignPanel();
+  var p = packers.find(function(x){ return x.id===id; });
+  if(!p) return;
+  if(!confirm('Remove '+p.name+' from this account?')) return;
+  packers=packers.filter(function(x){ return x.id!==id; });
+  if(currentPacker && currentPacker.id===id) currentPacker=null;
+  orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
+  saveStaff();
+  renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
 }
 
 function renderPackerPanel(){
@@ -5429,8 +5449,8 @@ async function locationsRefreshFromAccount(){
   if(api){
     var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
     var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
+    window._inventoryData = {};
     if(serverInv && typeof serverInv === 'object'){
-      window._inventoryData = {};
       Object.keys(serverInv).forEach(function(loc){
         ((serverInv[loc] && serverInv[loc].skus) || []).forEach(function(s){
           addSkuToLocation(loc, s.sku, s.qty);
@@ -5763,6 +5783,54 @@ function fmtTime(ms){
   return Math.floor(m/60)+'h '+(m%60)+'m';
 }
 
+function dashBarRow(label, n, max, color){
+  var pct = max ? Math.max(4, Math.round(n / max * 100)) : 0;
+  if(!n) pct = 0;
+  return '<div style="display:flex;align-items:center;gap:8px;margin:0 0 7px;">'
+    + '<span style="width:78px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+escHtml(label)+'">'+escHtml(label)+'</span>'
+    + '<div style="flex:1;background:var(--bg);height:8px;border-radius:4px;overflow:hidden;">'
+    + '<div style="height:8px;width:'+pct+'%;background:'+color+';"></div></div>'
+    + '<span style="width:28px;text-align:right;font-size:10px;color:var(--td);">'+n+'</span></div>';
+}
+function renderTodayBars(){
+  var day = todaysImportedOrders();
+  if(!day.length) day = orders || [];
+  var packEl = document.getElementById('d-bar-packers');
+  var carEl = document.getElementById('d-bar-carriers');
+  var leftEl = document.getElementById('d-bar-left');
+  if(!packEl || !carEl || !leftEl) return;
+  var byPacker = {};
+  day.forEach(function(o){
+    if(o.status !== 'done') return;
+    var p = packers.find(function(pk){ return pk.id === (o.packedBy || o.assignedTo); });
+    var name = p ? p.name : 'Unassigned';
+    byPacker[name] = (byPacker[name] || 0) + 1;
+  });
+  var packRows = Object.keys(byPacker).map(function(name){ return {name:name, n:byPacker[name]}; })
+    .sort(function(a,b){ return b.n - a.n; });
+  var packMax = packRows.reduce(function(m,r){ return Math.max(m, r.n); }, 0);
+  packEl.innerHTML = packRows.length
+    ? packRows.map(function(r){ return dashBarRow(r.name, r.n, packMax, '#7dd3fc'); }).join('')
+    : '<div style="color:var(--td);font-size:11px;">No packages packed today.</div>';
+  var byCar = {};
+  day.forEach(function(o){
+    var c = o.carrier || 'Unknown';
+    byCar[c] = (byCar[c] || 0) + 1;
+  });
+  var carRows = Object.keys(byCar).map(function(name){ return {name:name, n:byCar[name]}; })
+    .sort(function(a,b){ return b.n - a.n; });
+  var carMax = carRows.reduce(function(m,r){ return Math.max(m, r.n); }, 0);
+  carEl.innerHTML = carRows.length
+    ? carRows.map(function(r){ return dashBarRow(r.name, r.n, carMax, (typeof cc==='function' ? cc(r.name) : '#86efac')); }).join('')
+    : '<div style="color:var(--td);font-size:11px;">No labels imported today.</div>';
+  var done = day.filter(function(o){ return o.status==='done'; }).length;
+  var left = day.length - done;
+  var max = Math.max(done, left, 1);
+  leftEl.innerHTML = day.length
+    ? dashBarRow('Done', done, max, '#4caf80') + dashBarRow('Left', left, max, '#fbbf24')
+    : '<div style="color:var(--td);font-size:11px;">No labels imported today.</div>';
+}
+
 function renderDash(){
   var tot=orders.length, don=orders.filter(function(o){return o.status==='done';}).length;
   var rem=tot-don, pct=tot?Math.round((don/tot)*100):0;
@@ -5778,6 +5846,7 @@ function renderDash(){
   if(dPac) dPac.textContent=packers.filter(function(p){return p.online;}).length+'/'+packers.filter(isOnShift).length;
   if(dPtx) dPtx.textContent=don+'/'+tot;
   if(dBar) dBar.style.width=pct+'%';
+  renderTodayBars();
 
 
   var lbEl=document.getElementById('d-packers');
@@ -7308,7 +7377,8 @@ async function rackConfigLoad(){
 // by returns put-away, auto-collection from daily label imports, and
 // manual edits on a spot's info panel, so all three stay consistent.
 function inventorySync(){
-  try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); } catch(e){}
+  try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData||{})); } catch(e){}
+  if(!window._tenantInventoryReady) return;
   if(typeof window.warehubApi === 'function'){
     window.warehubApi('POST', '/api/settings', { rack_inventory: window._inventoryData }).catch(function(e){
       console.error('[inventory] cloud save failed:', e);
@@ -12795,6 +12865,29 @@ function aiDoActions(actions){
     });
   }
   
+  async function isolateTenantCache(userId){
+    var last = '';
+    try { last = localStorage.getItem('warehub_active_user') || ''; } catch(e){}
+    if(last === userId) return;
+    ['warehub_packers','warehub_managers','warehub_currentPacker','warehub_inventory','warehub_receiving_log','warehub_returns','warehub_vehicle','warehub_fba','warehub_fba_reprints','warehub_company_info','warehub_vehicle_config','warehub_fedex'].forEach(function(k){
+      try { localStorage.removeItem(k); } catch(e){}
+    });
+    try { localStorage.setItem('warehub_active_user', userId); } catch(e){}
+    packers = [];
+    managers = [];
+    currentPacker = null;
+    orders = [];
+    if(typeof recvLog !== 'undefined') recvLog = [];
+    window._inventoryData = {};
+    window._accountTodayOrders = [];
+    window._receivedRows = [];
+    window._tenantInventoryReady = false;
+    if(typeof idbClearBatch === 'function'){ try { await idbClearBatch(); } catch(e){} }
+    if(typeof renderManagerPanel === 'function') renderManagerPanel();
+    if(typeof renderPackerPanel === 'function') renderPackerPanel();
+    if(typeof renderLocations === 'function') renderLocations();
+  }
+
   async function onSignedIn(user) {
     const authScreen = document.getElementById('clerk-auth-screen');
     const appRoot    = document.getElementById('app') ||
@@ -12803,8 +12896,11 @@ function aiDoActions(actions){
   
     // Get a fresh JWT token
     _clerkToken = await window.Clerk.session.getToken();
+    window._clerkToken = _clerkToken;
     _clerkUser  = user;
+    window._clerkUser = user;
     window.__clerk = window.Clerk;
+    await isolateTenantCache(user.id);
   
     // Register tenant on first sign-up (idempotent — safe to call every login)
     window._tenantPlan = 'trial';
@@ -12877,13 +12973,10 @@ function aiDoActions(actions){
       clearTimeout(window._appInitTimer);
       if (typeof window._appInitFn === 'function') {
         await window._appInitFn();
-        // After localStorage init, load cloud data (overrides local state)
-        if (typeof window.apiLoadAll === 'function') {
-          window.apiLoadAll().catch(function(e){
-            console.warn('[WH-API] Cloud load failed (using local data):', e.message);
-          });
-        }
       }
+    }
+    if (typeof window.apiLoadAll === 'function') {
+      await window.apiLoadAll();
     }
   }
   
@@ -12931,7 +13024,8 @@ function aiDoActions(actions){
     if(!apiReady()) return;
     setCloudDot('var(--am)', 'Syncing packers…');
     var result = await apiCall('POST', '/api/packers/sync', {
-      packers: packers.concat(managers)
+      packers: packers.concat(managers),
+      replace: true
     });
     if(result && result.ok){
       setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
@@ -12946,7 +13040,19 @@ function aiDoActions(actions){
     var result = await apiCall('GET', '/api/packers');
     if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
     var all = result.packers;
-    if(!all.length){ setCloudDot('var(--gn)', 'Cloud: no packers yet'); return false; }
+    if(!all.length){
+      packers = [];
+      managers = [];
+      currentPacker = null;
+      try{
+        localStorage.removeItem('warehub_packers');
+        localStorage.removeItem('warehub_managers');
+        localStorage.removeItem('warehub_currentPacker');
+      }catch(e){}
+      renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+      setCloudDot('var(--gn)', 'Cloud: no packers yet');
+      return true;
+    }
     packers  = all.filter(function(p){ return !p.is_manager; });
     managers = all.filter(function(p){ return  p.is_manager; });
     // Normalize fields
@@ -13322,6 +13428,10 @@ function aiDoActions(actions){
       window._companyInfo = s.company_info;
       try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
     }
+    window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
+    try { localStorage.setItem('warehub_inventory', JSON.stringify(window._inventoryData)); } catch(e){}
+    window._tenantInventoryReady = true;
+    if(typeof renderLocations === 'function') renderLocations();
   };
 
   // Patch vehicleConfigSave to also push settings to API
