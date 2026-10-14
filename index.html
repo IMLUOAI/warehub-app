@@ -3141,7 +3141,6 @@ function addPacker(){
   var id  =idEl.value.trim().toUpperCase();
   if(!name||!id){alert('Enter both a name and a barcode ID.');return;}
   if(packers.find(function(p){return p.id===id;})){alert('Barcode ID already exists.');return;}
-  window._packerRev = (window._packerRev||0)+1;
   packers.push({
     id:id,name:name,
     color:PCOLORS[packers.length%PCOLORS.length],
@@ -3159,18 +3158,20 @@ function removePacker(id){
   var p = packers.find(function(x){ return x.id===id; });
   if(!p) return;
   if(!confirm('Remove '+p.name+' from this account?')) return;
-  window._packerRev = (window._packerRev||0)+1;
-  window._deletedPackerIds = window._deletedPackerIds || [];
-  if(window._deletedPackerIds.indexOf(id)<0) window._deletedPackerIds.push(id);
-  try{
-    var uid = (window._clerkUser && window._clerkUser.id) || '';
-    localStorage.setItem('warehub_deleted_packers:'+uid, JSON.stringify(window._deletedPackerIds));
-  }catch(e){}
   packers = packers.filter(function(x){ return x.id!==id; });
   if(currentPacker && currentPacker.id===id) currentPacker=null;
   orders.forEach(function(o){ if(o.assignedTo===id) o.assignedTo=null; });
-  saveStaff();
+  try{
+    localStorage.setItem('warehub_packers', JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+  }catch(e){}
   renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+  var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
+  var write = window.packerWrite || function(fn){ return fn(); };
+  write(async function(){
+    if(window.warehubApi) await window.warehubApi('DELETE', '/api/packers/'+encodeURIComponent(id)).catch(function(){ return null; });
+    if(snapshot.length && window.warehubApi) await window.warehubApi('POST', '/api/packers/sync', { packers: snapshot, deleteIds: [id] }).catch(function(){ return null; });
+  });
 }
 
 function renderPackerPanel(){
@@ -12875,22 +12876,11 @@ function aiDoActions(actions){
   }
   window.apiSavePackers = function(){
     if(!apiReady()) return Promise.resolve();
-    try{
-      var uid = (window._clerkUser && window._clerkUser.id) || '';
-      var saved = JSON.parse(localStorage.getItem('warehub_deleted_packers:'+uid)||'[]');
-      if(Array.isArray(saved)) window._deletedPackerIds = saved;
-    }catch(e){}
-    var deleted = (window._deletedPackerIds||[]).slice();
-    var snapshot = JSON.parse(JSON.stringify(packers.concat(managers))).filter(function(p){
-      return deleted.indexOf(p.id) < 0;
-    });
-    if(!snapshot.length && !deleted.length) return Promise.resolve();
+    var snapshot = JSON.parse(JSON.stringify(packers.concat(managers)));
+    if(!snapshot.length) return Promise.resolve();
     return window.packerWrite(async function(){
       setCloudDot('var(--am)', 'Syncing packers…');
-      for(var i=0;i<deleted.length;i++){
-        await apiCall('DELETE', '/api/packers/'+encodeURIComponent(deleted[i]));
-      }
-      var result = await apiCall('POST', '/api/packers/sync', { packers: snapshot, deleteIds: deleted });
+      var result = await apiCall('POST', '/api/packers/sync', { packers: snapshot });
       if(result && result.ok) setCloudDot('var(--gn)', 'Cloud sync: saved at ' + new Date().toLocaleTimeString());
       else setCloudDot('var(--rd)', 'Cloud sync failed');
       return result;
@@ -12899,58 +12889,43 @@ function aiDoActions(actions){
 
   window.apiLoadPackers = async function(){
     if(!apiReady()) return false;
-    var rev = window._packerRev || 0;
-    return window.packerWrite(async function(){
-      if((window._packerRev||0) !== rev) return true;
-      setCloudDot('var(--am)', 'Loading from cloud…');
-      var result = await apiCall('GET', '/api/packers');
-      if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
-      if((window._packerRev||0) !== rev) return true;
-      var deleted = window._deletedPackerIds || [];
-      var all = result.packers.filter(function(p){ return deleted.indexOf(p.id) < 0; });
-      var stillThere = result.packers.filter(function(p){ return deleted.indexOf(p.id) >= 0; });
-      for(var di=0; di<stillThere.length; di++){
-        await apiCall('DELETE', '/api/packers/'+encodeURIComponent(stillThere[di].id));
-      }
-      if(!stillThere.length && deleted.length){
-        window._deletedPackerIds = [];
-        try{
-          var uid = (window._clerkUser && window._clerkUser.id) || '';
-          localStorage.removeItem('warehub_deleted_packers:'+uid);
-        }catch(e){}
-      }
-      if(!all.length){
-        packers = [];
-        managers = [];
-        currentPacker = null;
-        try{
-          localStorage.removeItem('warehub_packers');
-          localStorage.removeItem('warehub_managers');
-          localStorage.removeItem('warehub_currentPacker');
-        }catch(e){}
-        renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
-        setCloudDot('var(--gn)', 'Cloud: no packers yet');
-        return true;
-      }
-      packers  = all.filter(function(p){ return !p.is_manager; });
-      managers = all.filter(function(p){ return  p.is_manager; });
-      packers.forEach(function(p){
-        p.online = !!p.online; p.active = true;
-        p.loginTime = p.loginTime||null;
-        p.ordersCompleted = p.ordersCompleted||0;
-        p.dailyOrdersDate = p.daily_orders_date||'';
-        p.dailyOrdersCompleted = p.daily_orders_completed||0;
-        p.skusScanned = p.skusScanned||0;
-        p.orderTimes = p.orderTimes||[];
-        p.totalPackTime = p.totalPackTime||0;
-        p.shiftSessions = p.shiftSessions||[];
-      });
-      localStorage.setItem('warehub_packers',  JSON.stringify(packers));
-      localStorage.setItem('warehub_managers', JSON.stringify(managers));
+    setCloudDot('var(--am)', 'Loading from cloud…');
+    var result = await apiCall('GET', '/api/packers');
+    if(!result || !result.packers) { setCloudDot('var(--rd)', 'Cloud load failed'); return false; }
+    var all = result.packers;
+    if(!all.length){
+      packers = [];
+      managers = [];
+      currentPacker = null;
+      try{
+        localStorage.removeItem('warehub_packers');
+        localStorage.removeItem('warehub_managers');
+        localStorage.removeItem('warehub_currentPacker');
+      }catch(e){}
       renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
-      setCloudDot('var(--gn)', 'Cloud sync: loaded ' + all.length + ' packers');
+      setCloudDot('var(--gn)', 'Cloud: no packers yet');
       return true;
+    }
+    packers  = all.filter(function(p){ return !p.is_manager; });
+    managers = all.filter(function(p){ return  p.is_manager; });
+    // Normalize fields
+    packers.forEach(function(p){
+      p.online = !!p.online; p.active = true;
+      p.loginTime = p.loginTime||null;
+      p.ordersCompleted = p.ordersCompleted||0;
+      p.dailyOrdersDate = p.daily_orders_date||'';
+      p.dailyOrdersCompleted = p.daily_orders_completed||0;
+      p.skusScanned = p.skusScanned||0;
+      p.orderTimes = p.orderTimes||[];
+      p.totalPackTime = p.totalPackTime||0;
+      p.shiftSessions = p.shiftSessions||[];
     });
+    localStorage.setItem('warehub_packers',  JSON.stringify(packers));
+    localStorage.setItem('warehub_managers', JSON.stringify(managers));
+    renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); renderQuickLoginBtns();
+    setCloudDot('var(--gn)', 'Cloud sync: loaded ' + all.length + ' packers');
+    pm('✓ Staff loaded from cloud (' + packers.length + ' packers)');
+    return true;
   };
 
   // Patch saveStaff to also sync to API
