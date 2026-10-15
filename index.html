@@ -4399,19 +4399,51 @@ function skusForFnsku(code){
   });
   return found;
 }
+function cleanScanCode(raw){
+  return String(raw||'')
+    .toUpperCase()
+    .replace(/\](C1|D2|Q3|E0|A0)/g, '')
+    .replace(/[\s\u001d]+/g, '')
+    .trim();
+}
 function onItemFnsku(sku, raw){
-  var code = saveFnsku(sku, raw);
-  if(!code){ setErr('Enter the FNSKU for '+sku+'.'); return; }
-  var hit = verifySkus.find(function(v){ return v.sku===String(sku).toUpperCase() && !v.scanned && !v.replaced; });
-  if(!hit){ setFb(sku+' FNSKU saved. That line is already filled.','var(--am)'); renderActiveCard(); return; }
+  var code = cleanScanCode(raw);
+  var skuUp = String(sku||'').toUpperCase();
+  if(!code){ setErr('Scan the item barcode for '+skuUp+'.'); return; }
+  if(code !== skuUp) saveFnsku(skuUp, code);
+  var hit = verifySkus.find(function(v){ return v.sku===skuUp && !v.scanned && !v.replaced; });
+  if(!hit){ setFb(skuUp+' saved. That line is already filled.','var(--am)'); renderActiveCard(); return; }
   hit.scanned = 1;
   hit.fnsku = code;
   syncSkuProgress();
   clearErr();
-  setFb('✓ '+sku+' · FNSKU '+code,'var(--gn)');
+  setFb('✓ '+skuUp+' · '+code,'var(--gn)');
   flash('ok');
   if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
   else { renderActiveCard(); focusScan(); }
+}
+function fnskuFieldKey(e, sku){
+  var el = e.target;
+  if(el._fnDone) return;
+  function commit(){
+    if(el._fnDone) return;
+    el._fnDone = true;
+    if(el._fnTimer) clearTimeout(el._fnTimer);
+    onItemFnsku(sku, el.value);
+  }
+  if(e.key==='Enter'){
+    e.preventDefault();
+    e.stopPropagation();
+    commit();
+    return;
+  }
+  if((el.value||'').length<=1) el._fnStart = Date.now();
+  if(el._fnTimer) clearTimeout(el._fnTimer);
+  el._fnTimer = setTimeout(function(){
+    var v = (el.value||'').trim();
+    var elapsed = Date.now() - (el._fnStart||0);
+    if(v.length>=4 && elapsed<900) commit();
+  }, 280);
 }
 
 function applyItemScan(scanned){
@@ -4420,7 +4452,7 @@ function applyItemScan(scanned){
     focusScan();
     return;
   }
-  var code = String(scanned||'').toUpperCase().trim();
+  var code = cleanScanCode(scanned);
   var hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced && v.sku===code; });
   if(!hit){
     hit = verifySkus.find(function(v){
@@ -5868,13 +5900,14 @@ function renderActiveCard(){
         var filled=g.scanned+g.replaced;
         var done=filled>=g.total;
         var safe=sku.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        var known=fnskuFor(sku).replace(/"/g,'"');
+        var known=fnskuFor(sku);
         return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;">'
           +'<div class="ski-check">'+(done?'✓':'○')+'</div>'
           +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
           +'<div class="ski-qty">'+g.scanned+' scanned'+(g.replaced?' · '+g.replaced+' replaced':'')+' / '+g.total+'</div>'
-          +(done ? (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">FNSKU '+known+'</span>' : '')
-            : '<input value="'+known+'" placeholder="FNSKU" autocomplete="off" style="width:150px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onItemFnsku(\''+safe+'\', this.value);}"/>'
+          +(done ? (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
+            : '<input class="pack-item-fnsku" placeholder="Scan item barcode" autocomplete="off" style="width:190px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--cy);color:var(--tx);" onkeydown="fnskuFieldKey(event, \''+safe+'\')"/>'
+            + (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
             + '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
       }).join('')
@@ -12655,7 +12688,11 @@ window._appInitFn = async function(){try{
     if(loginOv&&!loginOv.classList.contains('hide')){
       if(e.target.id!=='login-scan-in'&&!e.target.dataset.quickLogin)
         document.getElementById('login-scan-in').focus();
-    } else if(e.target.id!=='scan-in'){ focusScan(); }
+    } else if(e.target.id!=='scan-in'){
+      var tag = (e.target.tagName || '').toLowerCase();
+      if(tag==='input' || tag==='textarea' || tag==='select') return;
+      focusScan();
+    }
   });
 
 
