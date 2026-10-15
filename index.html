@@ -3112,24 +3112,25 @@ var C128=(function(){
     bars.push(sum%103); bars.push(STOP);
     return bars;
   }
-  function svg(text, barW, barH){
-    barW=barW||2; barH=barH||60;
+  function svg(text, barW, barH, quiet){
+    barW=barW||2; barH=barH||60; quiet=quiet||0;
     var bars=encode(String(text));
     var patterns=bars.map(function(b){return ENCODE[b];});
     var totalBars=0;
     patterns.forEach(function(p){
       var s=String(p);
-      for(var i=0;i<s.length;i++) totalBars+=parseInt(s[i]);
+      for(var i=0;i<s.length;i++) totalBars+=parseInt(s[i],10)||0;
     });
-    var totalW=totalBars*barW;
+    var pad=quiet*barW;
+    var totalW=totalBars*barW+pad*2;
     var rects='';
-    var x=0;
+    var x=pad;
     patterns.forEach(function(p){
       var s=String(p);
       var dark=true;
       for(var i=0;i<s.length;i++){
-        var w=parseInt(s[i])*barW;
-        if(dark) rects+='<rect x="'+x+'" y="0" width="'+w+'" height="'+barH+'" fill="#000"/>';
+        var w=(parseInt(s[i],10)||0)*barW;
+        if(dark && w) rects+='<rect x="'+x+'" y="0" width="'+w+'" height="'+barH+'" fill="#000"/>';
         x+=w; dark=!dark;
       }
     });
@@ -6443,19 +6444,19 @@ function printPackerCards(){
 
   var printCss=
     '*{box-sizing:border-box;margin:0;padding:0;}'
-    +'@page{size:4in 6in;margin:0;}'
-    +'html,body{width:4in;height:6in;background:#fff;font-family:Arial,Helvetica,sans-serif;'
+    +'@page{size:3in 4in;margin:0;}'
+    +'html,body{width:3in;height:4in;margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;'
       +'display:flex;align-items:center;justify-content:center;}'
-    +'.ic{width:3.375in;height:2.125in;border:1.5pt solid #000;display:flex;flex-direction:column;background:#fff;}'
-    +'.ic-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4pt 6pt 2pt;}'
-    +'.ic-company{font-size:5pt;font-weight:700;color:#000;letter-spacing:2px;text-align:center;margin-bottom:2pt;}'
-    +'.ic-init{font-size:22pt;font-weight:900;color:#000;line-height:1;}'
-    +'.ic-name{font-size:10pt;font-weight:900;color:#000;text-align:center;margin-top:2pt;}'
-    +'.ic-role{font-size:5.5pt;font-weight:700;color:#000;letter-spacing:3px;margin-top:2pt;}'
-    +'.ic-divider{width:85%;border-top:0.75pt solid #000;margin:3pt auto;}'
-    +'.ic-bot{padding:2pt 6pt 3pt;text-align:center;}'
-    +'.ic-svg svg{width:80%;height:auto;max-height:18pt;display:block;margin:0 auto;}'
-    +'.ic-id{font-size:5pt;color:#000;margin-top:1pt;letter-spacing:2px;font-family:monospace;font-weight:700;}';
+    +'.ic{width:2.75in;height:3.75in;border:1.75pt solid #000;display:flex;flex-direction:column;background:#fff;}'
+    +'.ic-top{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12pt 8pt 2pt;}'
+    +'.ic-company{font-size:9pt;font-weight:700;color:#000;letter-spacing:2.5px;text-align:center;}'
+    +'.ic-init{font-size:38pt;font-weight:900;color:#000;line-height:0.9;margin-top:6pt;}'
+    +'.ic-name{font-size:15pt;font-weight:900;color:#000;text-align:center;margin-top:4pt;line-height:1.05;}'
+    +'.ic-role{font-size:10pt;font-weight:700;color:#000;letter-spacing:3px;margin-top:4pt;}'
+    +'.ic-bot{margin-top:auto;padding:6pt 8pt 10pt;text-align:center;}'
+    +'.ic-svg{background:#fff;padding:4pt 0 0;}'
+    +'.ic-svg svg{width:2.35in;height:0.7in;display:block;margin:0 auto;}'
+    +'.ic-id{font-size:11pt;color:#000;margin-top:4pt;letter-spacing:1.5px;font-family:monospace;font-weight:700;}';
 
 
   var allPeople=[];
@@ -6472,16 +6473,17 @@ function printPackerCards(){
   previewSt.id='ic-style';
   previewSt.textContent=
     '.icpv-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}'
-    +'.icpv{width:270px;height:170px;border-radius:6px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:transform .15s;}'
+    +'.icpv{width:220px;height:300px;border-radius:8px;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:transform .15s;background:#111;}'
     +'.icpv:hover{transform:translateY(-3px);}'
-    +'.icpv-hdr{flex:0 0 58%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;}'
-    +'.icpv-co{font-size:6px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:2px;text-align:center;margin-bottom:3px;}'
-    +'.icpv-in{font-size:28px;font-weight:900;color:#fff;line-height:1;}'
-    +'.icpv-nm{font-size:11px;font-weight:900;color:#fff;text-align:center;margin-top:3px;}'
-    +'.icpv-bod{flex:1;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px;gap:3px;}'
-    +'.icpv-rl{font-size:6px;font-weight:700;letter-spacing:3px;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.2);}'
-    +'.icpv-bc{background:#fff;border-radius:3px;padding:3px;margin-top:3px;width:90%;text-align:center;}'
-    +'.icpv-id{font-size:6px;color:rgba(255,255,255,.5);letter-spacing:2px;font-family:monospace;font-weight:700;}';
+    +'.icpv-hdr{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 12px 8px;}'
+    +'.icpv-co{font-size:11px;font-weight:700;color:rgba(255,255,255,.75);letter-spacing:3px;text-align:center;}'
+    +'.icpv-in{font-size:64px;font-weight:900;color:#fff;line-height:0.9;margin-top:8px;}'
+    +'.icpv-nm{font-size:18px;font-weight:900;color:#fff;text-align:center;margin-top:6px;}'
+    +'.icpv-bod{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:12px 12px 16px;gap:6px;}'
+    +'.icpv-rl{font-size:11px;font-weight:700;letter-spacing:3px;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.25);}'
+    +'.icpv-bc{background:#fff;border-radius:4px;padding:8px 6px 4px;width:100%;text-align:center;}'
+    +'.icpv-bc svg{width:100%;height:72px;display:block;}'
+    +'.icpv-id{font-size:12px;color:rgba(255,255,255,.8);letter-spacing:2px;font-family:monospace;font-weight:700;}';
   document.head.appendChild(previewSt);
 
   var defaultColors=['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
@@ -6497,7 +6499,7 @@ function printPackerCards(){
   hdr.innerHTML=
     '<div>'
     +'<div style="font-size:10px;letter-spacing:3px;color:#aaa;">WAREHUB — ID CARDS</div>'
-    +'<div style="font-size:9px;color:#555;margin-top:2px;">CR80 badge on 4×6 thermal · black ink · click card or PRINT to print one</div>'
+    +'<div style="font-size:9px;color:#555;margin-top:2px;">2¾ × 3¾ in badge, centered on 3 × 4 in paper</div>'
     +'</div>'
     +'<div style="display:flex;gap:8px;">'
     +'<button id="ic-print-all" style="padding:6px 14px;font-size:9px;letter-spacing:1px;background:#fff;color:#111;border:none;cursor:pointer;font-family:inherit;">🖨 PRINT ALL</button>'
@@ -6512,7 +6514,7 @@ function printPackerCards(){
   allPeople.forEach(function(item,i){
     var col=item.person.color||defaultColors[i%defaultColors.length];
     var hdrBg=item.role==='MANAGER'?'linear-gradient(135deg,#b8860b,#8b6914)':'linear-gradient(135deg,'+col+','+col+'bb)';
-    var barcode=C128.svg(item.person.id,2,36);
+    var barcode=C128.svg(item.person.id,2,70,12);
 
     var wrap=document.createElement('div');
     wrap.className='icpv-wrap';
@@ -6566,7 +6568,7 @@ function printPackerCards(){
 }
 
 function buildCardHtml(item){
-  var svg=C128.svg(item.person.id,3,80);
+  var svg=C128.svg(item.person.id,2,90,14);
   return '<div class="ic">'
     +'<div class="ic-top">'
       +'<div class="ic-company">WAREHUB</div>'
@@ -6574,7 +6576,6 @@ function buildCardHtml(item){
       +'<div class="ic-name">'+item.person.name+'</div>'
       +'<div class="ic-role">'+item.role+'</div>'
     +'</div>'
-    +'<div class="ic-divider"></div>'
     +'<div class="ic-bot">'
       +'<div class="ic-svg">'+svg+'</div>'
       +'<div class="ic-id">'+item.person.id+'</div>'
@@ -6589,13 +6590,13 @@ function doPrintCard(item, css){
   try{
     var blob=new Blob([fullHtml],{type:'text/html'});
     var url=URL.createObjectURL(blob);
-    var w=window.open(url,'_blank','width=420,height=640');
+    var w=window.open(url,'_blank','width=320,height=460');
     if(!w){ pm('⚠ Pop-up blocked — allow pop-ups for this site then try again.'); URL.revokeObjectURL(url); return; }
     w.onload=function(){ w.print(); setTimeout(function(){ w.close(); URL.revokeObjectURL(url); },1500); };
     setTimeout(function(){ if(w&&!w.closed){ try{w.print();}catch(e){} } URL.revokeObjectURL(url); },1000);
   }catch(e){
 
-    var w2=window.open('','_blank','width=420,height=640');
+    var w2=window.open('','_blank','width=320,height=460');
     if(!w2){ pm('⚠ Pop-up blocked.'); return; }
     w2.document.open(); w2.document.write(fullHtml); w2.document.close();
     setTimeout(function(){ try{w2.focus();w2.print();}catch(e){} setTimeout(function(){w2.close();},1500); },500);
