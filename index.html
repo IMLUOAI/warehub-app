@@ -4339,7 +4339,7 @@ function beginItemVerify(order){
   setFb('Label matched. Scan each item, or type its FNSKU on the line.','var(--cy)');
   flash('ok');
   renderActiveCard();
-  focusScan();
+  focusNextItem();
 }
 
 function syncSkuProgress(){
@@ -4406,13 +4406,20 @@ function cleanScanCode(raw){
     .replace(/[\s\u001d]+/g, '')
     .trim();
 }
+function focusNextItem(){
+  setTimeout(function(){
+    var box = document.querySelector('#checklist .pack-item-fnsku');
+    if(box) box.focus();
+    else focusScan();
+  }, 120);
+}
 function onItemFnsku(sku, raw){
   var code = cleanScanCode(raw);
   var skuUp = String(sku||'').toUpperCase();
-  if(!code){ setErr('Scan the item barcode for '+skuUp+'.'); return; }
+  if(!code) return;
   if(code !== skuUp) saveFnsku(skuUp, code);
   var hit = verifySkus.find(function(v){ return v.sku===skuUp && !v.scanned && !v.replaced; });
-  if(!hit){ setFb(skuUp+' saved. That line is already filled.','var(--am)'); renderActiveCard(); return; }
+  if(!hit){ setFb(skuUp+' is already filled. Scan the next item.','var(--am)'); focusNextItem(); return; }
   hit.scanned = 1;
   hit.fnsku = code;
   syncSkuProgress();
@@ -4420,16 +4427,18 @@ function onItemFnsku(sku, raw){
   setFb('✓ '+skuUp+' · '+code,'var(--gn)');
   flash('ok');
   if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
-  else { renderActiveCard(); focusScan(); }
+  else { renderActiveCard(); focusNextItem(); }
 }
 function fnskuFieldKey(e, sku){
   var el = e.target;
   if(el._fnDone) return;
   function commit(){
     if(el._fnDone) return;
+    var v = (el.value||'').trim();
+    if(!v) return;
     el._fnDone = true;
     if(el._fnTimer) clearTimeout(el._fnTimer);
-    onItemFnsku(sku, el.value);
+    onItemFnsku(sku, v);
   }
   if(e.key==='Enter'){
     e.preventDefault();
@@ -4441,9 +4450,8 @@ function fnskuFieldKey(e, sku){
   if(el._fnTimer) clearTimeout(el._fnTimer);
   el._fnTimer = setTimeout(function(){
     var v = (el.value||'').trim();
-    var elapsed = Date.now() - (el._fnStart||0);
-    if(v.length>=4 && elapsed<900) commit();
-  }, 280);
+    if(v.length>=4) commit();
+  }, 500);
 }
 
 function applyItemScan(scanned){
@@ -4467,9 +4475,9 @@ function applyItemScan(scanned){
   }
   if(!hit){
     bpErr(); flash('err');
-    setErr('✗ '+code+' is not the SKU on this label. Click that item’s FNSKU box, scan or type the FNSKU, then press Enter.');
+    setErr('✗ '+code+' is not the SKU on this label. Scan it into the next item box.');
     setFb('✗ FNSKU NOT LINKED','var(--rd)');
-    focusScan();
+    focusNextItem();
     return;
   }
   hit.scanned = 1;
@@ -4480,7 +4488,7 @@ function applyItemScan(scanned){
     setFb('✓ '+code,'var(--gn)');
     flash('ok');
     renderActiveCard();
-    focusScan();
+    focusNextItem();
   }
 }
 
