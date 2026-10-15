@@ -4336,7 +4336,7 @@ function beginItemVerify(order){
   });
   setPackState('verify-items');
   clearErr();
-  setFb('Label matched. Scan each item SKU.','var(--cy)');
+  setFb('Label matched. Scan each item, or type its FNSKU on the line.','var(--cy)');
   flash('ok');
   renderActiveCard();
   focusScan();
@@ -4365,6 +4365,55 @@ function sameLabelScan(scanned, order){
   return n===t || (n12.length===12 && n12===t12);
 }
 
+function fnskuStoreKey(){
+  var uid = 'local';
+  try { uid = localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
+  return 'warehub_fnsku:' + uid;
+}
+function fnskuMap(){
+  try {
+    var map = JSON.parse(localStorage.getItem(fnskuStoreKey()) || '{}');
+    return map && typeof map === 'object' ? map : {};
+  } catch(e){ return {}; }
+}
+function fnskuFor(sku){
+  var list = fnskuMap()[String(sku||'').toUpperCase()] || [];
+  return list.length ? list[list.length - 1] : '';
+}
+function saveFnsku(sku, fnsku){
+  sku = String(sku||'').toUpperCase().trim();
+  fnsku = String(fnsku||'').toUpperCase().replace(/\s+/g,'').trim();
+  if(!sku || !fnsku) return '';
+  var map = fnskuMap();
+  var list = map[sku] || [];
+  if(list.indexOf(fnsku) < 0) list.push(fnsku);
+  map[sku] = list.slice(-8);
+  try { localStorage.setItem(fnskuStoreKey(), JSON.stringify(map)); } catch(e){}
+  return fnsku;
+}
+function skusForFnsku(code){
+  var map = fnskuMap();
+  var found = [];
+  Object.keys(map).forEach(function(sku){
+    if((map[sku]||[]).indexOf(code) >= 0) found.push(sku);
+  });
+  return found;
+}
+function onItemFnsku(sku, raw){
+  var code = saveFnsku(sku, raw);
+  if(!code){ setErr('Enter the FNSKU for '+sku+'.'); return; }
+  var hit = verifySkus.find(function(v){ return v.sku===String(sku).toUpperCase() && !v.scanned && !v.replaced; });
+  if(!hit){ setFb(sku+' FNSKU saved. That line is already filled.','var(--am)'); renderActiveCard(); return; }
+  hit.scanned = 1;
+  hit.fnsku = code;
+  syncSkuProgress();
+  clearErr();
+  setFb('✓ '+sku+' · FNSKU '+code,'var(--gn)');
+  flash('ok');
+  if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
+  else { renderActiveCard(); focusScan(); }
+}
+
 function applyItemScan(scanned){
   if(sameLabelScan(scanned, activeOrder)){
     setFb('Label already matched. Scan the item SKU.','var(--am)');
@@ -4379,9 +4428,15 @@ function applyItemScan(scanned){
     });
   }
   if(!hit){
+    var linked = skusForFnsku(code);
+    hit = verifySkus.find(function(v){
+      return !v.scanned && !v.replaced && linked.indexOf(v.sku) >= 0;
+    });
+  }
+  if(!hit){
     bpErr(); flash('err');
-    setErr('✗ '+code+' is not a remaining SKU on this label. The shipping label already matched.');
-    setFb('✗ WRONG ITEM','var(--rd)');
+    setErr('✗ '+code+' is not the SKU on this label. Click that item’s FNSKU box, scan or type the FNSKU, then press Enter.');
+    setFb('✗ FNSKU NOT LINKED','var(--rd)');
     focusScan();
     return;
   }
@@ -5813,11 +5868,14 @@ function renderActiveCard(){
         var filled=g.scanned+g.replaced;
         var done=filled>=g.total;
         var safe=sku.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;">'
+        var known=fnskuFor(sku).replace(/"/g,'"');
+        return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;">'
           +'<div class="ski-check">'+(done?'✓':'○')+'</div>'
           +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
           +'<div class="ski-qty">'+g.scanned+' scanned'+(g.replaced?' · '+g.replaced+' replaced':'')+' / '+g.total+'</div>'
-          +(done?'':'<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
+          +(done ? (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">FNSKU '+known+'</span>' : '')
+            : '<input value="'+known+'" placeholder="FNSKU" autocomplete="off" style="width:150px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);" onkeydown="if(event.key===\'Enter\'){event.preventDefault();onItemFnsku(\''+safe+'\', this.value);}"/>'
+            + '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
       }).join('')
       +'<div id="replace-box" style="display:none;margin-top:8px;padding:8px;border:1px solid var(--am);border-radius:8px;">'
