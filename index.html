@@ -4300,7 +4300,7 @@ function setPackState(state){
     if(inp) inp.placeholder = t('pack_scan_placeholder');
     if(lbl){ lbl.textContent=t('pack_scan_step1'); lbl.style.color=''; }
   } else if(state==='verify-items'){
-    if(inp) inp.placeholder = 'Scan item SKU…';
+    if(inp) inp.placeholder = 'Scan item FNSKU or SKU — then the next one';
     if(lbl){ lbl.textContent='ITEM →'; lbl.style.color='var(--am)'; }
   }
   renderActiveCard();
@@ -4336,10 +4336,10 @@ function beginItemVerify(order){
   });
   setPackState('verify-items');
   clearErr();
-  setFb('Label matched. Scan each item, or type its FNSKU on the line.','var(--cy)');
+  setFb('Label matched. Scan each item on the main bar.','var(--cy)');
   flash('ok');
   renderActiveCard();
-  focusNextItem();
+  focusScan();
 }
 
 function syncSkuProgress(){
@@ -4433,88 +4433,85 @@ function passToNextLabel(code){
   renderActiveCard();
   doScan(code);
 }
-function onItemFnsku(sku, raw){
+function currentOpenSku(){
+  var row = verifySkus.find(function(v){ return !v.scanned && !v.replaced; });
+  return row ? row.sku : '';
+}
+function acceptItemCode(sku, raw){
   var code = cleanScanCode(raw);
   var skuUp = String(sku||'').toUpperCase();
-  if(!code) return;
-  if(scanIsTracking(code) && !(activeOrder && sameLabelScan(code, activeOrder))){
-    passToNextLabel(code);
-    return;
-  }
+  if(!code || !skuUp || !activeOrder) return false;
   if(code !== skuUp) saveFnsku(skuUp, code);
   var hit = verifySkus.find(function(v){ return v.sku===skuUp && !v.scanned && !v.replaced; });
-  if(!hit){ setFb(skuUp+' is already filled. Scan the next item.','var(--am)'); focusNextItem(); return; }
-  hit.scanned = 1;
-  hit.fnsku = code;
-  syncSkuProgress();
-  clearErr();
-  setFb('✓ '+skuUp+' · '+code,'var(--gn)');
-  flash('ok');
-  if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
-  else { renderActiveCard(); focusNextItem(); }
-}
-function fnskuFieldKey(e, sku){
-  var el = e.target;
-  if(el._fnDone) return;
-  function commit(){
-    if(el._fnDone) return;
-    var v = (el.value||'').trim();
-    if(!v) return;
-    el._fnDone = true;
-    if(el._fnTimer) clearTimeout(el._fnTimer);
-    onItemFnsku(sku, v);
-  }
-  if(e.key==='Enter'){
-    e.preventDefault();
-    e.stopPropagation();
-    commit();
-    return;
-  }
-  if((el.value||'').length<=1) el._fnStart = Date.now();
-  if(el._fnTimer) clearTimeout(el._fnTimer);
-  el._fnTimer = setTimeout(function(){
-    var v = (el.value||'').trim();
-    if(v.length>=4) commit();
-  }, 500);
-}
-
-function applyItemScan(scanned){
-  if(sameLabelScan(scanned, activeOrder)){
-    setFb('Label already matched. Scan the next item.','var(--am)');
-    focusNextItem();
-    return true;
-  }
-  var code = cleanScanCode(scanned);
-  if(scanIsTracking(code)) return false;
-  var hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced && v.sku===code; });
-  if(!hit){
-    hit = verifySkus.find(function(v){
-      return !v.scanned && !v.replaced && v.sku.length>=3 && code.slice(-v.sku.length)===v.sku;
-    });
-  }
-  if(!hit){
-    var linked = skusForFnsku(code);
-    hit = verifySkus.find(function(v){
-      return !v.scanned && !v.replaced && linked.indexOf(v.sku) >= 0;
-    });
-  }
-  if(!hit){
-    hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced; });
-    if(hit && code !== hit.sku) saveFnsku(hit.sku, code);
-  }
   if(!hit) return false;
   hit.scanned = 1;
   hit.fnsku = code;
   syncSkuProgress();
   clearErr();
-  if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
-  else {
-    setFb('✓ '+hit.sku+' · '+code,'var(--gn)');
-    flash('ok');
+  flash('ok');
+  if(verifyDone()){
+    setFb('✓ '+skuUp+' · '+code,'var(--gn)');
+    completeOrder(activeOrder, activeOrder.tracking);
+  } else {
+    var next = currentOpenSku();
+    setFb('✓ '+skuUp+' · scan '+next,'var(--gn)');
     renderActiveCard();
-    focusNextItem();
+    focusScan();
   }
   return true;
+}
+function onItemFnsku(sku, raw){
+  acceptItemCode(sku, raw);
+}
+function fnskuFieldInput(el, sku){
+  if(!el || el._fnDone) return;
+  if(el._fnTimer) clearTimeout(el._fnTimer);
+  el._fnTimer = setTimeout(function(){
+    var v = (el.value||'').trim();
+    if(v.length < 4 || el._fnDone) return;
+    el._fnDone = true;
+    el.value = '';
+    acceptItemCode(sku, v);
+  }, 60);
+}
+function fnskuFieldKey(e, sku){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    e.stopPropagation();
+    var el = e.target;
+    if(el._fnDone) return;
+    var v = (el.value||'').trim();
+    if(!v) return;
+    el._fnDone = true;
+    if(el._fnTimer) clearTimeout(el._fnTimer);
+    el.value = '';
+    acceptItemCode(sku, v);
+  }
+}
+
+function applyItemScan(scanned){
+  if(sameLabelScan(scanned, activeOrder)){
+    setFb('Label already matched. Scan the next item.','var(--am)');
+    focusScan();
+    return true;
+  }
+  var code = cleanScanCode(scanned);
+  var skuUp = currentOpenSku();
+  if(!skuUp) return false;
+  var hitSku = '';
+  verifySkus.forEach(function(v){
+    if(hitSku || v.scanned || v.replaced) return;
+    if(v.sku===code || (v.sku.length>=3 && code.slice(-v.sku.length)===v.sku)) hitSku = v.sku;
+  });
+  if(!hitSku){
+    var linked = skusForFnsku(code);
+    verifySkus.forEach(function(v){
+      if(hitSku || v.scanned || v.replaced) return;
+      if(linked.indexOf(v.sku)>=0) hitSku = v.sku;
+    });
+  }
+  if(!hitSku) hitSku = skuUp;
+  return acceptItemCode(hitSku, code);
 }
 
 function openReplace(sku){
@@ -4701,7 +4698,7 @@ function doScan(raw){
   document.getElementById('scan-in').value = '';
 
   if(packState==='verify-items' && activeOrder){
-    if(!applyItemScan(scanned)) passToNextLabel(scanned);
+    applyItemScan(scanned);
     return;
   }
 
@@ -5939,7 +5936,7 @@ function renderActiveCard(){
           +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
           +'<div class="ski-qty">'+g.scanned+' scanned'+(g.replaced?' · '+g.replaced+' replaced':'')+' / '+g.total+'</div>'
           +(done ? (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
-            : '<input class="pack-item-fnsku" placeholder="Scan item barcode" autocomplete="off" style="width:190px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--cy);color:var(--tx);" onkeydown="fnskuFieldKey(event, \''+safe+'\')"/>'
+            : '<input class="pack-item-fnsku" placeholder="FNSKU" autocomplete="off" style="width:190px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--cy);color:var(--tx);" oninput="fnskuFieldInput(this, \''+safe+'\')" onkeydown="fnskuFieldKey(event, \''+safe+'\')"/>'
             + (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
             + '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
