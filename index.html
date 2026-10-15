@@ -1167,6 +1167,16 @@ body.station-mode #pack-left{font-size:120px;}
           <div class="bar" style="height:10px;margin-top:10px;"><div class="barf" id="pack-bar" style="width:0%;background:var(--gn);transition:width .35s;"></div></div>
           <div id="pack-pace">Import a batch to start the count</div>
         </div>
+        <div id="replace-sheet" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div class="lbl" style="margin:0;">REPLACEMENT SHEET</div>
+            <button class="btn" type="button" onclick="exportReplacementSheet()">Save Excel</button>
+          </div>
+          <div style="font-size:10px;color:var(--td);margin-top:4px;">Sold-out SKUs shipped as another item. Adjust inventory from this sheet.</div>
+          <div id="replace-summary" style="font-size:12px;margin-top:8px;color:var(--td);">No replacements yet.</div>
+          <div id="replace-rows" style="max-height:160px;overflow:auto;margin-top:6px;"></div>
+          <div id="replace-last" style="margin-top:8px;"></div>
+        </div>
       </div>
       <div id="queue"></div>
     </div>
@@ -1606,7 +1616,7 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
-  if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
+  if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); renderReplacementSheet(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
@@ -4289,14 +4299,291 @@ function setPackState(state){
     if(s2){ s2.className='step-btn'; }
     if(inp) inp.placeholder = t('pack_scan_placeholder');
     if(lbl){ lbl.textContent=t('pack_scan_step1'); lbl.style.color=''; }
+  } else if(state==='verify-items'){
+    if(inp) inp.placeholder = 'Scan item SKU…';
+    if(lbl){ lbl.textContent='ITEM →'; lbl.style.color='var(--am)'; }
   }
   renderActiveCard();
+}
+
+function orderPieceCount(order){
+  return (order && order.skus || []).reduce(function(n,s){ return n + (parseInt(s.qty,10)||1); }, 0);
+}
+
+function replacementStoreKey(){
+  var uid = 'local';
+  try { uid = localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
+  return 'warehub_replacements:' + uid;
+}
+
+function loadReplacements(){
+  try { return JSON.parse(localStorage.getItem(replacementStoreKey()) || '[]'); } catch(e){ return []; }
+}
+
+function saveReplacements(rows){
+  try { localStorage.setItem(replacementStoreKey(), JSON.stringify(rows.slice(0, 2000))); } catch(e){}
+}
+
+function beginItemVerify(order){
+  activeOrder = order;
+  verifySkus = [];
+  (order.skus||[]).forEach(function(s){
+    var q = parseInt(s.qty,10)||1;
+    var sku = String(s.sku||'').toUpperCase();
+    s.replaced = 0;
+    s.scanned = 0;
+    for(var i=0;i<q;i++) verifySkus.push({ sku: sku, scanned: 0, replaced: false, spec: '' });
+  });
+  setPackState('verify-items');
+  clearErr();
+  setFb('Label matched. Scan each item SKU.','var(--cy)');
+  flash('ok');
+  renderActiveCard();
+  focusScan();
+}
+
+function syncSkuProgress(){
+  if(!activeOrder) return;
+  (activeOrder.skus||[]).forEach(function(s){
+    var sku = String(s.sku||'').toUpperCase();
+    var lines = verifySkus.filter(function(v){ return v.sku===sku; });
+    s.scanned = lines.filter(function(v){ return v.scanned && !v.replaced; }).length;
+    s.replaced = lines.filter(function(v){ return v.replaced; }).length;
+  });
+}
+
+function verifyDone(){
+  return verifySkus.length && verifySkus.every(function(v){ return v.scanned || v.replaced; });
+}
+
+function sameLabelScan(scanned, order){
+  var n = String(scanned||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  var t = String((order&&order.tracking)||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!n || !t) return false;
+  var n12 = n.replace(/\D/g,'').slice(-12);
+  var t12 = t.replace(/\D/g,'').slice(-12);
+  return n===t || (n12.length===12 && n12===t12);
+}
+
+function applyItemScan(scanned){
+  if(sameLabelScan(scanned, activeOrder)){
+    setFb('Label already matched. Scan the item SKU.','var(--am)');
+    focusScan();
+    return;
+  }
+  var code = String(scanned||'').toUpperCase().trim();
+  var hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced && v.sku===code; });
+  if(!hit){
+    hit = verifySkus.find(function(v){
+      return !v.scanned && !v.replaced && v.sku.length>=3 && code.slice(-v.sku.length)===v.sku;
+    });
+  }
+  if(!hit){
+    bpErr(); flash('err');
+    setErr('✗ '+code+' is not a remaining SKU on this label. The shipping label already matched.');
+    setFb('✗ WRONG ITEM','var(--rd)');
+    focusScan();
+    return;
+  }
+  hit.scanned = 1;
+  syncSkuProgress();
+  clearErr();
+  if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
+  else {
+    setFb('✓ '+code,'var(--gn)');
+    flash('ok');
+    renderActiveCard();
+    focusScan();
+  }
+}
+
+function openReplace(sku){
+  window._replaceSku = sku;
+  renderActiveCard();
+  var box = document.getElementById('replace-box');
+  var lbl = document.getElementById('replace-sku-lbl');
+  if(lbl) lbl.textContent = sku;
+  if(box) box.style.display = 'block';
+  var spec = document.getElementById('replace-spec');
+  if(spec){ spec.value = ''; spec.focus(); }
+}
+
+function logReplacement(order, sku, qty, spec){
+  var row = {
+    id: 'R'+Date.now(),
+    at: new Date().toISOString(),
+    tracking: order ? order.tracking : '',
+    carrier: order ? (order.carrier||'') : '',
+    orderId: order ? (order.id||'') : '',
+    originalSku: String(sku||'').toUpperCase(),
+    qty: qty,
+    spec: spec,
+    packer: (typeof currentPacker!=='undefined' && currentPacker) ? currentPacker.name : ''
+  };
+  var rows = loadReplacements();
+  rows.unshift(row);
+  saveReplacements(rows);
+  if(window.warehubApi){
+    window.warehubApi('POST', '/api/out-of-stock', {
+      tracking: row.tracking || 'replacement',
+      sku: row.originalSku,
+      carrier: row.carrier,
+      order_id: row.orderId || null,
+      reported_by: row.packer,
+      notes: 'REPLACED WITH: '+spec+' || qty:'+qty
+    }).catch(function(){});
+  }
+  renderReplacementSheet();
+  return row;
+}
+
+function saveReplacement(){
+  var sku = window._replaceSku;
+  var specEl = document.getElementById('replace-spec');
+  var spec = specEl ? specEl.value.trim() : '';
+  if(!sku || !activeOrder){ setErr('Scan the label first.'); return; }
+  if(!spec){ setErr('Enter the replacement item spec.'); return; }
+  var left = verifySkus.filter(function(v){ return v.sku===sku && !v.scanned && !v.replaced; });
+  if(!left.length){ setErr('That SKU is already filled.'); return; }
+  left.forEach(function(v){ v.replaced = true; v.spec = spec; });
+  syncSkuProgress();
+  logReplacement(activeOrder, sku, left.length, spec);
+  if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
+  else {
+    setFb('Replaced '+left.length+' × '+sku,'var(--am)');
+    renderActiveCard();
+    focusScan();
+  }
+}
+
+function saveLastReplacement(){
+  var o = lastCompletedOrderForDisplay;
+  var skuEl = document.getElementById('last-replace-sku');
+  var specEl = document.getElementById('last-replace-spec');
+  var qtyEl = document.getElementById('last-replace-qty');
+  if(!o){ setErr('Scan a label first.'); return; }
+  var spec = specEl ? specEl.value.trim() : '';
+  var sku = skuEl ? skuEl.value : ((o.skus&&o.skus[0]&&o.skus[0].sku)||'');
+  var qty = qtyEl ? (parseInt(qtyEl.value,10)||1) : 1;
+  if(!spec){ setErr('Enter the replacement item spec.'); return; }
+  logReplacement(o, sku, qty, spec);
+  if(specEl) specEl.value = '';
+  setFb('Replacement saved for '+sku,'var(--am)');
+}
+
+function renderReplacementSheet(){
+  var summary = document.getElementById('replace-summary');
+  var list = document.getElementById('replace-rows');
+  var last = document.getElementById('replace-last');
+  if(!summary || !list) return;
+  var rows = loadReplacements();
+  if(!rows.length){
+    summary.textContent = 'No replacements yet.';
+    list.innerHTML = '';
+  } else {
+    var counts = {};
+    rows.forEach(function(r){
+      var k = r.originalSku || '—';
+      counts[k] = (counts[k]||0) + (parseInt(r.qty,10)||1);
+    });
+    summary.innerHTML = Object.keys(counts).map(function(k){
+      return '<span style="display:inline-block;margin:0 10px 4px 0;color:var(--tx);"><b>'+k+'</b> · '+counts[k]+' replaced</span>';
+    }).join('');
+    list.innerHTML = rows.slice(0, 40).map(function(r){
+      var when = r.at ? new Date(r.at).toLocaleString() : '';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:11px;">'
+        + '<b style="color:var(--am);">'+r.originalSku+'</b> ×'+(r.qty||1)
+        + ' → <span style="color:var(--tx);">'+r.spec+'</span>'
+        + '<div style="color:var(--td);font-size:10px;">'+(r.tracking||'')+' · '+(r.carrier||'')+' · '+when+(r.packer?' · '+r.packer:'')+'</div>'
+        + '</div>';
+    }).join('');
+  }
+  if(!last) return;
+  var o = lastCompletedOrderForDisplay;
+  if(!o || packState==='verify-items'){ last.innerHTML = ''; return; }
+  var sku = (o.skus && o.skus[0] && o.skus[0].sku) || '';
+  var opts = (o.skus||[]).map(function(s){
+    return '<option value="'+String(s.sku).replace(/"/g,'"')+'">'+s.sku+'</option>';
+  }).join('');
+  last.innerHTML = '<div style="font-size:10px;letter-spacing:1px;color:var(--td);margin-bottom:4px;">LAST LABEL WAS SOLD OUT?</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    + '<select id="last-replace-sku" style="padding:6px;background:var(--bg);color:var(--tx);border:1px solid var(--bdr);border-radius:6px;">'+opts+'</select>'
+    + '<input id="last-replace-qty" type="number" min="1" value="1" style="width:64px;padding:6px;background:var(--bg);color:var(--tx);border:1px solid var(--bdr);border-radius:6px;"/>'
+    + '<input id="last-replace-spec" placeholder="What you shipped instead" style="flex:1;min-width:140px;padding:6px;background:var(--bg);color:var(--tx);border:1px solid var(--bdr);border-radius:6px;"/>'
+    + '<button type="button" class="btn" onclick="saveLastReplacement()">Save</button>'
+    + '</div>';
+  if(sku && document.getElementById('last-replace-sku')) document.getElementById('last-replace-sku').value = sku;
+  if(window.warehubApi && !window._replacePulling){
+    window._replacePulling = true;
+    window.warehubApi('GET', '/api/out-of-stock').then(function(result){
+      window._replacePulling = false;
+      var remote = (result && result.items) || [];
+      var rows = loadReplacements();
+      var known = {};
+      rows.forEach(function(r){ known[r.tracking+'|'+r.originalSku+'|'+r.spec] = 1; });
+      var added = false;
+      remote.forEach(function(item){
+        var notes = String(item.notes||'');
+        if(notes.indexOf('REPLACED WITH:') !== 0) return;
+        var spec = notes.replace(/^REPLACED WITH:\s*/, '').replace(/\s*\|\|\s*qty:\d+\s*$/, '');
+        var qtyM = notes.match(/qty:(\d+)/);
+        var key = (item.tracking||'')+'|'+(item.sku||'')+'|'+spec;
+        if(known[key]) return;
+        rows.push({
+          id: item.id,
+          at: item.created_at ? new Date(item.created_at*1000).toISOString() : '',
+          tracking: item.tracking||'',
+          carrier: item.carrier||'',
+          originalSku: item.sku||'',
+          qty: qtyM ? parseInt(qtyM[1],10) : 1,
+          spec: spec,
+          packer: item.reported_by||''
+        });
+        added = true;
+      });
+      if(added){
+        rows.sort(function(a,b){ return String(b.at).localeCompare(String(a.at)); });
+        saveReplacements(rows);
+        renderReplacementSheet();
+      }
+    }).catch(function(){ window._replacePulling = false; });
+  }
+}
+
+function exportReplacementSheet(){
+  var rows = loadReplacements();
+  if(!rows.length){ alert('No replacements to save.'); return; }
+  ensureSheetJS().then(function(){
+    var counts = {};
+    rows.forEach(function(r){
+      var k = r.originalSku || '—';
+      counts[k] = (counts[k]||0) + (parseInt(r.qty,10)||1);
+    });
+    var detail = rows.map(function(r){
+      return [r.at ? new Date(r.at).toLocaleString() : '', r.tracking||'', r.carrier||'', r.originalSku||'', r.qty||1, r.spec||'', r.packer||''];
+    });
+    var summary = Object.keys(counts).map(function(k){ return [k, counts[k]]; });
+    var buf = buildXlsxBuffer([
+      { name:'By SKU', headers:['Sold-out SKU','Qty replaced'], rows: summary },
+      { name:'Replacements', headers:['When','Tracking','Carrier','Sold-out SKU','Qty','Replacement spec','Packer'], rows: detail }
+    ]);
+    var blob = new Blob([buf], { type:'application/octet-stream' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'replacements-'+new Date().toISOString().slice(0,10)+'.xlsx';
+    a.click();
+  }).catch(function(e){ alert('Could not save Excel: '+(e&&e.message||e)); });
 }
 
 function doScan(raw){
   var scanned = raw.toUpperCase().trim();
   if(!scanned) return;
   document.getElementById('scan-in').value = '';
+
+  if(packState==='verify-items' && activeOrder){
+    applyItemScan(scanned);
+    return;
+  }
 
   // FedEx-aware normalizer: strips FEDEX-/FX- prefixes and non-alnum so that
   // "FEDEX-877833078380", "8778 3307 8380", and long 96… barcodes all collapse
@@ -4456,7 +4743,14 @@ function doScan(raw){
       || (refPacker && refPacker.loginTime ? refPacker.loginTime : Date.now());
   }
 
-  // Complete immediately — no SKU verification
+  // Multi-piece labels stay open until each item is scanned or replaced.
+  // A SKU mismatch does not undo the tracking match.
+  if(orderPieceCount(order) > 1){
+    beginItemVerify(order);
+    return;
+  }
+
+  // Complete immediately — single piece, no extra SKU scan
   completeOrder(order, scanned);
 }
 
@@ -4517,7 +4811,8 @@ function completeOrder(order, scannedTracking){
   // which shelf they physically pulled from).
   (order.skus||[]).forEach(function(s){
     if(!s.sku || !window._inventoryData) return;
-    var needed = parseInt(s.qty) || 1;
+    var needed = Math.max(0, (parseInt(s.qty) || 1) - (parseInt(s.replaced) || 0));
+    if(!needed) return;
     var best = null;
     Object.keys(window._inventoryData).forEach(function(loc){
       var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
@@ -4537,6 +4832,7 @@ function completeOrder(order, scannedTracking){
   activeOrder=null; verifySkus=[];
   lastCompletedOrderForDisplay = order; // shown briefly until the next scan starts
   setPackState('idle');
+  renderReplacementSheet();
 
   document.getElementById('done-ov').classList.add('show');
   setTimeout(function(){document.getElementById('done-ov').classList.remove('show');},1400);
@@ -5501,26 +5797,36 @@ function renderActiveCard(){
   // actually becomes 'verify-items' anywhere in the app, so this checklist
   // has never been showing. verifySkus.length>0 is the real signal: there
   // are items for this order still needing to be scanned/verified.
-  if(verifySkus && verifySkus.length){
+  if(verifySkus && verifySkus.length && packState==='verify-items'){
 
     var grouped={};
     verifySkus.forEach(function(v){
-      if(!grouped[v.sku]) grouped[v.sku]={total:0,scanned:0};
+      if(!grouped[v.sku]) grouped[v.sku]={total:0,scanned:0,replaced:0};
       grouped[v.sku].total++;
-      if(v.scanned) grouped[v.sku].scanned++;
+      if(v.replaced) grouped[v.sku].replaced++;
+      else if(v.scanned) grouped[v.sku].scanned++;
     });
-    var allDone=verifySkus.every(function(v){return v.scanned;});
     checklist.innerHTML='<div style="margin-top:12px;">'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">SCAN EACH ITEM ↓</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">LABEL MATCHED · SCAN EACH ITEM</div>'
       +Object.keys(grouped).map(function(sku){
         var g=grouped[sku];
-        var done=g.scanned>=g.total;
-        return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'">'
+        var filled=g.scanned+g.replaced;
+        var done=filled>=g.total;
+        var safe=sku.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;">'
           +'<div class="ski-check">'+(done?'✓':'○')+'</div>'
-          +'<div class="ski-sku">'+sku+'</div>'
-          +'<div class="ski-qty">'+g.scanned+' / '+g.total+'</div>'
+          +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
+          +'<div class="ski-qty">'+g.scanned+' scanned'+(g.replaced?' · '+g.replaced+' replaced':'')+' / '+g.total+'</div>'
+          +(done?'':'<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
       }).join('')
+      +'<div id="replace-box" style="display:none;margin-top:8px;padding:8px;border:1px solid var(--am);border-radius:8px;">'
+      +'<div style="font-size:11px;margin-bottom:6px;">Replace <b id="replace-sku-lbl"></b> with another item</div>'
+      +'<input id="replace-spec" placeholder="Replacement spec: SKU, size, color" style="width:100%;padding:7px 9px;font-size:12px;border-radius:6px;margin-bottom:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>'
+      +'<div style="display:flex;gap:6px;">'
+      +'<button type="button" class="btn" onclick="saveReplacement()">Save replacement</button>'
+      +'<button type="button" class="btn" onclick="document.getElementById(\'replace-box\').style.display=\'none\'">Cancel</button>'
+      +'</div></div>'
       +'</div>';
   } else if(packState==='scan-label'){
 
@@ -9446,6 +9752,8 @@ function returnsViewPhoto(ri){
 }
 
 function returnsDelete(id){
+  var rec = returnsList.find(function(r){return r.id===id;});
+  if(rec) trashAdd('returns', rec, rec.tracking || rec.sku || 'Return');
   returnsList=returnsList.filter(function(r){return r.id!==id;});
   returnsSave();
   renderReturnsList();
@@ -10306,7 +10614,165 @@ function devRender(){
 }
 
 
+function trashKey(){
+  var uid = 'local';
+  try { uid = localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
+  return 'warehub_trash:' + uid;
+}
+function trashAll(){
+  try { var rows = JSON.parse(localStorage.getItem(trashKey()) || '[]'); return Array.isArray(rows) ? rows : []; }
+  catch(e){ return []; }
+}
+function trashSave(rows){
+  try { localStorage.setItem(trashKey(), JSON.stringify((rows||[]).slice(0, 800))); } catch(e){}
+}
+function trashAdd(source, record, label){
+  if(!record) return;
+  var copy;
+  try { copy = JSON.parse(JSON.stringify(record)); } catch(e){ copy = record; }
+  if(copy && copy.photos) delete copy.photos;
+  var rows = trashAll();
+  rows.unshift({
+    id: 'T'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    source: source,
+    at: new Date().toISOString(),
+    label: label || '',
+    record: copy
+  });
+  trashSave(rows);
+}
+async function trashPull(source){
+  if(!window.warehubApi) return;
+  var result = await window.warehubApi('GET', '/api/trash?source='+encodeURIComponent(source)).catch(function(){ return null; });
+  if(!result || !result.items) return;
+  var rows = trashAll();
+  result.items.forEach(function(item){
+    if(rows.some(function(r){ return r.cloudId===item.id; })) return;
+    rows.push({
+      id: 'C'+item.id,
+      cloudId: item.id,
+      source: item.source,
+      at: item.deleted_at ? new Date(item.deleted_at*1000).toISOString() : '',
+      label: item.label || '',
+      record: item.record || {}
+    });
+  });
+  trashSave(rows);
+}
+function trashLabel(item){
+  if(item.label) return item.label;
+  var r = item.record || {};
+  return r.sku || r.shipment_id || r.shipId || r.tracking || r.dest || r.destination || r.driver || 'Deleted row';
+}
+function closeRecoverBin(){
+  var m = document.getElementById('recover-bin');
+  if(m) m.remove();
+}
+async function openRecoverBin(source){
+  closeRecoverBin();
+  var modal = document.createElement('div');
+  modal.id = 'recover-bin';
+  modal.style.cssText = 'position:fixed;inset:0;background:#000a;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = '<div style="background:var(--sur);border:1px solid var(--bdr);border-radius:10px;max-width:560px;width:100%;max-height:80vh;overflow:auto;padding:16px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+    + '<div style="font-size:14px;font-weight:700;">Recover bin</div>'
+    + '<button type="button" class="btn" onclick="closeRecoverBin()">Close</button></div>'
+    + '<div style="font-size:11px;color:var(--td);margin-bottom:10px;">Deleted '+source+' rows from this account. Restoring an FBA row puts it in the current batch.</div>'
+    + '<div id="recover-bin-list" style="font-size:12px;color:var(--td);">Loading…</div></div>';
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeRecoverBin(); });
+  document.body.appendChild(modal);
+  await trashPull(source);
+  renderRecoverBin(source);
+}
+function renderRecoverBin(source){
+  var list = document.getElementById('recover-bin-list');
+  if(!list) return;
+  var rows = trashAll().filter(function(r){ return r.source===source; });
+  if(!rows.length){
+    list.innerHTML = 'Nothing to recover. Deletes made before this bin existed are already gone.';
+    return;
+  }
+  list.innerHTML = rows.map(function(item){
+    var when = item.at ? new Date(item.at).toLocaleString() : '';
+    return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr);">'
+      + '<div style="min-width:0;"><div style="color:var(--tx);font-weight:600;">'+trashLabel(item)+'</div>'
+      + '<div style="font-size:10px;color:var(--td);">'+when+'</div></div>'
+      + '<div style="display:flex;gap:6px;flex-shrink:0;">'
+      + '<button type="button" class="btn" onclick="restoreTrashItem(\''+item.id+'\',\''+source+'\')">Restore</button>'
+      + '<button type="button" class="btn" onclick="discardTrashItem(\''+item.id+'\',\''+source+'\')">Delete</button>'
+      + '</div></div>';
+  }).join('');
+}
+async function restoreTrashItem(id, source){
+  var rows = trashAll();
+  var item = rows.find(function(r){ return r.id===id; });
+  if(!item) return;
+  var rec = item.record || {};
+  var cloudOk = false;
+  if(item.cloudId && window.warehubApi){
+    var cloud = await window.warehubApi('POST', '/api/trash/'+item.cloudId+'/restore').catch(function(){ return null; });
+    cloudOk = !!(cloud && cloud.ok);
+  }
+  if(!cloudOk){
+    if(source==='fba' && window.warehubApi){
+      await window.warehubApi('POST', '/api/fba-grid', {
+        ship_date: rec.ship_date, shipment_id: rec.shipment_id, fulfillment_center: rec.fulfillment_center,
+        sku: rec.sku, qty: rec.qty, size: rec.size, weight: rec.weight, carrier: rec.carrier,
+        tracking: rec.tracking, boxes: rec.boxes, submitted_by: rec.submitted_by, notes: rec.notes
+      }).catch(function(){});
+    } else if(source==='fba-log'){
+      fbaRecords.unshift(rec);
+      fbaSaveLocal();
+      renderFbaLog();
+      renderFbaStats();
+    } else if(source==='returns'){
+      returnsList.unshift(rec);
+      returnsSave();
+      if(window.apiSaveReturn) window.apiSaveReturn(rec);
+      renderReturnsList();
+      renderReturnsStats();
+    } else if(source==='vehicle'){
+      vehicleTrips.unshift(rec);
+      vehicleSave();
+      if(window.apiSaveTrip) window.apiSaveTrip(rec);
+      renderVehicleLog();
+      renderVehicleStats();
+    }
+  }
+  if(source==='fba' && typeof fbaGridLoad==='function') await fbaGridLoad();
+  if(source==='returns' && window.apiLoadReturns) window.apiLoadReturns();
+  if(source==='vehicle' && window.apiLoadVehicle) window.apiLoadVehicle();
+  trashSave(trashAll().filter(function(r){ return r.id!==id; }));
+  renderRecoverBin(source);
+}
+function discardTrashItem(id, source){
+  var item = trashAll().find(function(r){ return r.id===id; });
+  if(item && item.cloudId && window.warehubApi){
+    window.warehubApi('DELETE', '/api/trash/'+item.cloudId).catch(function(){});
+  }
+  trashSave(trashAll().filter(function(r){ return r.id!==id; }));
+  renderRecoverBin(source);
+}
+function vehicleClearAll(){
+  if(!confirm('Delete ALL trip records? You can restore them from the recover bin.')) return;
+  (vehicleTrips||[]).forEach(function(t){ trashAdd('vehicle', t, (t.dest||t.destination||'Trip')+(t.driver?' · '+t.driver:'')); });
+  vehicleTrips=[];
+  vehicleSave();
+  renderVehicleLog();
+  renderVehicleStats();
+}
+function fbaClearAllLocal(){
+  if(!confirm('Delete ALL FBA shipment records? You can restore them from the recover bin.')) return;
+  (fbaRecords||[]).forEach(function(r){ trashAdd('fba-log', r, r.shipId||'FBA shipment'); });
+  fbaRecords=[];
+  fbaSaveLocal();
+  renderFbaLog();
+  renderFbaStats();
+}
+
 function vehicleDeleteTrip(id){
+  var trip = (vehicleTrips||[]).find(function(t){ return t.id === id; });
+  if(trip) trashAdd('vehicle', trip, (trip.dest||trip.destination||'Trip')+(trip.driver?' · '+trip.driver:''));
   vehicleTrips = vehicleTrips.filter(function(t){ return t.id !== id; });
   vehicleSave();
   if(window.warehubApi && String(id).indexOf('TRIP-')!==0){
@@ -10411,7 +10877,9 @@ async function fbaGridUpdateCell(rowId, field, value){
 }
 
 async function fbaGridDeleteRow(rowId){
-  if(!confirm('Delete this row?')) return;
+  if(!confirm('Delete this row? You can restore it from the recover bin.')) return;
+  var row = fbaGridRows.find(function(r){ return r.id === rowId; });
+  if(row) trashAdd('fba', row, row.sku || row.shipment_id || 'FBA row');
   await window.warehubApi('DELETE', '/api/fba-grid/'+rowId).catch(function(){});
   fbaGridRows = fbaGridRows.filter(function(r){ return r.id !== rowId; });
   fbaGridRender();
@@ -10491,7 +10959,11 @@ async function fbaBatchView(batchId){
 }
 
 async function fbaBatchDelete(batchId, label){
-  if(!confirm('Delete "'+label+'" and all its rows? This can\'t be undone.')) return;
+  if(!confirm('Delete "'+label+'" and all its rows? You can restore the rows from the recover bin.')) return;
+  var snap = await window.warehubApi('GET', '/api/fba-grid?batchId='+encodeURIComponent(batchId)).catch(function(){ return null; });
+  ((snap && snap.rows) || []).forEach(function(row){
+    trashAdd('fba', row, (row.sku || row.shipment_id || 'FBA row')+' · '+label);
+  });
   await window.warehubApi('DELETE', '/api/fba-grid/batches/'+batchId).catch(function(){});
   if(batchId === fbaCurrentBatchId || batchId === fbaViewingBatchId){
     // The batch we were looking at is gone — reset and let the server
@@ -11935,6 +12407,7 @@ function renderFbaLog(){
 
 function fbaDelete(id){
   var rec = fbaRecords.find(function(r){ return r.id===id; });
+  if(rec) trashAdd('fba-log', rec, rec.shipId || 'FBA shipment');
   if(rec) fbaAdjustInventory(rec.skus, +1); // restore whatever this shipment had deducted
   fbaRecords = fbaRecords.filter(function(r){ return r.id!==id; });
   fbaSaveLocal();
