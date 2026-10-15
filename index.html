@@ -4413,10 +4413,34 @@ function focusNextItem(){
     else focusScan();
   }, 120);
 }
+function scanIsTracking(code){
+  var n = cleanScanCode(code).replace(/[^A-Z0-9]/g,'');
+  if(!n || n.length < 8) return false;
+  var n12 = n.replace(/\D/g,'').slice(-12);
+  return (orders||[]).some(function(o){
+    var t = String(o.tracking||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(!t) return false;
+    var t12 = t.replace(/\D/g,'').slice(-12);
+    if(n===t) return true;
+    if((o.trackAliases||[]).some(function(a){ return cleanScanCode(a).replace(/[^A-Z0-9]/g,'')===n; })) return true;
+    return n12.length===12 && n12===t12;
+  });
+}
+function passToNextLabel(code){
+  packState = 'idle';
+  verifySkus = [];
+  activeOrder = null;
+  renderActiveCard();
+  doScan(code);
+}
 function onItemFnsku(sku, raw){
   var code = cleanScanCode(raw);
   var skuUp = String(sku||'').toUpperCase();
   if(!code) return;
+  if(scanIsTracking(code) && !(activeOrder && sameLabelScan(code, activeOrder))){
+    passToNextLabel(code);
+    return;
+  }
   if(code !== skuUp) saveFnsku(skuUp, code);
   var hit = verifySkus.find(function(v){ return v.sku===skuUp && !v.scanned && !v.replaced; });
   if(!hit){ setFb(skuUp+' is already filled. Scan the next item.','var(--am)'); focusNextItem(); return; }
@@ -4456,11 +4480,12 @@ function fnskuFieldKey(e, sku){
 
 function applyItemScan(scanned){
   if(sameLabelScan(scanned, activeOrder)){
-    setFb('Label already matched. Scan the item SKU.','var(--am)');
-    focusScan();
-    return;
+    setFb('Label already matched. Scan the next item.','var(--am)');
+    focusNextItem();
+    return true;
   }
   var code = cleanScanCode(scanned);
+  if(scanIsTracking(code)) return false;
   var hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced && v.sku===code; });
   if(!hit){
     hit = verifySkus.find(function(v){
@@ -4474,22 +4499,22 @@ function applyItemScan(scanned){
     });
   }
   if(!hit){
-    bpErr(); flash('err');
-    setErr('✗ '+code+' is not the SKU on this label. Scan it into the next item box.');
-    setFb('✗ FNSKU NOT LINKED','var(--rd)');
-    focusNextItem();
-    return;
+    hit = verifySkus.find(function(v){ return !v.scanned && !v.replaced; });
+    if(hit && code !== hit.sku) saveFnsku(hit.sku, code);
   }
+  if(!hit) return false;
   hit.scanned = 1;
+  hit.fnsku = code;
   syncSkuProgress();
   clearErr();
   if(verifyDone()) completeOrder(activeOrder, activeOrder.tracking);
   else {
-    setFb('✓ '+code,'var(--gn)');
+    setFb('✓ '+hit.sku+' · '+code,'var(--gn)');
     flash('ok');
     renderActiveCard();
     focusNextItem();
   }
+  return true;
 }
 
 function openReplace(sku){
@@ -4676,7 +4701,7 @@ function doScan(raw){
   document.getElementById('scan-in').value = '';
 
   if(packState==='verify-items' && activeOrder){
-    applyItemScan(scanned);
+    if(!applyItemScan(scanned)) passToNextLabel(scanned);
     return;
   }
 
