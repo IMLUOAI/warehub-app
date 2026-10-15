@@ -171,7 +171,6 @@
       <!-- Returns list -->
       <div style="flex-shrink:0;">
         <div style="font-size:8px;letter-spacing:2px;color:var(--td);margin-bottom:8px;">RETURN LOG</div>
-        <button class="btn" onclick="openRecoverBin('returns')" style="font-size:8px;margin-bottom:8px;">Recover bin</button>
         <div id="return-list" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
 
@@ -342,8 +341,7 @@
           <div style="font-size:9px;letter-spacing:2px;color:var(--td);">TRIP HISTORY</div>
           <div style="display:flex;gap:8px;align-items:center;">
             <input id="veh-filter" placeholder="Filter by driver or destination…" oninput="renderVehicleLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:200px;"/>
-            <button class="btn" onclick="openRecoverBin('vehicle')" style="font-size:8px;">Recover bin</button>
-            <button class="btn" onclick="vehicleClearAll()" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
+            <button class="btn" onclick="if(confirm('Delete ALL trip records?')){vehicleTrips=[];vehicleSave();renderVehicleLog();renderVehicleStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
           </div>
         </div>
         <div id="veh-log" style="overflow-x:auto;"></div>
@@ -383,7 +381,6 @@
             <button class="btn" onclick="fbaBatchHistoryToggle()" style="font-size:9px;white-space:nowrap;">📜 BATCH HISTORY</button>
             <button class="btn" onclick="fbaBatchStartNew()" style="border-color:var(--am,#fbbf24);color:var(--am,#fbbf24);background:#fbbf2415;font-size:9px;white-space:nowrap;">🆕 START NEW BATCH</button>
             <button class="btn" onclick="fbaGridAddRow()" style="font-size:9px;white-space:nowrap;">+ ADD ROW</button>
-            <button class="btn" onclick="openRecoverBin('fba')" style="font-size:9px;white-space:nowrap;">Recover bin</button>
             <button class="btn" onclick="fbaGridExportExcel()" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;">📊 EXPORT EXCEL</button>
           </div>
         </div>
@@ -592,8 +589,7 @@
           <div style="font-size:9px;letter-spacing:2px;color:var(--td);">SHIPMENT HISTORY</div>
           <div style="display:flex;gap:8px;align-items:center;">
             <input id="fba-filter" placeholder="Filter by shipment ID, FC, SKU…" oninput="renderFbaLog()" style="background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:4px 8px;font-size:10px;font-family:inherit;outline:none;width:220px;"/>
-            <button class="btn" onclick="openRecoverBin('fba-log')" style="font-size:8px;">Recover bin</button>
-            <button class="btn" onclick="fbaClearAllLocal()" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
+            <button class="btn" onclick="if(confirm('Delete ALL FBA records?')){fbaRecords=[];fbaSaveLocal();renderFbaLog();renderFbaStats();}" style="font-size:8px;border-color:var(--rd);color:var(--rd);">🗑 CLEAR ALL</button>
           </div>
         </div>
         <div id="fba-log" style="overflow-x:auto;"></div>
