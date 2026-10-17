@@ -4301,7 +4301,7 @@ function setPackState(state){
     if(inp) inp.placeholder = t('pack_scan_placeholder');
     if(lbl){ lbl.textContent=t('pack_scan_step1'); lbl.style.color=''; }
   } else if(state==='verify-items'){
-    if(inp) inp.placeholder = 'Scan item FNSKU or SKU — then the next one';
+    if(inp) inp.placeholder = openSkuKinds().length>1 ? 'Scan each different item FNSKU' : 'Scan this SKU for each piece';
     if(lbl){ lbl.textContent='ITEM →'; lbl.style.color='var(--am)'; }
   }
   renderActiveCard();
@@ -4337,7 +4337,7 @@ function beginItemVerify(order){
   });
   setPackState('verify-items');
   clearErr();
-  setFb('Label matched. Scan each item on the main bar.','var(--cy)');
+  setFb(openSkuKinds().length>1 ? 'Label matched. Scan each item FNSKU.' : 'Label matched. Scan this SKU for each piece.','var(--cy)');
   flash('ok');
   renderActiveCard();
   focusScan();
@@ -4490,6 +4490,14 @@ function fnskuFieldKey(e, sku){
   }
 }
 
+function openSkuKinds(){
+  var seen = [];
+  (verifySkus||[]).forEach(function(v){
+    if(v.scanned || v.replaced) return;
+    if(seen.indexOf(v.sku) < 0) seen.push(v.sku);
+  });
+  return seen;
+}
 function applyItemScan(scanned){
   if(sameLabelScan(scanned, activeOrder)){
     setFb('Label already matched. Scan the next item.','var(--am)');
@@ -4497,21 +4505,29 @@ function applyItemScan(scanned){
     return true;
   }
   var code = cleanScanCode(scanned);
-  var skuUp = currentOpenSku();
-  if(!skuUp) return false;
+  var open = openSkuKinds();
+  if(!open.length) return false;
   var hitSku = '';
-  verifySkus.forEach(function(v){
-    if(hitSku || v.scanned || v.replaced) return;
-    if(v.sku===code || (v.sku.length>=3 && code.slice(-v.sku.length)===v.sku)) hitSku = v.sku;
+  open.forEach(function(sku){
+    if(hitSku) return;
+    if(sku===code || (sku.length>=3 && code.slice(-sku.length)===sku)) hitSku = sku;
   });
   if(!hitSku){
     var linked = skusForFnsku(code);
-    verifySkus.forEach(function(v){
-      if(hitSku || v.scanned || v.replaced) return;
-      if(linked.indexOf(v.sku)>=0) hitSku = v.sku;
+    open.forEach(function(sku){
+      if(!hitSku && linked.indexOf(sku) >= 0) hitSku = sku;
     });
   }
-  if(!hitSku) hitSku = skuUp;
+  // One SKU, many pieces: any scan of that item counts toward the qty.
+  // Different SKUs: each FNSKU has to match its own line. Do not guess.
+  if(!hitSku && open.length===1 && !scanIsTracking(code)) hitSku = open[0];
+  if(!hitSku){
+    bpErr(); flash('err');
+    setErr('✗ '+code+' does not match a remaining item. Scan each item FNSKU: '+open.join(', '));
+    setFb('✗ SCAN EACH FNSKU','var(--rd)');
+    focusScan();
+    return true;
+  }
   return acceptItemCode(hitSku, code);
 }
 
@@ -5924,8 +5940,9 @@ function renderActiveCard(){
       if(v.replaced) grouped[v.sku].replaced++;
       else if(v.scanned) grouped[v.sku].scanned++;
     });
+    var mixed = Object.keys(grouped).length > 1;
     checklist.innerHTML='<div style="margin-top:12px;">'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">LABEL MATCHED · SCAN EACH ITEM</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">'+(mixed ? 'LABEL MATCHED · SCAN EACH ITEM FNSKU' : 'LABEL MATCHED · SCAN THIS SKU FOR EACH PIECE')+'</div>'
       +Object.keys(grouped).map(function(sku){
         var g=grouped[sku];
         var filled=g.scanned+g.replaced;
