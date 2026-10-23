@@ -4463,11 +4463,32 @@ function currentOpenSku(){
   var row = verifySkus.find(function(v){ return !v.scanned && !v.replaced; });
   return row ? row.sku : '';
 }
+function codeMatchesSku(code, sku){
+  code = String(code||'').toUpperCase();
+  sku = String(sku||'').toUpperCase();
+  if(!code || !sku) return false;
+  if(code === sku) return true;
+  if(sku.length>=4 && code.length>sku.length && code.slice(-sku.length)===sku) return true;
+  var inv = window._inventoryData || {};
+  var ok = false;
+  Object.keys(inv).forEach(function(loc){
+    ((inv[loc]||{}).skus||[]).forEach(function(item){
+      if(String(item.sku||'').toUpperCase()===sku && String(item.barcode||'').toUpperCase()===code) ok = true;
+    });
+  });
+  return ok;
+}
 function acceptItemCode(sku, raw){
   var code = cleanScanCode(raw);
   var skuUp = String(sku||'').toUpperCase();
   if(!code || !skuUp || !activeOrder) return false;
-  if(code !== skuUp) saveFnsku(skuUp, code);
+  if(!codeMatchesSku(code, skuUp)){
+    bpErr(); flash('err');
+    setErr('✗ '+code+' does not match '+skuUp+' on this label.');
+    setFb('✗ SKU MISMATCH','var(--rd)');
+    focusScan();
+    return false;
+  }
   var hit = verifySkus.find(function(v){ return v.sku===skuUp && !v.scanned && !v.replaced; });
   if(!hit) return false;
   hit.scanned = 1;
@@ -4524,14 +4545,8 @@ function openSkuKinds(){
   return seen;
 }
 function matchOpenSku(code, open){
-  var exact = open.filter(function(sku){ return sku===code; });
+  var exact = open.filter(function(sku){ return codeMatchesSku(code, sku); });
   if(exact.length===1) return exact[0];
-  var linked = skusForFnsku(code).filter(function(sku){ return open.indexOf(sku)>=0; });
-  if(linked.length===1) return linked[0];
-  var suffix = open.filter(function(sku){
-    return sku.length>=4 && code.length>sku.length && code.slice(-sku.length)===sku;
-  });
-  if(suffix.length===1) return suffix[0];
   return '';
 }
 function applyItemScan(scanned){
@@ -4544,14 +4559,10 @@ function applyItemScan(scanned){
   var open = openSkuKinds();
   if(!open.length) return false;
   var hitSku = matchOpenSku(code, open);
-  // Same SKU, several pieces: keep counting that one barcode.
-  // Different SKUs: one scan must not pass the package.
-  if(!hitSku && open.length===1 && !scanIsTracking(code)) hitSku = open[0];
   if(!hitSku){
     bpErr(); flash('err');
-    var left = verifySkus.filter(function(v){ return !v.scanned && !v.replaced; }).length;
-    setErr('✗ '+code+' is only one item. Still need '+left+' scan'+(left===1?'':'s')+': '+open.join(', '));
-    setFb('✗ SCAN EACH SKU','var(--rd)');
+    setErr('✗ '+code+' does not match a SKU on this label: '+open.join(', '));
+    setFb('✗ SKU MISMATCH','var(--rd)');
     focusScan();
     return true;
   }
