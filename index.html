@@ -1358,11 +1358,11 @@ body.station-mode #pack-left{font-size:120px;}
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">INVENTORY</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">📍 Locations</div>
           <div style="font-size:11px;color:var(--td);margin-top:4px;line-height:1.5;max-width:420px;">
-            SKU → bin locations from receiving and CSV import. Pack Station uses this map first, then the shelf printed on the label.
+            SKU → bin for the daily pull areas: W-1, B-1, C-1, R-1, R-2, R-3, A-1. Other warehouse areas in the sheet are ignored.
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT CSV</button>
+          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT INVENTORY</button>
           <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
         </div>
       </div>
@@ -4980,7 +4980,7 @@ function completeOrder(order, scannedTracking){
     if(!needed) return;
     var best = null;
     Object.keys(window._inventoryData).forEach(function(loc){
-      var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+      var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return invItemMatchesSku(x, s.sku); });
       if(item && (parseInt(item.qty)||0) > 0 && (!best || (parseInt(item.qty)||0) > (parseInt(best.item.qty)||0))){
         best = { loc: loc, item: item };
       }
@@ -5800,7 +5800,7 @@ function locationsRenderByLocation(inv, q){
     });
     skus = skus.filter(function(s){
       if(!q) return true;
-      return (s.sku || '').toUpperCase().indexOf(q) >= 0 || loc.toUpperCase().indexOf(q) >= 0;
+      return (s.sku || '').toUpperCase().indexOf(q) >= 0 || (s.barcode || '').toUpperCase().indexOf(q) >= 0 || loc.toUpperCase().indexOf(q) >= 0;
     });
     if(q && !skus.length && loc.toUpperCase().indexOf(q) < 0) return;
     if(q && !skus.length) return;
@@ -5811,7 +5811,7 @@ function locationsRenderByLocation(inv, q){
     } else {
       skus.forEach(function(s){
         html += '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-top:1px solid var(--bdr);font-size:12px;">'
-          + '<span style="font-family:monospace;font-weight:600;">' + (s.sku || '') + '</span>'
+          + '<span style="font-family:monospace;font-weight:600;">' + (s.sku || '') + (s.barcode ? '<span style="color:var(--td);font-weight:500;"> · '+s.barcode+'</span>' : '') + '</span>'
           + '<span style="color:var(--td);">×' + (s.qty || 0) + '</span></div>';
       });
     }
@@ -5832,7 +5832,7 @@ function locationsRenderPickQueue(q){
       if(inv){
         var best = null;
         Object.keys(inv).forEach(function(l){
-          var item = ((inv[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+          var item = ((inv[l]||{}).skus||[]).find(function(x){ return invItemMatchesSku(x, s.sku); });
           var qq = item ? (parseInt(item.qty)||0) : 0;
           if(qq > 0 && (!best || qq > best.q)) best = { loc: l, q: qq };
         });
@@ -5881,7 +5881,7 @@ function buildPickGuideHtml(order){
     if(window._inventoryData){
       var best = null;
       Object.keys(window._inventoryData).forEach(function(l){
-        var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        var item = ((window._inventoryData[l]||{}).skus||[]).find(function(x){ return invItemMatchesSku(x, s.sku); });
         var q = item ? (parseInt(item.qty)||0) : 0;
         if(q > 0 && (!best || q > best.q)) best = { loc: l, q: q };
       });
@@ -6425,7 +6425,7 @@ function floorComputePickQueue(){
       if(!s.sku) return;
       // Find which tracked location(s) currently hold this SKU
       Object.keys(inv).forEach(function(loc){
-        var item = ((inv[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        var item = ((inv[loc]||{}).skus||[]).find(function(x){ return invItemMatchesSku(x, s.sku); });
         if(!item || (parseInt(item.qty)||0) <= 0) return;
         var key = loc+'||'+s.sku;
         if(!needed[key]) needed[key] = { location:loc, sku:s.sku, qty:0, trackings:[] };
@@ -9027,11 +9027,98 @@ function rackShowPickRoute(){
 
 window._inventoryData = {};
 
+var PULL_AREA_CODES = ['W-1','B-1','C-1','R-1','R-2','R-3','A-1'];
+function pullAreaOf(loc, area){
+  var blob = (String(loc||'')+' '+String(area||'')).toUpperCase();
+  for(var i=0;i<PULL_AREA_CODES.length;i++){
+    var code = PULL_AREA_CODES[i];
+    var re = new RegExp('(^|[^A-Z0-9])'+code.replace('-','\\-')+'(?![0-9])');
+    if(re.test(blob)) return code;
+  }
+  return '';
+}
+function invItemMatchesSku(item, sku){
+  var want = String(sku||'').toUpperCase();
+  if(!want || !item) return false;
+  return String(item.sku||'').toUpperCase()===want || String(item.barcode||'').toUpperCase()===want;
+}
+function inventoryHeaderIndex(headers, needles){
+  for(var i=0;i<headers.length;i++){
+    var h = String(headers[i]||'').toUpperCase();
+    for(var n=0;n<needles.length;n++){
+      if(h.indexOf(needles[n])>=0) return i;
+    }
+  }
+  return -1;
+}
+function inventoryApplyPullRows(records){
+  if(!window._inventoryData) window._inventoryData = {};
+  Object.keys(window._inventoryData).forEach(function(loc){
+    if(pullAreaOf(loc, (window._inventoryData[loc]||{}).area || '')) delete window._inventoryData[loc];
+  });
+  var bins = {};
+  var skuCount = 0;
+  (records||[]).forEach(function(r){
+    var zone = pullAreaOf(r.location, r.area);
+    if(!zone) return;
+    var sku = String(r.sku||'').trim().toUpperCase();
+    var loc = String(r.location||'').trim().toUpperCase();
+    if(!sku || !loc) return;
+    var qty = parseFloat(r.qty);
+    if(!(qty > 0)) return;
+    if(!bins[loc]) bins[loc] = {skus:[], area: zone};
+    var barcode = String(r.barcode||'').replace(/\s+/g,'').trim().toUpperCase();
+    bins[loc].skus.push({
+      sku: sku,
+      name: String(r.name||'').trim(),
+      qty: Math.round(qty),
+      unit: 'PCS',
+      barcode: barcode && barcode !== sku ? barcode : ''
+    });
+    skuCount++;
+    if(barcode && barcode !== sku) saveFnsku(sku, barcode);
+  });
+  Object.keys(bins).forEach(function(loc){ window._inventoryData[loc] = bins[loc]; });
+  window._inventoryDirty = true;
+  inventorySync();
+  if(typeof renderLocations==='function') renderLocations();
+  if(typeof rackHighlightInventory==='function') rackHighlightInventory();
+  pm('✓ Pull reference — '+skuCount+' SKUs in '+Object.keys(bins).length+' bins. Kept W-1, B-1, C-1, R-1, R-2, R-3, A-1 only.');
+}
+function inventoryLoadMatrix(headers, rows){
+  var H = (headers||[]).map(function(h){ return String(h||''); });
+  var iSku = inventoryHeaderIndex(H, ['SKU']);
+  var iBar = inventoryHeaderIndex(H, ['BARCODE','条码']);
+  var iName = inventoryHeaderIndex(H, ['PRODUCTNAME','PRODUCT_NAME']);
+  var iLoc = inventoryHeaderIndex(H, ['LOCATION','库位']);
+  var iArea = inventoryHeaderIndex(H, ['AREA','库区']);
+  var iQty = inventoryHeaderIndex(H, ['AVAILABLE','可用']);
+  if(iQty<0) iQty = inventoryHeaderIndex(H, ['TOTAL STOCK','总库存','QTY']);
+  if(iSku<0 || iLoc<0){ pm('✗ This sheet needs SKU and Location columns.'); return; }
+  var records = (rows||[]).map(function(cols){
+    cols = cols || [];
+    return {
+      sku: cols[iSku],
+      barcode: iBar>=0 ? cols[iBar] : '',
+      name: iName>=0 ? cols[iName] : '',
+      location: cols[iLoc],
+      area: iArea>=0 ? cols[iArea] : '',
+      qty: iQty>=0 ? cols[iQty] : 0
+    };
+  });
+  inventoryApplyPullRows(records);
+}
+
 function inventoryLoadCSV(text){
-  var lines = text.trim().split('\n');
+  var lines = text.trim().split(/\r?\n/);
   if(!lines.length) return;
-  var headers = lines[0].split(',').map(function(h){ return h.trim().toUpperCase(); });
-  var locIdx  = headers.indexOf('LOCATION');
+  var headers = lines[0].split(',').map(function(h){ return h.trim(); });
+  var upper = headers.map(function(h){ return h.toUpperCase(); });
+  if(inventoryHeaderIndex(upper, ['SKU'])>=0 && inventoryHeaderIndex(upper, ['LOCATION','库位'])>=0 && inventoryHeaderIndex(upper, ['AREA','库区','BARCODE','条码','AVAILABLE','可用'])>=0){
+    inventoryLoadMatrix(headers, lines.slice(1).map(function(line){ return line.split(','); }));
+    return;
+  }
+  var locIdx  = upper.indexOf('LOCATION');
   if(locIdx < 0) locIdx = 0;
   var data = {};
 
@@ -9043,10 +9130,10 @@ function inventoryLoadCSV(text){
 
 
     for(var s=1;s<=5;s++){
-      var skuIdx  = headers.indexOf('SKU_'+s);
-      var nameIdx = headers.indexOf('PRODUCT_NAME_'+s);
-      var qtyIdx  = headers.indexOf('QTY_'+s);
-      var unitIdx = headers.indexOf('UNIT_'+s);
+      var skuIdx  = upper.indexOf('SKU_'+s);
+      var nameIdx = upper.indexOf('PRODUCT_NAME_'+s);
+      var qtyIdx  = upper.indexOf('QTY_'+s);
+      var unitIdx = upper.indexOf('UNIT_'+s);
       if(skuIdx>=0 && cols[skuIdx] && cols[skuIdx].trim()){
         item.skus.push({
           sku:  cols[skuIdx].trim(),
@@ -9058,21 +9145,21 @@ function inventoryLoadCSV(text){
     }
 
 
-    var supIdx  = headers.indexOf('SUPPLIER');
-    var updIdx  = headers.indexOf('LAST_UPDATED');
-    var noteIdx = headers.indexOf('NOTES');
+    var supIdx  = upper.indexOf('SUPPLIER');
+    var updIdx  = upper.indexOf('LAST_UPDATED');
+    var noteIdx = upper.indexOf('NOTES');
     if(supIdx>=0)  item.supplier    = (cols[supIdx]||'').trim();
     if(updIdx>=0)  item.lastUpdated = (cols[updIdx]||'').trim();
     if(noteIdx>=0) item.notes       = (cols[noteIdx]||'').trim();
 
 
-    var singleSkuIdx = headers.indexOf('SKU');
+    var singleSkuIdx = upper.indexOf('SKU');
     if(!item.skus.length && singleSkuIdx>=0 && cols[singleSkuIdx]){
       item.skus.push({
         sku:  (cols[singleSkuIdx]||'').trim(),
-        name: headers.indexOf('PRODUCT_NAME')>=0 ? (cols[headers.indexOf('PRODUCT_NAME')]||'').trim() : '',
-        qty:  headers.indexOf('QTY')>=0  ? (cols[headers.indexOf('QTY')]||'').trim()  : '',
-        unit: headers.indexOf('UNIT')>=0 ? (cols[headers.indexOf('UNIT')]||'').trim() : ''
+        name: upper.indexOf('PRODUCT_NAME')>=0 ? (cols[upper.indexOf('PRODUCT_NAME')]||'').trim() : '',
+        qty:  upper.indexOf('QTY')>=0  ? (cols[upper.indexOf('QTY')]||'').trim()  : '',
+        unit: upper.indexOf('UNIT')>=0 ? (cols[upper.indexOf('UNIT')]||'').trim() : ''
       });
     }
 
@@ -9103,9 +9190,27 @@ function rackHighlightInventory(){
 
 function inventoryTriggerUpload(){
   var inp = document.createElement('input');
-  inp.type='file'; inp.accept='.csv,text/csv';
+  inp.type='file';
+  inp.accept='.csv,.xlsx,.xls,text/csv';
   inp.onchange=function(e){
     var file=e.target.files[0]; if(!file) return;
+    var name=(file.name||'').toLowerCase();
+    if(/\.xlsx$|\.xls$/.test(name)){
+      ensureSheetJS().then(function(){
+        var reader=new FileReader();
+        reader.onload=function(ev){
+          try{
+            var wb=XLSX.read(ev.target.result,{type:'array'});
+            var sheet=wb.Sheets[wb.SheetNames[0]];
+            var matrix=XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:''});
+            if(!matrix.length){ pm('✗ Empty inventory sheet.'); return; }
+            inventoryLoadMatrix(matrix[0], matrix.slice(1));
+          }catch(err){ pm('✗ '+err.message); }
+        };
+        reader.readAsArrayBuffer(file);
+      }).catch(function(err){ pm('✗ '+err.message); });
+      return;
+    }
     var reader=new FileReader();
     reader.onload=function(ev){ inventoryLoadCSV(ev.target.result); };
     reader.readAsText(file);
@@ -9171,7 +9276,7 @@ function rackDoScan(val){
       var item = inv[loc];
       if(item && item.skus){
         item.skus.forEach(function(s){
-          if(s.sku && s.sku.toUpperCase().indexOf(sku) >= 0){
+          if(invItemMatchesSku(s, sku) || (s.sku && s.sku.toUpperCase().indexOf(sku) >= 0)){
             found.push({loc:loc, name:s.name, qty:s.qty, unit:s.unit});
           }
         });
@@ -11162,7 +11267,7 @@ function fbaAdjustInventory(skus, direction){
       // Deducting — find the location with the most on hand for this SKU.
       var best = null;
       Object.keys(window._inventoryData).forEach(function(loc){
-        var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return x.sku===s.sku; });
+        var item = ((window._inventoryData[loc]||{}).skus||[]).find(function(x){ return invItemMatchesSku(x, s.sku); });
         if(item && (parseInt(item.qty)||0) > 0 && (!best || (parseInt(item.qty)||0) > (parseInt(best.item.qty)||0))){
           best = { loc: loc, item: item };
         }
