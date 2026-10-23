@@ -2794,13 +2794,18 @@ function extractOrder(words, pageH){
     if(/^\d{6,}$/.test(s.sku)) return false;
     return true;
   });
-  // Warehouse stamp sits lowest on the page. If several candidates remain,
-  // keep the lowest cluster only so a higher packing-slip line cannot win.
-  if(skus.length>1){
-    var lowest=skus.reduce(function(m,s){return Math.max(m,s.top||0);},0);
-    var low=skus.filter(function(s){return (s.top||0) >= lowest-12;});
-    if(low.length) skus=low;
-  }
+  // Keep every different SKU on this label. Dropping all but the lowest line
+  // made a multi-item label look like one SKU, so one scan passed the package.
+  var skuMerged={};
+  var skuOrder=[];
+  skus.forEach(function(s){
+    if(!skuMerged[s.sku]){
+      skuMerged[s.sku]={sku:s.sku,qty:0,scanned:0};
+      skuOrder.push(s.sku);
+    }
+    skuMerged[s.sku].qty += s.qty||1;
+  });
+  skus=skuOrder.map(function(k){return skuMerged[k];});
   if(!skus.length) skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
 
 
@@ -4325,19 +4330,39 @@ function saveReplacements(rows){
   try { localStorage.setItem(replacementStoreKey(), JSON.stringify(rows.slice(0, 2000))); } catch(e){}
 }
 
+function expandSkuLines(order){
+  var out=[];
+  (order&&order.skus||[]).forEach(function(s){
+    var raw=String(s.sku||'').toUpperCase().trim();
+    var qty=parseInt(s.qty,10)||1;
+    if(!raw || raw==='UNKNOWN') return;
+    var pieces=raw.split(/\s*[,;|]\s*/).filter(Boolean);
+    if(pieces.length>1){
+      pieces.forEach(function(p){
+        var m=p.match(/^([A-Z0-9][A-Z0-9\-]{1,24})\*(\d+)$/);
+        if(m) out.push({sku:m[1], qty:parseInt(m[2],10)||1});
+        else out.push({sku:p, qty:1});
+      });
+    } else {
+      var m2=raw.match(/^([A-Z0-9][A-Z0-9\-]{1,24})\*(\d+)$/);
+      if(m2) out.push({sku:m2[1], qty:parseInt(m2[2],10)||qty});
+      else out.push({sku:raw, qty:qty});
+    }
+  });
+  return out.length ? out : [{sku:'UNKNOWN', qty:1}];
+}
 function beginItemVerify(order){
   activeOrder = order;
+  var lines = expandSkuLines(order);
+  order.skus = lines.map(function(s){ return {sku:s.sku, qty:s.qty, scanned:0, replaced:0}; });
   verifySkus = [];
-  (order.skus||[]).forEach(function(s){
+  order.skus.forEach(function(s){
     var q = parseInt(s.qty,10)||1;
-    var sku = String(s.sku||'').toUpperCase();
-    s.replaced = 0;
-    s.scanned = 0;
-    for(var i=0;i<q;i++) verifySkus.push({ sku: sku, scanned: 0, replaced: false, spec: '' });
+    for(var i=0;i<q;i++) verifySkus.push({ sku: s.sku, scanned: 0, replaced: false, spec: '' });
   });
   setPackState('verify-items');
   clearErr();
-  setFb(openSkuKinds().length>1 ? 'Label matched. Scan each item FNSKU.' : 'Label matched. Scan this SKU for each piece.','var(--cy)');
+  setFb(openSkuKinds().length>1 ? 'Different SKUs. Scan each one before this package can pass.' : 'Label matched. Scan this SKU for each piece.','var(--cy)');
   flash('ok');
   renderActiveCard();
   focusScan();
@@ -4498,33 +4523,35 @@ function openSkuKinds(){
   });
   return seen;
 }
+function matchOpenSku(code, open){
+  var exact = open.filter(function(sku){ return sku===code; });
+  if(exact.length===1) return exact[0];
+  var linked = skusForFnsku(code).filter(function(sku){ return open.indexOf(sku)>=0; });
+  if(linked.length===1) return linked[0];
+  var suffix = open.filter(function(sku){
+    return sku.length>=4 && code.length>sku.length && code.slice(-sku.length)===sku;
+  });
+  if(suffix.length===1) return suffix[0];
+  return '';
+}
 function applyItemScan(scanned){
   if(sameLabelScan(scanned, activeOrder)){
-    setFb('Label already matched. Scan the next item.','var(--am)');
+    setFb('Label already matched. Scan the next SKU.','var(--am)');
     focusScan();
     return true;
   }
   var code = cleanScanCode(scanned);
   var open = openSkuKinds();
   if(!open.length) return false;
-  var hitSku = '';
-  open.forEach(function(sku){
-    if(hitSku) return;
-    if(sku===code || (sku.length>=3 && code.slice(-sku.length)===sku)) hitSku = sku;
-  });
-  if(!hitSku){
-    var linked = skusForFnsku(code);
-    open.forEach(function(sku){
-      if(!hitSku && linked.indexOf(sku) >= 0) hitSku = sku;
-    });
-  }
-  // One SKU, many pieces: any scan of that item counts toward the qty.
-  // Different SKUs: each FNSKU has to match its own line. Do not guess.
+  var hitSku = matchOpenSku(code, open);
+  // Same SKU, several pieces: keep counting that one barcode.
+  // Different SKUs: one scan must not pass the package.
   if(!hitSku && open.length===1 && !scanIsTracking(code)) hitSku = open[0];
   if(!hitSku){
     bpErr(); flash('err');
-    setErr('✗ '+code+' does not match a remaining item. Scan each item FNSKU: '+open.join(', '));
-    setFb('✗ SCAN EACH FNSKU','var(--rd)');
+    var left = verifySkus.filter(function(v){ return !v.scanned && !v.replaced; }).length;
+    setErr('✗ '+code+' is only one item. Still need '+left+' scan'+(left===1?'':'s')+': '+open.join(', '));
+    setFb('✗ SCAN EACH SKU','var(--rd)');
     focusScan();
     return true;
   }
@@ -4877,9 +4904,13 @@ function doScan(raw){
       || (refPacker && refPacker.loginTime ? refPacker.loginTime : Date.now());
   }
 
-  // Multi-piece labels stay open until each item is scanned or replaced.
-  // A SKU mismatch does not undo the tracking match.
-  if(orderPieceCount(order) > 1){
+  // Multi-piece or mixed-SKU labels stay open until every SKU is scanned.
+  // One scan of one SKU must not pass a label that has other SKUs.
+  var verifyLines = expandSkuLines(order);
+  var verifyPieces = verifyLines.reduce(function(n,s){ return n + (parseInt(s.qty,10)||1); }, 0);
+  var verifyKinds = {};
+  verifyLines.forEach(function(s){ if(s.sku && s.sku!=='UNKNOWN') verifyKinds[s.sku]=1; });
+  if(verifyPieces > 1 || Object.keys(verifyKinds).length > 1){
     beginItemVerify(order);
     return;
   }
@@ -5942,7 +5973,7 @@ function renderActiveCard(){
     });
     var mixed = Object.keys(grouped).length > 1;
     checklist.innerHTML='<div style="margin-top:12px;">'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">'+(mixed ? 'LABEL MATCHED · SCAN EACH ITEM FNSKU' : 'LABEL MATCHED · SCAN THIS SKU FOR EACH PIECE')+'</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">'+(mixed ? 'DIFFERENT SKUS · SCAN EACH ONE' : 'LABEL MATCHED · SCAN THIS SKU FOR EACH PIECE')+'</div>'
       +Object.keys(grouped).map(function(sku){
         var g=grouped[sku];
         var filled=g.scanned+g.replaced;
