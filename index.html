@@ -5807,14 +5807,11 @@ async function locationsRefreshFromAccount(){
   if(api){
     var settingsResult = await api('GET', '/api/settings').catch(function(){ return null; });
     var serverInv = settingsResult && settingsResult.settings && settingsResult.settings.rack_inventory;
-    window._inventoryData = {};
+    window._inventoryData = (serverInv && typeof serverInv === 'object') ? JSON.parse(JSON.stringify(serverInv)) : {};
+    window._inventoryOwner = window._clerkUser && window._clerkUser.id;
     window._inventoryDirty = false;
-    if(serverInv && typeof serverInv === 'object'){
-      Object.keys(serverInv).forEach(function(loc){
-        ((serverInv[loc] && serverInv[loc].skus) || []).forEach(function(s){
-          addSkuToLocation(loc, s.sku, s.qty);
-        });
-      });
+    if(settingsResult && settingsResult.settings && settingsResult.settings.sku_aliases){
+      applySkuAliasMap(settingsResult.settings.sku_aliases, settingsResult.settings.sku_alias_clerk_id);
     }
     var rows = [];
     var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
@@ -5836,8 +5833,9 @@ function renderLocations(){
   Object.keys(inv).forEach(function(loc){
     skuCount += ((inv[loc] && inv[loc].skus) || []).length;
   });
+  var pairCount = skuPairRows().length;
   var stats = document.getElementById('loc-stats');
-  if(stats) stats.textContent = locCount + ' location(s) · ' + skuCount + ' SKU row(s)';
+  if(stats) stats.textContent = locCount + ' location(s) · ' + skuCount + ' SKU row(s)' + (pairCount ? ' · ' + pairCount + ' pairs' : '');
 }
 
 function locationsSearch(val){
@@ -5847,9 +5845,24 @@ function locationsSearch(val){
 function locationsRenderByLocation(inv, q){
   var el = document.getElementById('loc-by-location');
   if(!el) return;
+  var pairs = skuPairRows().filter(function(p){
+    if(!q) return true;
+    return p.sku.indexOf(q) >= 0 || p.barcode.indexOf(q) >= 0;
+  });
+  var pairHtml = '';
+  if(pairs.length){
+    pairHtml = '<div style="margin-bottom:10px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;">'
+      + '<div style="padding:8px 10px;background:var(--bg);font-weight:700;font-size:13px;color:#86efac;">SKU / FNSKU</div>';
+    pairs.slice(0, 200).forEach(function(p){
+      pairHtml += '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-top:1px solid var(--bdr);font-size:12px;">'
+        + '<span style="font-family:monospace;font-weight:600;">' + p.sku + '</span>'
+        + '<span style="font-family:monospace;color:var(--td);">' + p.barcode + '</span></div>';
+    });
+    pairHtml += '</div>';
+  }
   var locs = Object.keys(inv).sort();
-  if(!locs.length){
-    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;line-height:1.6;">No inventory locations yet.<br/>Import a CSV or receive stock.</div>';
+  if(!locs.length && !pairs.length){
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--td);font-size:12px;line-height:1.6;">No inventory locations yet.<br/>Import a sheet or receive stock.</div>';
     return;
   }
   var html = '';
@@ -5880,7 +5893,7 @@ function locationsRenderByLocation(inv, q){
     }
     html += '</div>';
   });
-  el.innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--td);font-size:12px;">No matches.</div>';
+  el.innerHTML = pairHtml + (html || (pairs.length ? '' : '<div style="padding:20px;text-align:center;color:var(--td);font-size:12px;">No matches.</div>'));
 }
 
 function locationsRenderPickQueue(q){
@@ -7754,17 +7767,30 @@ async function rackConfigLoad(){
 // manual edits on a spot's info panel, so all three stay consistent.
 function inventorySync(){
   var owner = window._clerkUser && window._clerkUser.id;
-  if(!owner || window._inventoryOwner !== owner || !window._inventoryDirty) return;
+  if(!owner){
+    locStatus('Sign in, then import again. Nothing was saved to the account.', false);
+    return;
+  }
+  if(window._inventoryOwner && window._inventoryOwner !== owner){
+    locStatus('Sign in again, then import. This list was not saved.', false);
+    return;
+  }
+  window._inventoryOwner = owner;
+  if(!window._inventoryDirty) return;
   window._inventoryDirty = false;
   try { localStorage.setItem('warehub_inventory:'+owner, JSON.stringify(window._inventoryData||{})); } catch(e){}
   try { localStorage.removeItem('warehub_inventory'); } catch(e){}
-  if(!window._tenantInventoryReady) return;
+  if(!window._tenantInventoryReady){
+    locStatus('Saved on this device. Open Locations again after sign-in to sync the account.', false);
+    return;
+  }
   if(typeof window.warehubApi === 'function'){
     window.warehubApi('POST', '/api/settings', {
       rack_inventory: window._inventoryData,
       inventory_clerk_id: owner
     }).catch(function(e){
       console.error('[inventory] cloud save failed:', e);
+      locStatus('Saved on this device, but the account save failed. Stay signed in and import again.', false);
     });
   }
 }
@@ -9099,6 +9125,30 @@ function invItemMatchesSku(item, sku){
   var codes = [item.sku, item.barcode].concat(item.aliases||[]);
   return codes.some(function(c){ return String(c||'').toUpperCase()===want; });
 }
+function locStatus(msg, ok){
+  var el = document.getElementById('loc-sync-status');
+  if(el){
+    el.textContent = msg || '';
+    el.style.color = ok === false ? '#fbbf24' : '#4caf80';
+  }
+  if(typeof pm === 'function' && msg) pm(msg);
+}
+function skuPairRows(){
+  var map = window._skuAliases || (typeof fnskuMap === 'function' ? fnskuMap() : {});
+  var rows = [];
+  var seen = {};
+  Object.keys(map || {}).forEach(function(sku){
+    (map[sku] || []).forEach(function(other){
+      var a = String(sku);
+      var b = String(other);
+      var key = [a, b].sort().join('|');
+      if(!a || !b || a === b || seen[key]) return;
+      seen[key] = 1;
+      rows.push({ sku: a, barcode: b });
+    });
+  });
+  return rows.sort(function(x, y){ return x.sku.localeCompare(y.sku); });
+}
 function inventoryHeaderIndex(headers, test){
   for(var i=0;i<headers.length;i++){
     var h = String(headers[i]||'').toUpperCase().replace(/\s+/g,' ').trim();
@@ -9145,7 +9195,7 @@ function inventoryApplyRows(records){
   if(pairCount) skuAliasSync();
   if(typeof renderLocations==='function') renderLocations();
   if(typeof rackHighlightInventory==='function') rackHighlightInventory();
-  pm('✓ Inventory saved to this account — '+skuCount+' SKUs in '+Object.keys(bins).length+' bins.'+(pairCount?' '+pairCount+' SKU / FNSKU pairs linked for pack scan.':''));
+  locStatus('Inventory saved to this account — '+skuCount+' SKUs in '+Object.keys(bins).length+' bins.'+(pairCount?' '+pairCount+' SKU / FNSKU pairs linked for pack scan.':''), true);
 }
 function inventoryLoadMatrix(headers, rows){
   var H = (headers||[]).map(function(h){ return String(h||''); });
@@ -9160,7 +9210,7 @@ function inventoryLoadMatrix(headers, rows){
   var iArea = inventoryHeaderIndex(H, function(h){ return /库区/.test(h) || h==='AREA' || h.indexOf('AREA/')===0; });
   var iQty = inventoryHeaderIndex(H, function(h){ return /AVAILABLE|可用|总数量/.test(h); });
   if(iQty<0) iQty = inventoryHeaderIndex(H, function(h){ return /TOTAL STOCK|总库存|^QTY$|ON HAND/.test(h); });
-  if(iSku<0){ pm('✗ This sheet needs a SKU column.'); return; }
+  if(iSku<0){ locStatus('This sheet needs a SKU column.', false); return; }
   var records = (rows||[]).map(function(cols){
     cols = cols || [];
     return {
@@ -9179,9 +9229,10 @@ function inventoryLoadMatrix(headers, rows){
       if(codes.length>1){ linkSkuCodes(codes); pairs++; }
     });
     if(pairs) skuAliasSync();
-    pm(pairs
-      ? '✓ Linked '+pairs+' SKU / FNSKU pairs on this account. Pack scan accepts either code.'
-      : '✗ No SKU / FNSKU pairs found. Put both codes in the SKU cell, like X004ABC (DC-01).');
+    if(typeof renderLocations==='function') renderLocations();
+    locStatus(pairs
+      ? 'Linked '+pairs+' SKU / FNSKU pairs on this account. Pack scan accepts either code. This sheet has no bin column, so locations were not changed.'
+      : 'No SKU / FNSKU pairs found. Put both codes in the SKU cell, like X004ABC (DC-01).', !!pairs);
     return;
   }
   inventoryApplyRows(records);
@@ -9296,10 +9347,10 @@ function inventoryTriggerUpload(){
             var matrix=XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:''});
             if(!matrix.length){ pm('✗ Empty inventory sheet.'); return; }
             inventoryImportMatrix(matrix);
-          }catch(err){ pm('✗ '+err.message); }
+          }catch(err){ locStatus(err.message || 'Could not read that sheet.', false); }
         };
         reader.readAsArrayBuffer(file);
-      }).catch(function(err){ pm('✗ '+err.message); });
+      }).catch(function(err){ locStatus(err.message || 'Could not open the Excel file.', false); });
       return;
     }
     var reader=new FileReader();
