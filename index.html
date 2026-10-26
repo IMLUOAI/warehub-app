@@ -4488,11 +4488,22 @@ function skuAliasSync(){
   var map = fnskuMap();
   window._skuAliases = map;
   var owner = window._clerkUser && window._clerkUser.id;
+  if(owner){
+    try { localStorage.setItem('warehub_sku_catalog:'+owner, JSON.stringify(window._skuCatalog||[])); } catch(e){}
+  }
   if(!owner || typeof window.warehubApi !== 'function') return;
   window.warehubApi('POST', '/api/settings', {
     sku_aliases: map,
-    sku_alias_clerk_id: owner
+    sku_alias_clerk_id: owner,
+    sku_catalog: window._skuCatalog || []
   }).catch(function(e){ console.error('[sku-alias] cloud save failed:', e); });
+}
+function applySkuCatalog(rows, ownerId){
+  if(!Array.isArray(rows)) return;
+  var me = window._clerkUser && window._clerkUser.id;
+  if(ownerId && me && ownerId !== me) return;
+  window._skuCatalog = rows;
+  if(me){ try { localStorage.setItem('warehub_sku_catalog:'+me, JSON.stringify(rows)); } catch(e){} }
 }
 function applySkuAliasMap(map, ownerId){
   if(!map || typeof map !== 'object') return;
@@ -5813,6 +5824,9 @@ async function locationsRefreshFromAccount(){
     if(settingsResult && settingsResult.settings && settingsResult.settings.sku_aliases){
       applySkuAliasMap(settingsResult.settings.sku_aliases, settingsResult.settings.sku_alias_clerk_id);
     }
+    if(settingsResult && settingsResult.settings && Array.isArray(settingsResult.settings.sku_catalog)){
+      applySkuCatalog(settingsResult.settings.sku_catalog, settingsResult.settings.sku_alias_clerk_id);
+    }
     var rows = [];
     var rec = await api('GET', '/api/receiving').catch(function(){ return null; });
     if(rec && Array.isArray(rec.receiving)) rows = rows.concat(rec.receiving);
@@ -5835,7 +5849,7 @@ function renderLocations(){
   });
   var pairCount = skuPairRows().length;
   var stats = document.getElementById('loc-stats');
-  if(stats) stats.textContent = locCount + ' location(s) · ' + skuCount + ' SKU row(s)' + (pairCount ? ' · ' + pairCount + ' pairs' : '');
+  if(stats) stats.textContent = locCount + ' location(s) · ' + skuCount + ' SKU row(s)' + (pairCount ? ' · ' + pairCount + ' imported SKUs' : '');
 }
 
 function locationsSearch(val){
@@ -5847,16 +5861,16 @@ function locationsRenderByLocation(inv, q){
   if(!el) return;
   var pairs = skuPairRows().filter(function(p){
     if(!q) return true;
-    return p.sku.indexOf(q) >= 0 || p.barcode.indexOf(q) >= 0;
+    return String(p.sku||'').indexOf(q) >= 0 || String(p.barcode||'').indexOf(q) >= 0 || String(p.name||'').toUpperCase().indexOf(q) >= 0;
   });
   var pairHtml = '';
   if(pairs.length){
     pairHtml = '<div style="margin-bottom:10px;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;">'
       + '<div style="padding:8px 10px;background:var(--bg);font-weight:700;font-size:13px;color:#86efac;">SKU / FNSKU</div>';
-    pairs.slice(0, 200).forEach(function(p){
+    pairs.slice(0, 500).forEach(function(p){
       pairHtml += '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-top:1px solid var(--bdr);font-size:12px;">'
-        + '<span style="font-family:monospace;font-weight:600;">' + p.sku + '</span>'
-        + '<span style="font-family:monospace;color:var(--td);">' + p.barcode + '</span></div>';
+        + '<span style="font-family:monospace;font-weight:600;">' + (p.sku||'') + (p.name ? '<span style="color:var(--td);font-weight:500;"> · '+String(p.name).slice(0,42)+'</span>' : '') + '</span>'
+        + '<span style="font-family:monospace;color:var(--td);">' + (p.barcode || '—') + '</span></div>';
     });
     pairHtml += '</div>';
   }
@@ -9134,6 +9148,17 @@ function locStatus(msg, ok){
   if(typeof pm === 'function' && msg) pm(msg);
 }
 function skuPairRows(){
+  var catalog = Array.isArray(window._skuCatalog) ? window._skuCatalog : [];
+  if(!catalog.length){
+    try {
+      var owner = window._clerkUser && window._clerkUser.id;
+      if(owner) catalog = JSON.parse(localStorage.getItem('warehub_sku_catalog:'+owner) || '[]');
+    } catch(e){ catalog = []; }
+    if(catalog.length) window._skuCatalog = catalog;
+  }
+  if(catalog.length){
+    return catalog.slice().sort(function(x, y){ return String(x.sku||'').localeCompare(String(y.sku||'')); });
+  }
   var map = window._skuAliases || (typeof fnskuMap === 'function' ? fnskuMap() : {});
   var rows = [];
   var seen = {};
@@ -9144,7 +9169,7 @@ function skuPairRows(){
       var key = [a, b].sort().join('|');
       if(!a || !b || a === b || seen[key]) return;
       seen[key] = 1;
-      rows.push({ sku: a, barcode: b });
+      rows.push({ sku: a, barcode: b, name: '' });
     });
   });
   return rows.sort(function(x, y){ return x.sku.localeCompare(y.sku); });
@@ -9224,15 +9249,25 @@ function inventoryLoadMatrix(headers, rows){
   });
   if(iLoc<0){
     var pairs = 0;
+    var skipped = 0;
+    var bySku = {};
     records.forEach(function(r){
       var codes = inventoryCodesFromRow(r.sku, r.barcode);
+      if(!codes.length){ if(String(r.sku||'').trim()) skipped++; return; }
       if(codes.length>1){ linkSkuCodes(codes); pairs++; }
+      var fn = codes.filter(function(c){ return c.indexOf('X00')===0; });
+      var seller = codes.filter(function(c){ return c.indexOf('X00')!==0; });
+      var sku = seller[0] || codes[0];
+      var barcode = (fn[0] && fn[0]!==sku) ? fn[0] : (codes.filter(function(c){ return c!==sku; })[0] || '');
+      var prev = bySku[sku];
+      if(!prev || (!prev.barcode && barcode)){
+        bySku[sku] = { sku: sku, barcode: barcode, name: String(r.name||'').trim() };
+      }
     });
-    if(pairs) skuAliasSync();
+    window._skuCatalog = Object.keys(bySku).map(function(k){ return bySku[k]; });
+    skuAliasSync();
     if(typeof renderLocations==='function') renderLocations();
-    locStatus(pairs
-      ? 'Linked '+pairs+' SKU / FNSKU pairs on this account. Pack scan accepts either code. This sheet has no bin column, so locations were not changed.'
-      : 'No SKU / FNSKU pairs found. Put both codes in the SKU cell, like X004ABC (DC-01).', !!pairs);
+    locStatus('Imported '+window._skuCatalog.length+' SKUs. '+pairs+' of them also have an FNSKU and are linked for pack scan.'+(skipped?' '+skipped+' rows had no readable SKU.':''), window._skuCatalog.length>0);
     return;
   }
   inventoryApplyRows(records);
@@ -14208,6 +14243,7 @@ function aiDoActions(actions){
     window._inventoryDirty = false;
     window._tenantInventoryReady = true;
     if(s.sku_aliases) applySkuAliasMap(s.sku_aliases, s.sku_alias_clerk_id);
+    if(Array.isArray(s.sku_catalog)) applySkuCatalog(s.sku_catalog, s.sku_alias_clerk_id);
     if(typeof renderLocations === 'function') renderLocations();
   };
 
