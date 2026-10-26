@@ -1358,7 +1358,7 @@ body.station-mode #pack-left{font-size:120px;}
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">INVENTORY</div>
           <div style="font-size:18px;font-weight:700;margin-top:2px;">📍 Locations</div>
           <div style="font-size:11px;color:var(--td);margin-top:4px;line-height:1.5;max-width:420px;">
-            SKU → bin for the daily pull areas: W-1, B-1, C-1, R-1, R-2, R-3, A-1. Other warehouse areas in the sheet are ignored.
+            Each account imports its own sheet. A SKU cell can hold two codes, such as an FNSKU and the seller SKU in parentheses. Both are saved to that account, so a scan of either one matches.
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -4388,9 +4388,9 @@ function sameLabelScan(scanned, order){
 }
 
 function fnskuStoreKey(){
-  var uid = 'local';
-  try { uid = localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
-  return 'warehub_fnsku:' + uid;
+  var uid = (window._clerkUser && window._clerkUser.id) || '';
+  if(!uid){ try { uid = localStorage.getItem('warehub_active_user') || ''; } catch(e){} }
+  return 'warehub_fnsku:' + (uid || 'local');
 }
 function fnskuMap(){
   try {
@@ -4459,17 +4459,66 @@ function currentOpenSku(){
   var row = verifySkus.find(function(v){ return !v.scanned && !v.replaced; });
   return row ? row.sku : '';
 }
+function splitSkuCodes(raw){
+  var text = String(raw||'').toUpperCase().replace(/\u00a0/g,' ');
+  var found = [];
+  function add(chunk){
+    String(chunk||'').split(/[^A-Z0-9\-]+/).forEach(function(part){
+      if(!part || part.length<3 || part.length>40) return;
+      if(!/[A-Z]/.test(part)) return;
+      if(found.indexOf(part)<0) found.push(part);
+    });
+  }
+  var re = /[（(]([^）)]+)[）)]/g;
+  var m, insides = [];
+  while((m = re.exec(text))) insides.push(m[1]);
+  add(text.replace(/[（(][^）)]*[）)]/g, ' '));
+  insides.forEach(add);
+  return found;
+}
+function linkSkuCodes(codes){
+  codes = (codes||[]).filter(Boolean);
+  for(var i=0;i<codes.length;i++){
+    for(var j=0;j<codes.length;j++){
+      if(i!==j) saveFnsku(codes[i], codes[j]);
+    }
+  }
+}
+function skuAliasSync(){
+  var map = fnskuMap();
+  window._skuAliases = map;
+  var owner = window._clerkUser && window._clerkUser.id;
+  if(!owner || typeof window.warehubApi !== 'function') return;
+  window.warehubApi('POST', '/api/settings', {
+    sku_aliases: map,
+    sku_alias_clerk_id: owner
+  }).catch(function(e){ console.error('[sku-alias] cloud save failed:', e); });
+}
+function applySkuAliasMap(map, ownerId){
+  if(!map || typeof map !== 'object') return;
+  var me = window._clerkUser && window._clerkUser.id;
+  if(ownerId && me && ownerId !== me) return;
+  window._skuAliases = map;
+  try { localStorage.setItem(fnskuStoreKey(), JSON.stringify(map)); } catch(e){}
+}
 function codeMatchesSku(code, sku){
   code = String(code||'').toUpperCase();
   sku = String(sku||'').toUpperCase();
   if(!code || !sku) return false;
   if(code === sku) return true;
   if(sku.length>=4 && code.length>sku.length && code.slice(-sku.length)===sku) return true;
+  var map = window._skuAliases || fnskuMap();
+  if((map[sku]||[]).indexOf(code)>=0) return true;
+  if((map[code]||[]).indexOf(sku)>=0) return true;
   var inv = window._inventoryData || {};
   var ok = false;
   Object.keys(inv).forEach(function(loc){
     ((inv[loc]||{}).skus||[]).forEach(function(item){
-      if(String(item.sku||'').toUpperCase()===sku && String(item.barcode||'').toUpperCase()===code) ok = true;
+      var codes = splitSkuCodes(item.sku).concat(splitSkuCodes(item.barcode));
+      (item.aliases||[]).forEach(function(a){ codes = codes.concat(splitSkuCodes(a)); });
+      var hasScan = codes.indexOf(code)>=0 || String(item.barcode||'').toUpperCase()===code || String(item.sku||'').toUpperCase()===code;
+      var hasLabel = codes.indexOf(sku)>=0 || String(item.sku||'').toUpperCase()===sku || String(item.barcode||'').toUpperCase()===sku;
+      if(hasScan && hasLabel) ok = true;
     });
   });
   return ok;
@@ -7695,6 +7744,9 @@ async function rackConfigLoad(){
   } else if(owner && window._inventoryOwner !== owner){
     window._inventoryData = {};
   }
+  if(result && result.settings && result.settings.sku_aliases){
+    applySkuAliasMap(result.settings.sku_aliases, result.settings.sku_alias_clerk_id);
+  }
 }
 
 // Shared save point for window._inventoryData — local cache + cloud, used
@@ -9041,86 +9093,109 @@ function rackShowPickRoute(){
 
 window._inventoryData = {};
 
-var PULL_AREA_CODES = ['W-1','B-1','C-1','R-1','R-2','R-3','A-1'];
-function pullAreaOf(loc, area){
-  var blob = (String(loc||'')+' '+String(area||'')).toUpperCase();
-  for(var i=0;i<PULL_AREA_CODES.length;i++){
-    var code = PULL_AREA_CODES[i];
-    var re = new RegExp('(^|[^A-Z0-9])'+code.replace('-','\\-')+'(?![0-9])');
-    if(re.test(blob)) return code;
-  }
-  return '';
-}
 function invItemMatchesSku(item, sku){
   var want = String(sku||'').toUpperCase();
   if(!want || !item) return false;
-  return String(item.sku||'').toUpperCase()===want || String(item.barcode||'').toUpperCase()===want;
+  var codes = [item.sku, item.barcode].concat(item.aliases||[]);
+  return codes.some(function(c){ return String(c||'').toUpperCase()===want; });
 }
-function inventoryHeaderIndex(headers, needles){
+function inventoryHeaderIndex(headers, test){
   for(var i=0;i<headers.length;i++){
-    var h = String(headers[i]||'').toUpperCase();
-    for(var n=0;n<needles.length;n++){
-      if(h.indexOf(needles[n])>=0) return i;
-    }
+    var h = String(headers[i]||'').toUpperCase().replace(/\s+/g,' ').trim();
+    if(test(h)) return i;
   }
   return -1;
 }
-function inventoryApplyPullRows(records){
+function inventoryCodesFromRow(rawSku, rawBarcode){
+  var codes = splitSkuCodes(rawSku);
+  splitSkuCodes(rawBarcode).forEach(function(c){ if(codes.indexOf(c)<0) codes.push(c); });
+  return codes;
+}
+function inventoryApplyRows(records){
   if(!window._inventoryData) window._inventoryData = {};
-  Object.keys(window._inventoryData).forEach(function(loc){
-    if(pullAreaOf(loc, (window._inventoryData[loc]||{}).area || '')) delete window._inventoryData[loc];
-  });
   var bins = {};
   var skuCount = 0;
+  var pairCount = 0;
   (records||[]).forEach(function(r){
-    var zone = pullAreaOf(r.location, r.area);
-    if(!zone) return;
-    var sku = String(r.sku||'').trim().toUpperCase();
+    var codes = inventoryCodesFromRow(r.sku, r.barcode);
     var loc = String(r.location||'').trim().toUpperCase();
-    if(!sku || !loc) return;
+    if(!codes.length) return;
+    if(codes.length>1){ linkSkuCodes(codes); pairCount++; }
+    if(!loc) return;
+    var fn = codes.filter(function(c){ return c.indexOf('X00')===0; });
+    var seller = codes.filter(function(c){ return c.indexOf('X00')!==0; });
+    var sku = seller[0] || codes[0];
+    var barcode = (fn[0] && fn[0]!==sku) ? fn[0] : (codes.filter(function(c){ return c!==sku; })[0] || '');
     var qty = parseFloat(r.qty);
     if(!(qty > 0)) return;
-    if(!bins[loc]) bins[loc] = {skus:[], area: zone};
-    var barcode = String(r.barcode||'').replace(/\s+/g,'').trim().toUpperCase();
+    if(!bins[loc]) bins[loc] = {skus:[], area: String(r.area||'').trim()};
     bins[loc].skus.push({
       sku: sku,
       name: String(r.name||'').trim(),
       qty: Math.round(qty),
       unit: 'PCS',
-      barcode: barcode && barcode !== sku ? barcode : ''
+      barcode: barcode,
+      aliases: codes.filter(function(c){ return c!==sku; })
     });
     skuCount++;
-    if(barcode && barcode !== sku) saveFnsku(sku, barcode);
   });
   Object.keys(bins).forEach(function(loc){ window._inventoryData[loc] = bins[loc]; });
   window._inventoryDirty = true;
   inventorySync();
+  if(pairCount) skuAliasSync();
   if(typeof renderLocations==='function') renderLocations();
   if(typeof rackHighlightInventory==='function') rackHighlightInventory();
-  pm('✓ Pull reference — '+skuCount+' SKUs in '+Object.keys(bins).length+' bins. Kept W-1, B-1, C-1, R-1, R-2, R-3, A-1 only.');
+  pm('✓ Inventory saved to this account — '+skuCount+' SKUs in '+Object.keys(bins).length+' bins.'+(pairCount?' '+pairCount+' SKU / FNSKU pairs linked for pack scan.':''));
 }
 function inventoryLoadMatrix(headers, rows){
   var H = (headers||[]).map(function(h){ return String(h||''); });
-  var iSku = inventoryHeaderIndex(H, ['SKU']);
-  var iBar = inventoryHeaderIndex(H, ['BARCODE','条码']);
-  var iName = inventoryHeaderIndex(H, ['PRODUCTNAME','PRODUCT_NAME']);
-  var iLoc = inventoryHeaderIndex(H, ['LOCATION','库位']);
-  var iArea = inventoryHeaderIndex(H, ['AREA','库区']);
-  var iQty = inventoryHeaderIndex(H, ['AVAILABLE','可用']);
-  if(iQty<0) iQty = inventoryHeaderIndex(H, ['TOTAL STOCK','总库存','QTY']);
-  if(iSku<0 || iLoc<0){ pm('✗ This sheet needs SKU and Location columns.'); return; }
+  var iSku = inventoryHeaderIndex(H, function(h){
+    if(/FNSKU|BARCODE|条码/.test(h)) return false;
+    return h==='SKU' || h.indexOf('SKU/')===0 || h.indexOf('SKU ' )===0 || /SELLER SKU|MERCHANT SKU|商家SKU|MSKU/.test(h);
+  });
+  if(iSku<0) iSku = inventoryHeaderIndex(H, function(h){ return h==='SKU' || (h.indexOf('SKU')>=0 && h.indexOf('FNSKU')<0 && h.indexOf('BARCODE')<0); });
+  var iBar = inventoryHeaderIndex(H, function(h){ return /BARCODE|FNSKU|条码|UPC|EAN/.test(h); });
+  var iName = inventoryHeaderIndex(H, function(h){ return /PRODUCT.?NAME|品名|TITLE/.test(h) || h==='NAME'; });
+  var iLoc = inventoryHeaderIndex(H, function(h){ return /库位/.test(h) || h==='LOCATION' || h.indexOf('LOCATION/')===0 || h==='BIN' || h.indexOf('BIN ')===0; });
+  var iArea = inventoryHeaderIndex(H, function(h){ return /库区/.test(h) || h==='AREA' || h.indexOf('AREA/')===0; });
+  var iQty = inventoryHeaderIndex(H, function(h){ return /AVAILABLE|可用|总数量/.test(h); });
+  if(iQty<0) iQty = inventoryHeaderIndex(H, function(h){ return /TOTAL STOCK|总库存|^QTY$|ON HAND/.test(h); });
+  if(iSku<0){ pm('✗ This sheet needs a SKU column.'); return; }
   var records = (rows||[]).map(function(cols){
     cols = cols || [];
     return {
       sku: cols[iSku],
       barcode: iBar>=0 ? cols[iBar] : '',
       name: iName>=0 ? cols[iName] : '',
-      location: cols[iLoc],
+      location: iLoc>=0 ? cols[iLoc] : '',
       area: iArea>=0 ? cols[iArea] : '',
       qty: iQty>=0 ? cols[iQty] : 0
     };
   });
-  inventoryApplyPullRows(records);
+  if(iLoc<0){
+    var pairs = 0;
+    records.forEach(function(r){
+      var codes = inventoryCodesFromRow(r.sku, r.barcode);
+      if(codes.length>1){ linkSkuCodes(codes); pairs++; }
+    });
+    if(pairs) skuAliasSync();
+    pm(pairs
+      ? '✓ Linked '+pairs+' SKU / FNSKU pairs on this account. Pack scan accepts either code.'
+      : '✗ No SKU / FNSKU pairs found. Put both codes in the SKU cell, like X004ABC (DC-01).');
+    return;
+  }
+  inventoryApplyRows(records);
+}
+function inventoryImportMatrix(matrix){
+  var at = 0;
+  for(var r=0;r<Math.min((matrix||[]).length, 20); r++){
+    var H = matrix[r] || [];
+    var hit = inventoryHeaderIndex(H, function(h){
+      return h==='SKU' || (h.indexOf('SKU')>=0 && h.indexOf('FNSKU')<0 && h.indexOf('BARCODE')<0);
+    });
+    if(hit>=0){ at = r; break; }
+  }
+  inventoryLoadMatrix(matrix[at] || [], matrix.slice(at+1));
 }
 
 function inventoryLoadCSV(text){
@@ -9128,7 +9203,9 @@ function inventoryLoadCSV(text){
   if(!lines.length) return;
   var headers = lines[0].split(',').map(function(h){ return h.trim(); });
   var upper = headers.map(function(h){ return h.toUpperCase(); });
-  if(inventoryHeaderIndex(upper, ['SKU'])>=0 && inventoryHeaderIndex(upper, ['LOCATION','库位'])>=0 && inventoryHeaderIndex(upper, ['AREA','库区','BARCODE','条码','AVAILABLE','可用'])>=0){
+  var looksLikeInventory = inventoryHeaderIndex(upper, function(h){ return h==='SKU' || (h.indexOf('SKU')>=0 && h.indexOf('FNSKU')<0); })>=0
+    && inventoryHeaderIndex(upper, function(h){ return h==='LOCATION' || h.indexOf('LOCATION/')===0 || h.indexOf('库位')>=0; })>=0;
+  if(looksLikeInventory){
     inventoryLoadMatrix(headers, lines.slice(1).map(function(line){ return line.split(','); }));
     return;
   }
@@ -9218,7 +9295,7 @@ function inventoryTriggerUpload(){
             var sheet=wb.Sheets[wb.SheetNames[0]];
             var matrix=XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:''});
             if(!matrix.length){ pm('✗ Empty inventory sheet.'); return; }
-            inventoryLoadMatrix(matrix[0], matrix.slice(1));
+            inventoryImportMatrix(matrix);
           }catch(err){ pm('✗ '+err.message); }
         };
         reader.readAsArrayBuffer(file);
@@ -14079,6 +14156,7 @@ function aiDoActions(actions){
     window._inventoryOwner = me;
     window._inventoryDirty = false;
     window._tenantInventoryReady = true;
+    if(s.sku_aliases) applySkuAliasMap(s.sku_aliases, s.sku_alias_clerk_id);
     if(typeof renderLocations === 'function') renderLocations();
   };
 
