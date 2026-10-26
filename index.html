@@ -2764,48 +2764,44 @@ function extractOrder(words, pageH){
 
   var H = pageH || 400;
 
-  var skuTopMin = H >= 900 ? H - 200 : H * 0.82;
-  var bottomZone = words.filter(function(w){return w.top >= skuTopMin && w.x < Math.max(H*0.55, 150);});
-  var skuW = bottomZone.filter(function(w){return /\*\d/.test(w.text);});
-
-  if(!skuW.length) skuW = words.filter(function(w){return /^[A-Z0-9][A-Z0-9\-]{1,18}\*\d+$/i.test(w.text);});
-  // Some labels have SKU split: "D1YP03B-T" and "*2" separately — join adjacent bottom-left tokens
-  if(!skuW.length){
-    var cands=bottomZone.filter(function(w){return /^[A-Z][A-Z0-9\-]{2,18}$/i.test(w.text);});
-    cands.forEach(function(c){
-      var nextW=bottomZone.filter(function(w){return w.x>c.x&&w.x<c.x+80&&Math.abs(w.top-c.top)<8;});
-      nextW.forEach(function(n){
-        if(/^\*\d+$/.test(n.text)) skuW.push({text:c.text+n.text,x:c.x,top:c.top});
-      });
-    });
+  function addLabelSku(found, sku, qty){
+    sku = String(sku||'').toUpperCase().replace(/[^A-Z0-9\-]/g,'');
+    qty = parseInt(qty,10)||1;
+    if(!sku || sku.length<3 || qty<1) return;
+    if(!/[A-Z]/.test(sku)) return;
+    if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE)$/i.test(sku)) return;
+    if(/^\d{6,}$/.test(sku)) return;
+    found.push({sku:sku, qty:qty});
   }
-  var skus=skuW.map(function(w){
-    // Handle "SKU*QTY*extra" — only take first two parts
-    var parts=w.text.split('*');
-    return{sku:parts[0].toUpperCase(),qty:parseInt(parts[1])||1,scanned:0,top:w.top||0};
+  var foundSkus=[];
+  // Every SKU*qty on the page. A bottom-left crop was keeping one line and
+  // letting a single scan pass a label that listed other SKUs above it.
+  words.forEach(function(w){
+    var t=String(w.text||'');
+    var re=/([A-Z0-9][A-Z0-9\-]{1,40})\s*[*x×]\s*(\d+)/ig;
+    var m;
+    while((m=re.exec(t))) addLabelSku(foundSkus, m[1], m[2]);
   });
-  // Drop tokens that are carrier words, zips, or tracking fragments. A loose
-  // "*digits" match was pulling reference lines and a neighboring label's
-  // SKU onto this page, so Pack Station showed a SKU that was not on the label.
-  skus=skus.filter(function(s){
-    if(!s.sku || s.sku.length<3) return false;
-    if(!/[A-Z]/.test(s.sku)) return false;
-    if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE)$/i.test(s.sku)) return false;
-    if(/^\d{6,}$/.test(s.sku)) return false;
-    return true;
+  words.forEach(function(w){
+    if(!/^[A-Z0-9][A-Z0-9\-]{2,40}$/i.test(w.text)) return;
+    if(/\*\d/.test(w.text)) return;
+    words.forEach(function(n){
+      if(n===w || Math.abs((n.top||0)-(w.top||0))>8) return;
+      if((n.x||0)<=(w.x||0) || (n.x||0)>(w.x||0)+100) return;
+      var qm=String(n.text||'').match(/^\*(\d+)$/) || String(n.text||'').match(/^[x×](\d+)$/i);
+      if(qm) addLabelSku(foundSkus, w.text, qm[1]);
+    });
   });
-  // Keep every different SKU on this label. Dropping all but the lowest line
-  // made a multi-item label look like one SKU, so one scan passed the package.
   var skuMerged={};
   var skuOrder=[];
-  skus.forEach(function(s){
+  foundSkus.forEach(function(s){
     if(!skuMerged[s.sku]){
       skuMerged[s.sku]={sku:s.sku,qty:0,scanned:0};
       skuOrder.push(s.sku);
     }
     skuMerged[s.sku].qty += s.qty||1;
   });
-  skus=skuOrder.map(function(k){return skuMerged[k];});
+  var skus=skuOrder.map(function(k){return skuMerged[k];});
   if(!skus.length) skus=[{sku:'UNKNOWN',qty:1,scanned:0}];
 
 
@@ -4497,6 +4493,13 @@ function acceptItemCode(sku, raw){
   clearErr();
   flash('ok');
   if(verifyDone()){
+    var stillOpen = openSkuKinds();
+    if(stillOpen.length){
+      setFb('Still need '+stillOpen.join(', '),'var(--am)');
+      renderActiveCard();
+      focusScan();
+      return true;
+    }
     setFb('✓ '+skuUp+' · '+code,'var(--gn)');
     completeOrder(activeOrder, activeOrder.tracking);
   } else {
