@@ -2825,29 +2825,12 @@ function extractOrder(words, pageH, pageW){
     });
     if(hit) addLabelSku(foundSkus, w.text, qty, w);
   });
-  // The warehouse SKU is the large type on the outer edge of the label.
-  // The reference SKU is smaller and one line inward. Keep only the large line.
-  var maxSkuSize = 0;
-  foundSkus.forEach(function(s){ if((s.size||0)>maxSkuSize) maxSkuSize=s.size; });
-  var bigSkus = foundSkus.filter(function(s){ return !maxSkuSize || (s.size||0) >= maxSkuSize*0.82; });
-  if(!bigSkus.length) bigSkus = foundSkus.slice();
-  var cx = W/2, cy = H/2;
-  bigSkus.sort(function(a,b){
-    var ds = (b.size||0)-(a.size||0);
-    if(Math.abs(ds)>0.75) return ds;
-    return Math.hypot(b.x-cx, b.top-cy) - Math.hypot(a.x-cx, a.top-cy);
-  });
-  var win = bigSkus[0];
-  var bottomSkus = [];
-  if(win){
-    var band = Math.max((win.size||10)*0.65, 6);
-    var ux = win.blx||1, uy = win.bly||0, px = -uy, py = ux;
-    bottomSkus = bigSkus.filter(function(s){
-      if((s.size||0) < (win.size||0)*0.82) return false;
-      var dx = (s.x||0)-(win.x||0), dy = (s.top||0)-(win.top||0);
-      return Math.abs(dx*px + dy*py) <= band;
-    });
-  }
+  // The reference SKU is the line above. The only SKU that counts is the
+  // one on the bottom line of the label. Font size is not used, because the
+  // reference line is often close enough in size to be kept by mistake.
+  var bottomTop = -1;
+  foundSkus.forEach(function(s){ if((s.top||0) > bottomTop) bottomTop = s.top; });
+  var bottomSkus = foundSkus.filter(function(s){ return bottomTop - (s.top||0) <= 5; });
   var skuMerged={};
   var skuOrder=[];
   bottomSkus.forEach(function(s){
