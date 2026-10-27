@@ -2816,21 +2816,45 @@ function extractOrder(words, pageH, pageW){
   words.forEach(function(w){
     if(!/^[A-Z0-9][A-Z0-9\-]{2,40}$/i.test(w.text)) return;
     if(/\*\d/.test(w.text)) return;
-    var qty = 1;
-    var hit = false;
+    var qty = 0;
+    var best = 1e9;
     words.forEach(function(n){
       if(n===w || !sameTextLine(w, n)) return;
       var qm=String(n.text||'').match(/^\*(\d+)$/) || String(n.text||'').match(/^[x×](\d+)$/i);
-      if(qm){ qty = parseInt(qm[1],10)||1; hit = true; }
+      if(!qm) return;
+      var dx = (n.x||0)-(w.x||0);
+      if(dx < -8 || dx > 90) return;
+      if(dx < best){ best = dx; qty = parseInt(qm[1],10)||1; }
     });
-    if(hit) addLabelSku(foundSkus, w.text, qty, w);
+    if(qty) addLabelSku(foundSkus, w.text, qty, w);
   });
-  // The reference SKU is the line above. The only SKU that counts is the
-  // one on the bottom line of the label. Font size is not used, because the
-  // reference line is often close enough in size to be kept by mistake.
-  var bottomTop = -1;
-  foundSkus.forEach(function(s){ if((s.top||0) > bottomTop) bottomTop = s.top; });
-  var bottomSkus = foundSkus.filter(function(s){ return bottomTop - (s.top||0) <= 5; });
+  // Smaller reference SKU is often on the same baseline as the real one,
+  // so a "bottom line" check keeps both. Keep the largest type only.
+  var maxSkuSize = 0;
+  foundSkus.forEach(function(s){ if((s.size||0) > maxSkuSize) maxSkuSize = s.size; });
+  var sized = maxSkuSize ? foundSkus.filter(function(s){ return (s.size||0) >= maxSkuSize * 0.78; }) : foundSkus.slice();
+  if(!sized.length) sized = foundSkus.slice();
+  function edgeDist(s){
+    return Math.min(s.top||0, Math.max(0, H-(s.top||0)), s.x||0, Math.max(0, W-(s.x||0)));
+  }
+  sized.sort(function(a,b){
+    var ds = (b.size||0)-(a.size||0);
+    if(Math.abs(ds) > 0.8) return ds;
+    var de = edgeDist(a)-edgeDist(b);
+    if(Math.abs(de) > 6) return de;
+    return (b.top||0)-(a.top||0);
+  });
+  var win = sized[0];
+  var bottomSkus = [];
+  if(win){
+    var ux = win.blx||1, uy = win.bly||0, px = -uy, py = ux;
+    var band = Math.max(4, (win.size||10)*0.4);
+    bottomSkus = sized.filter(function(s){
+      if((s.size||0) < (win.size||0)*0.78) return false;
+      var dx = (s.x||0)-(win.x||0), dy = (s.top||0)-(win.top||0);
+      return Math.abs(dx*px + dy*py) <= band;
+    });
+  }
   var skuMerged={};
   var skuOrder=[];
   bottomSkus.forEach(function(s){
