@@ -2511,11 +2511,15 @@ async function parsePdf(file){
       var words = ct.items
         .filter(function(it){ return it.str && it.str.trim(); })
         .map(function(it){
-          var sx = Math.hypot(it.transform[0]||0, it.transform[1]||0);
+          var a = it.transform[0]||0, b = it.transform[1]||0;
+          var sx = Math.hypot(a, b);
           var sy = Math.hypot(it.transform[2]||0, it.transform[3]||0);
           var size = Math.max(sx, sy);
           if(size < 0.5) size = it.height || 0;
-          return {text:it.str.trim(), x:it.transform[4], top:H-it.transform[5], size:size};
+          var blx = a, bly = -b;
+          var bl = Math.hypot(blx, bly);
+          if(bl < 0.5){ blx = 1; bly = 0; bl = 1; }
+          return {text:it.str.trim(), x:it.transform[4], top:H-it.transform[5], size:size, blx:blx/bl, bly:bly/bl};
         });
 
       // Debug: only log first 3 pages in detail to avoid DOM flood
@@ -2524,7 +2528,7 @@ async function parsePdf(file){
         words.forEach(function(w){ dbg('  top='+w.top.toFixed(1)+' x='+w.x.toFixed(1)+' "'+w.text+'"'); });
       }
 
-      var o = extractOrder(words, H);
+      var o = extractOrder(words, H, vp.width);
 
       // Narrow, targeted OCR rescue — ONLY for pages where text extraction
       // found essentially nothing (confirmed pattern: just a bare SKU*qty
@@ -2750,7 +2754,7 @@ function matchLabelDate(words){
   return null;
 }
 
-function extractOrder(words, pageH){
+function extractOrder(words, pageH, pageW){
   function near(target,tol){
     tol=tol||8;
     return words.filter(function(w){return Math.abs(w.top-target)<tol;}).sort(function(a,b){return a.x-b.x;});
@@ -2776,7 +2780,22 @@ function extractOrder(words, pageH){
 
 
   var H = pageH || 400;
+  var W = pageW || 288;
 
+  function sameTextLine(a, b){
+    var ux = (a&&a.blx)||1, uy = (a&&a.bly)||0;
+    var px = -uy, py = ux;
+    var dx = (b.x||0)-(a.x||0), dy = (b.top||0)-(a.top||0);
+    var across = Math.abs(dx*px + dy*py);
+    return across <= Math.max(7, ((a.size||10)+(b.size||0))*0.35);
+  }
+  function referenceLine(word){
+    return words.some(function(n){
+      if(!n || n===word) return false;
+      if(!sameTextLine(word, n)) return false;
+      return /reference|^ref\b|cust\s*ref/i.test(n.text);
+    });
+  }
   function addLabelSku(found, sku, qty, word){
     sku = String(sku||'').toUpperCase().replace(/[^A-Z0-9\-]/g,'');
     qty = parseInt(qty,10)||1;
@@ -2784,43 +2803,51 @@ function extractOrder(words, pageH){
     if(!/[A-Z]/.test(sku)) return;
     if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE|LABEL|POSTAGE)$/i.test(sku)) return;
     if(/^\d{6,}$/.test(sku)) return;
-    found.push({sku:sku, qty:qty, top:word?word.top:0, size:word?word.size:0, x:word?word.x:0});
+    if(word && referenceLine(word)) return;
+    found.push({sku:sku, qty:qty, top:word?word.top:0, size:word?word.size:0, x:word?word.x:0, blx:word&&word.blx||1, bly:word&&word.bly||0});
   }
   var foundSkus=[];
-  // The reference SKU is printed smaller, above the real one. Do not read it.
-  // Only text in the bottom strip of the label is the warehouse SKU.
-  var skuZoneTop = H * 0.72;
-  var skuWords = words.filter(function(w){ return (w.top||0) >= skuZoneTop; });
-  if(!skuWords.length) skuWords = words.slice();
-  skuWords.forEach(function(w){
+  words.forEach(function(w){
     var t=String(w.text||'');
     var re=/([A-Z0-9][A-Z0-9\-]{1,40})\s*[*x×]\s*(\d+)/ig;
     var m;
     while((m=re.exec(t))) addLabelSku(foundSkus, m[1], m[2], w);
   });
-  skuWords.forEach(function(w){
+  words.forEach(function(w){
     if(!/^[A-Z0-9][A-Z0-9\-]{2,40}$/i.test(w.text)) return;
     if(/\*\d/.test(w.text)) return;
     var qty = 1;
     var hit = false;
-    skuWords.forEach(function(n){
-      if(n===w) return;
-      if(Math.abs((n.top||0)-(w.top||0)) > Math.max(8, (w.size||0)*0.8)) return;
-      if((n.x||0) < (w.x||0)-10 || (n.x||0) > (w.x||0)+160) return;
+    words.forEach(function(n){
+      if(n===w || !sameTextLine(w, n)) return;
       var qm=String(n.text||'').match(/^\*(\d+)$/) || String(n.text||'').match(/^[x×](\d+)$/i);
       if(qm){ qty = parseInt(qm[1],10)||1; hit = true; }
     });
     if(hit) addLabelSku(foundSkus, w.text, qty, w);
   });
+  // The warehouse SKU is the large type on the outer edge of the label.
+  // The reference SKU is smaller and one line inward. Keep only the large line.
   var maxSkuSize = 0;
-  foundSkus.forEach(function(s){ if((s.size||0) > maxSkuSize) maxSkuSize = s.size; });
-  if(maxSkuSize > 0){
-    foundSkus = foundSkus.filter(function(s){ return (s.size||0) >= maxSkuSize * 0.72; });
+  foundSkus.forEach(function(s){ if((s.size||0)>maxSkuSize) maxSkuSize=s.size; });
+  var bigSkus = foundSkus.filter(function(s){ return !maxSkuSize || (s.size||0) >= maxSkuSize*0.82; });
+  if(!bigSkus.length) bigSkus = foundSkus.slice();
+  var cx = W/2, cy = H/2;
+  bigSkus.sort(function(a,b){
+    var ds = (b.size||0)-(a.size||0);
+    if(Math.abs(ds)>0.75) return ds;
+    return Math.hypot(b.x-cx, b.top-cy) - Math.hypot(a.x-cx, a.top-cy);
+  });
+  var win = bigSkus[0];
+  var bottomSkus = [];
+  if(win){
+    var band = Math.max((win.size||10)*0.65, 6);
+    var ux = win.blx||1, uy = win.bly||0, px = -uy, py = ux;
+    bottomSkus = bigSkus.filter(function(s){
+      if((s.size||0) < (win.size||0)*0.82) return false;
+      var dx = (s.x||0)-(win.x||0), dy = (s.top||0)-(win.top||0);
+      return Math.abs(dx*px + dy*py) <= band;
+    });
   }
-  var bottomTop = -1;
-  foundSkus.forEach(function(s){ if(s.top > bottomTop) bottomTop = s.top; });
-  var bottomSkus = foundSkus.filter(function(s){ return bottomTop - s.top <= 4; });
-  if(!bottomSkus.length) bottomSkus = foundSkus;
   var skuMerged={};
   var skuOrder=[];
   bottomSkus.forEach(function(s){
