@@ -6393,7 +6393,7 @@ function exportPayrollCSV(){
 // time, instead of showing whatever was true the moment the page loaded.
 async function floorPoll(){
   if(typeof apiReady !== 'function' || !apiReady()) return;
-  var result = await apiCall('GET', '/api/orders').catch(function(){ return null; });
+  var result = await apiCall('GET', '/api/orders?day='+encodeURIComponent(todayISO())).catch(function(){ return null; });
   if(!result || !result.orders) return;
   var byTracking = {};
   orders.forEach(function(o){ byTracking[o.tracking] = o; });
@@ -13920,12 +13920,17 @@ function aiDoActions(actions){
     }
     if(result && result.inserted != null){
       // Fetch back with API IDs so we can PATCH on complete
-      var fresh = await apiCall('GET', '/api/orders');
+      var fresh = await apiCall('GET', '/api/orders?day='+encodeURIComponent(todayISO()));
       if(fresh && fresh.orders){
         fresh.orders.forEach(function(apiOrder){
           var local = orders.find(function(o){ return o.tracking === apiOrder.tracking && !o.apiId; });
           if(local) local.apiId = apiOrder.id;
         });
+        window._accountTodayOrders = fresh.orders.map(accountOrderFromApi).filter(function(o){
+          return o.importedOn===todayISO();
+        });
+        window._ordersFetchedAt = Date.now();
+        if(typeof refreshAfterPack==='function') refreshAfterPack();
       }
       if(statusEl){
         statusEl.textContent = '✓ Synced — this batch is now searchable in Out-of-Stock.';
@@ -13939,8 +13944,8 @@ function aiDoActions(actions){
     if(!apiReady() || !order) return;
     var id = order.apiId;
     if(!id){
-      var fresh = await apiCall('GET', '/api/orders');
-      var hit = fresh && fresh.orders && fresh.orders.find(function(o){ return o.tracking===order.tracking; });
+      var looked = await apiCall('GET', '/api/orders/lookup?tracking='+encodeURIComponent(order.tracking||''));
+      var hit = looked && looked.order;
       if(hit){ id = hit.id; order.apiId = id; }
     }
     if(!id) return;
@@ -13964,10 +13969,16 @@ function aiDoActions(actions){
       orderStartTime: null, orderEndTime: null
     };
   }
-  window.apiLoadOrders = async function(){
+  window.apiLoadOrders = async function(force){
     if(!apiReady()) return;
-    var result = await apiCall('GET', '/api/orders');
+    var now = Date.now();
+    if(!force && window._ordersFetchedAt && (now - window._ordersFetchedAt) < 120000 && window._accountTodayOrders){
+      refreshAfterPack();
+      return;
+    }
+    var result = await apiCall('GET', '/api/orders?day='+encodeURIComponent(todayISO()));
     if(!result || !result.orders) return;
+    window._ordersFetchedAt = Date.now();
     var mapped = result.orders.map(accountOrderFromApi);
     var today = todayISO();
     var doneLocal = {};
