@@ -4340,7 +4340,7 @@ function setPackState(state){
     if(inp) inp.placeholder = t('pack_scan_placeholder');
     if(lbl){ lbl.textContent=t('pack_scan_step1'); lbl.style.color=''; }
   } else if(state==='verify-items'){
-    if(inp) inp.placeholder = 'Scan each large SKU once';
+    if(inp) inp.placeholder = 'Scan item SKU or FNSKU';
     if(lbl){ lbl.textContent='ITEM →'; lbl.style.color='var(--am)'; }
   }
   renderActiveCard();
@@ -4395,7 +4395,7 @@ function beginItemVerify(order){
   });
   setPackState('verify-items');
   clearErr();
-  setFb('Different large SKUs. Scan each one once.','var(--cy)');
+  setFb(openSkuKinds().length>1 ? 'Different items. Scan each SKU or FNSKU once.' : 'Label matched. Scan the item SKU or FNSKU.','var(--cy)');
   flash('ok');
   renderActiveCard();
   focusScan();
@@ -4466,11 +4466,7 @@ function cleanScanCode(raw){
     .trim();
 }
 function focusNextItem(){
-  setTimeout(function(){
-    var box = document.querySelector('#checklist .pack-item-fnsku');
-    if(box) box.focus();
-    else focusScan();
-  }, 120);
+  focusScan();
 }
 function scanIsTracking(code){
   var n = cleanScanCode(code).replace(/[^A-Z0-9]/g,'');
@@ -4554,10 +4550,15 @@ function codeMatchesSku(code, sku){
   sku = String(sku||'').toUpperCase();
   if(!code || !sku) return false;
   if(code === sku) return true;
-  if(sku.length>=4 && code.length>sku.length && code.slice(-sku.length)===sku) return true;
   var map = window._skuAliases || fnskuMap();
   if((map[sku]||[]).indexOf(code)>=0) return true;
   if((map[code]||[]).indexOf(sku)>=0) return true;
+  var catalog = window._skuCatalog || [];
+  for(var i=0;i<catalog.length;i++){
+    var row = catalog[i] || {};
+    var codes = splitSkuCodes(row.sku).concat(splitSkuCodes(row.barcode));
+    if(codes.indexOf(code)>=0 && codes.indexOf(sku)>=0) return true;
+  }
   var inv = window._inventoryData || {};
   var ok = false;
   Object.keys(inv).forEach(function(loc){
@@ -4570,6 +4571,24 @@ function codeMatchesSku(code, sku){
     });
   });
   return ok;
+}
+function pairedCodes(sku){
+  sku = String(sku||'').toUpperCase();
+  var out = [];
+  function add(c){
+    c = String(c||'').toUpperCase().trim();
+    if(!c || c===sku || out.indexOf(c)>=0) return;
+    out.push(c);
+  }
+  var map = window._skuAliases || fnskuMap();
+  (map[sku]||[]).forEach(add);
+  Object.keys(map).forEach(function(k){ if((map[k]||[]).indexOf(sku)>=0) add(k); });
+  (window._skuCatalog||[]).forEach(function(row){
+    var codes = splitSkuCodes(row.sku).concat(splitSkuCodes(row.barcode));
+    if(codes.indexOf(sku)<0) return;
+    codes.forEach(add);
+  });
+  return out.slice(0, 3);
 }
 function acceptItemCode(sku, raw){
   var code = cleanScanCode(raw);
@@ -6099,21 +6118,19 @@ function renderActiveCard(){
       else if(v.scanned) grouped[v.sku].scanned++;
     });
     checklist.innerHTML='<div style="margin-top:12px;">'
-      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">LARGE SKUS · SCAN EACH ONE ONCE</div>'
+      +'<div style="font-size:9px;letter-spacing:2px;color:var(--am);margin-bottom:6px;">SCAN THE ITEM — SKU OR FNSKU</div>'
       +Object.keys(grouped).map(function(sku){
         var g=grouped[sku];
         var filled=g.scanned+g.replaced;
         var done=filled>=g.total;
         var safe=sku.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        var known=fnskuFor(sku);
+        var also=pairedCodes(sku);
         return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;">'
           +'<div class="ski-check">'+(done?'✓':'○')+'</div>'
           +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
           +'<div class="ski-qty">qty '+g.qty+(g.replaced?' · replaced':'')+'</div>'
-          +(done ? (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
-            : '<input class="pack-item-fnsku" placeholder="FNSKU" autocomplete="off" style="width:190px;padding:6px 8px;font-size:12px;font-family:monospace;border-radius:6px;background:var(--bg);border:1px solid var(--cy);color:var(--tx);" oninput="fnskuFieldInput(this, \''+safe+'\')" onkeydown="fnskuFieldKey(event, \''+safe+'\')"/>'
-            + (known ? '<span style="font-size:10px;color:var(--td);font-family:monospace;">'+known+'</span>' : '')
-            + '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
+          +(also.length ? '<span style="font-size:10px;color:var(--cy);font-family:monospace;">same as '+also.join(' / ')+'</span>' : '')
+          +(done ? '' : '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
       }).join('')
       +'<div id="replace-box" style="display:none;margin-top:8px;padding:8px;border:1px solid var(--am);border-radius:8px;">'
@@ -9233,8 +9250,8 @@ function inventoryApplyRows(records){
     if(!codes.length) return;
     if(codes.length>1){ linkSkuCodes(codes); pairCount++; }
     if(!loc) return;
-    var fn = codes.filter(function(c){ return c.indexOf('X00')===0; });
-    var seller = codes.filter(function(c){ return c.indexOf('X00')!==0; });
+    var fn = codes.filter(function(c){ return /^(X00|B0)/.test(c); });
+    var seller = codes.filter(function(c){ return !/^(X00|B0)/.test(c); });
     var sku = seller[0] || codes[0];
     var barcode = (fn[0] && fn[0]!==sku) ? fn[0] : (codes.filter(function(c){ return c!==sku; })[0] || '');
     var qty = parseFloat(r.qty);
@@ -9291,8 +9308,8 @@ function inventoryLoadMatrix(headers, rows){
       var codes = inventoryCodesFromRow(r.sku, r.barcode);
       if(!codes.length){ if(String(r.sku||'').trim()) skipped++; return; }
       if(codes.length>1){ linkSkuCodes(codes); pairs++; }
-      var fn = codes.filter(function(c){ return c.indexOf('X00')===0; });
-      var seller = codes.filter(function(c){ return c.indexOf('X00')!==0; });
+      var fn = codes.filter(function(c){ return /^(X00|B0)/.test(c); });
+      var seller = codes.filter(function(c){ return !/^(X00|B0)/.test(c); });
       var sku = seller[0] || codes[0];
       var barcode = (fn[0] && fn[0]!==sku) ? fn[0] : (codes.filter(function(c){ return c!==sku; })[0] || '');
       var prev = bySku[sku];
