@@ -2789,7 +2789,11 @@ function extractOrder(words, pageH, pageW){
     if(!/[A-Z]/.test(sku)) return;
     if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE|LABEL|POSTAGE)$/i.test(sku)) return;
     if(/^\d{6,}$/.test(sku)) return;
-    found.push({sku:sku, qty:qty, size:word&&word.size||0});
+    if(word && words.some(function(n){
+      if(Math.abs((n.top||0)-(word.top||0)) > Math.max(8, (word.size||10)*0.8)) return false;
+      return /reference|^ref\b|cust\s*ref/i.test(n.text);
+    })) return;
+    found.push({sku:sku, qty:qty, size:word&&word.size||0, top:word&&word.top||0});
   }
   var foundSkus=[];
   words.forEach(function(w){
@@ -2812,14 +2816,19 @@ function extractOrder(words, pageH, pageW){
     });
     if(qty) addLabelSku(foundSkus, w.text, qty, w);
   });
-  // Real items are the large type at the bottom. A smaller SKU above that
-  // block is the reference line and is not an item. Several large lines
-  // are a real multi-SKU label, so keep every one of that size.
-  var maxSkuSize = 0;
-  foundSkus.forEach(function(s){ if((s.size||0)>maxSkuSize) maxSkuSize=s.size; });
-  var bottomSkus = maxSkuSize
-    ? foundSkus.filter(function(s){ return (s.size||0) >= maxSkuSize * 0.82; })
-    : foundSkus.slice();
+  // The reference SKU is smaller, or it sits above the bottom block.
+  // Keep the large bottom block only. Two large lines there are a real multi-SKU.
+  var maxSkuSize = 0, bottomTop = -1;
+  foundSkus.forEach(function(s){
+    if((s.size||0)>maxSkuSize) maxSkuSize=s.size;
+    if((s.top||0)>bottomTop) bottomTop=s.top;
+  });
+  var band = Math.max(maxSkuSize * 1.35, 16);
+  var bottomSkus = foundSkus.filter(function(s){
+    if(maxSkuSize && (s.size||0) < maxSkuSize * 0.92) return false;
+    if(bottomTop - (s.top||0) > band) return false;
+    return true;
+  });
   var skuMerged={};
   var skuOrder=[];
   bottomSkus.forEach(function(s){
