@@ -1155,6 +1155,7 @@ body.station-mode #pack-left{font-size:120px;}
           </div>
         </div>
         <div id="err-bar"></div>
+        <div id="pair-confirm" style="display:none;margin:8px 0;padding:8px 10px;border:1px solid var(--am);border-radius:8px;background:var(--sur);"></div>
         <div id="scan-row">
           <div id="scan-mode-lbl" style="font-size:9px;letter-spacing:2px;color:var(--td);white-space:nowrap;flex-shrink:0;">SCAN →</div>
           <input id="scan-in" placeholder="Scan shipping label to begin…" data-i18n-placeholder="pack_scan_placeholder" autocomplete="off" onkeydown="mainScanKeyHandler(event)"/>
@@ -1176,6 +1177,16 @@ body.station-mode #pack-left{font-size:120px;}
           <div id="replace-summary" style="font-size:12px;margin-top:8px;color:var(--td);">No replacements yet.</div>
           <div id="replace-rows" style="max-height:160px;overflow:auto;margin-top:6px;"></div>
           <div id="replace-last" style="margin-top:8px;"></div>
+        </div>
+        <div id="pair-sheet" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
+          <div class="lbl" style="margin:0;">SKU / FNSKU PAIRS</div>
+          <div style="font-size:10px;color:var(--td);margin-top:4px;">For items missing from the inventory sheet. Confirm a pair once. The next scan of either code passes.</div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+            <input id="pair-sku" placeholder="SKU" style="flex:1;min-width:120px;padding:7px 9px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:monospace;"/>
+            <input id="pair-fnsku" placeholder="FNSKU" style="flex:1;min-width:120px;padding:7px 9px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:monospace;"/>
+            <button class="btn" type="button" onclick="saveManualPair()">Save pair</button>
+          </div>
+          <div id="pair-rows" style="max-height:160px;overflow:auto;margin-top:8px;font-size:12px;color:var(--td);">No learned pairs yet.</div>
         </div>
       </div>
       <div id="queue"></div>
@@ -1616,7 +1627,7 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
-  if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); renderReplacementSheet(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
+  if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); renderReplacementSheet(); if(typeof renderPairTable==='function') renderPairTable(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
   if(name==='payroll') renderProductivity();
   if(name==='returns'){ renderReturnsList(); renderReturnsStats(); returnsPopulateLocationList(); setTimeout(function(){var el=document.getElementById('return-scan-in');if(el)el.focus();},100); }
@@ -4394,6 +4405,7 @@ function beginItemVerify(order){
     verifySkus.push({ sku: s.sku, qty: parseInt(s.qty,10)||1, scanned: 0, replaced: false, spec: '' });
   });
   setPackState('verify-items');
+  hidePairConfirm();
   clearErr();
   setFb(openSkuKinds().length>1 ? 'Different items. Scan each SKU or FNSKU once.' : 'Label matched. Scan the item SKU or FNSKU.','var(--cy)');
   flash('ok');
@@ -4528,7 +4540,8 @@ function skuAliasSync(){
   window.warehubApi('POST', '/api/settings', {
     sku_aliases: map,
     sku_alias_clerk_id: owner,
-    sku_catalog: window._skuCatalog || []
+    sku_catalog: window._skuCatalog || [],
+    sku_learned_pairs: window._learnedPairs || []
   }).catch(function(e){ console.error('[sku-alias] cloud save failed:', e); });
 }
 function applySkuCatalog(rows, ownerId){
@@ -4668,17 +4681,134 @@ function matchOpenSku(code, open){
   if(exact.length===1) return exact[0];
   return '';
 }
+function learnedPairKey(){
+  var uid = (window._clerkUser && window._clerkUser.id) || '';
+  if(!uid){ try { uid = localStorage.getItem('warehub_active_user') || ''; } catch(e){} }
+  return 'warehub_learned_pairs:' + (uid || 'local');
+}
+function loadLearnedPairs(){
+  if(Array.isArray(window._learnedPairs)) return window._learnedPairs;
+  try { window._learnedPairs = JSON.parse(localStorage.getItem(learnedPairKey()) || '[]'); }
+  catch(e){ window._learnedPairs = []; }
+  if(!Array.isArray(window._learnedPairs)) window._learnedPairs = [];
+  return window._learnedPairs;
+}
+function applyLearnedPairs(rows, ownerId){
+  if(!Array.isArray(rows)) return;
+  var me = window._clerkUser && window._clerkUser.id;
+  if(ownerId && me && ownerId !== me) return;
+  window._learnedPairs = rows.slice(0, 2000);
+  try { localStorage.setItem(learnedPairKey(), JSON.stringify(window._learnedPairs)); } catch(e){}
+  window._learnedPairs.forEach(function(r){ linkSkuCodes([r.a, r.b]); });
+  if(typeof renderPairTable==='function') renderPairTable();
+}
+function rememberSkuPair(a, b){
+  a = String(a||'').toUpperCase().trim();
+  b = String(b||'').toUpperCase().trim();
+  if(!a || !b || a===b) return false;
+  if(!/[A-Z]/.test(a) || !/[A-Z]/.test(b)) return false;
+  var rows = loadLearnedPairs();
+  var key = [a, b].sort().join('|');
+  if(!rows.some(function(r){ return [String(r.a||''), String(r.b||'')].sort().join('|')===key; })){
+    rows.unshift({ a:a, b:b, at:new Date().toISOString() });
+  }
+  window._learnedPairs = rows.slice(0, 2000);
+  try { localStorage.setItem(learnedPairKey(), JSON.stringify(window._learnedPairs)); } catch(e){}
+  linkSkuCodes([a, b]);
+  skuAliasSync();
+  renderPairTable();
+  return true;
+}
+function removeLearnedPair(a, b){
+  a = String(a||'').toUpperCase();
+  b = String(b||'').toUpperCase();
+  var key = [a, b].sort().join('|');
+  window._learnedPairs = loadLearnedPairs().filter(function(r){
+    return [String(r.a||''), String(r.b||'')].sort().join('|')!==key;
+  });
+  try { localStorage.setItem(learnedPairKey(), JSON.stringify(window._learnedPairs)); } catch(e){}
+  var map = fnskuMap();
+  function drop(k, v){
+    if(!map[k]) return;
+    map[k] = (map[k]||[]).filter(function(x){ return x!==v; });
+    if(!map[k].length) delete map[k];
+  }
+  drop(a, b); drop(b, a);
+  window._skuAliases = map;
+  try { localStorage.setItem(fnskuStoreKey(), JSON.stringify(map)); } catch(e){}
+  skuAliasSync();
+  renderPairTable();
+}
+function renderPairTable(){
+  var el = document.getElementById('pair-rows');
+  if(!el) return;
+  var rows = loadLearnedPairs();
+  if(!rows.length){ el.innerHTML = 'No learned pairs yet.'; return; }
+  el.innerHTML = rows.slice(0, 80).map(function(r){
+    var a = String(r.a||'').replace(/'/g, '');
+    var b = String(r.b||'').replace(/'/g, '');
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);">'
+      +'<span style="font-family:monospace;">'+a+' <span style="color:var(--cy);">=</span> '+b+'</span>'
+      +'<button type="button" class="btn" onclick="removeLearnedPair(\''+a+'\',\''+b+'\')">Remove</button>'
+      +'</div>';
+  }).join('');
+}
+function saveManualPair(){
+  var a = document.getElementById('pair-sku');
+  var b = document.getElementById('pair-fnsku');
+  if(!rememberSkuPair(a&&a.value, b&&b.value)){ setErr('Enter both codes.'); return; }
+  if(a) a.value = '';
+  if(b) b.value = '';
+  clearErr();
+  setFb('Pair saved. Either code will pass.','var(--gn)');
+}
+function hidePairConfirm(){
+  window._pairPending = null;
+  var box = document.getElementById('pair-confirm');
+  if(box){ box.style.display = 'none'; box.innerHTML = ''; }
+}
+function showPairConfirm(code, skus){
+  window._pairPending = { code: code, skus: skus.slice() };
+  var box = document.getElementById('pair-confirm');
+  if(!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '<div style="font-size:12px;margin-bottom:6px;">Scanned <b style="font-family:monospace;">'+String(code).replace(/</g,'')+'</b>. Same item as:</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +skus.map(function(sku){
+      var safe = String(sku).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return '<button type="button" class="btn" onclick="confirmSkuPair(\''+safe+'\')">'+sku+'</button>';
+    }).join('')
+    +'<button type="button" class="btn" onclick="hidePairConfirm()">Not the same</button>'
+    +'</div>';
+}
+function confirmSkuPair(sku){
+  var pending = window._pairPending;
+  if(!pending || !sku) return;
+  var code = pending.code;
+  hidePairConfirm();
+  if(!rememberSkuPair(sku, code)) return;
+  acceptItemCode(sku, code);
+}
 function applyItemScan(scanned){
   if(sameLabelScan(scanned, activeOrder)){
     setFb('Label already matched. Scan the next SKU.','var(--am)');
     focusScan();
     return true;
   }
-  var code = cleanScanCode(scanned);
+  var code = cleanScanCode(scanned).replace(/[^A-Z0-9\-]/g,'');
   var open = openSkuKinds();
   if(!open.length) return false;
   var hitSku = matchOpenSku(code, open);
+  if(hitSku) hidePairConfirm();
   if(!hitSku){
+    var pending = open.filter(function(sku){ return !codeMatchesSku(code, sku); });
+    if(code.length>=3 && /[A-Z]/.test(code) && pending.length && !scanIsTracking(code)){
+      showPairConfirm(code, pending);
+      clearErr();
+      setFb('Not in inventory. Confirm if this is the same item.','var(--am)');
+      focusScan();
+      return true;
+    }
     bpErr(); flash('err');
     setErr('✗ '+code+' does not match a SKU on this label: '+open.join(', '));
     setFb('✗ SKU MISMATCH','var(--rd)');
@@ -7826,6 +7956,9 @@ async function rackConfigLoad(){
   }
   if(result && result.settings && result.settings.sku_aliases){
     applySkuAliasMap(result.settings.sku_aliases, result.settings.sku_alias_clerk_id);
+  }
+  if(result && result.settings && Array.isArray(result.settings.sku_learned_pairs)){
+    applyLearnedPairs(result.settings.sku_learned_pairs, result.settings.sku_alias_clerk_id);
   }
 }
 
@@ -14308,6 +14441,7 @@ function aiDoActions(actions){
     window._tenantInventoryReady = true;
     if(s.sku_aliases) applySkuAliasMap(s.sku_aliases, s.sku_alias_clerk_id);
     if(Array.isArray(s.sku_catalog)) applySkuCatalog(s.sku_catalog, s.sku_alias_clerk_id);
+    if(Array.isArray(s.sku_learned_pairs)) applyLearnedPairs(s.sku_learned_pairs, s.sku_alias_clerk_id);
     if(typeof renderLocations === 'function') renderLocations();
   };
 
