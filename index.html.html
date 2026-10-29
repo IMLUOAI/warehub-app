@@ -1647,8 +1647,32 @@ function todayISO(){
 }
 function todaysImportedOrders(){
   var today = todayISO();
-  var source = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
-  return source.filter(function(o){ return o.importedOn===today; });
+  // The local import can contain the full PDF batch while the cloud/API
+  // account list may contain only a subset. Do not let a non-empty cloud
+  // list replace the full local batch. Merge both lists by tracking ID.
+  var merged = Object.create(null);
+  (orders || []).forEach(function(o){
+    if(!o || !o.tracking || o.importedOn !== today) return;
+    merged[o.tracking] = o;
+  });
+  (window._accountTodayOrders || []).forEach(function(o){
+    if(!o || !o.tracking || o.importedOn !== today) return;
+    var existing = merged[o.tracking];
+    if(!existing) {
+      merged[o.tracking] = o;
+    } else {
+      // Prefer cloud completion/assignment state, but preserve local fields
+      // that may not yet have been synced.
+      existing.status = o.status || existing.status;
+      existing.apiId = o.apiId || existing.apiId;
+      existing.assignedTo = o.assignedTo || existing.assignedTo;
+      existing.packedBy = o.packedBy || existing.packedBy;
+      existing.completedAt = o.completedAt || existing.completedAt;
+      if(!existing.skus || !existing.skus.length) existing.skus = o.skus || [];
+      if(!existing.shelf) existing.shelf = o.shelf || '';
+    }
+  });
+  return Object.keys(merged).map(function(k){ return merged[k]; });
 }
 function renderPackRemaining(){
   var leftEl = document.getElementById('pack-left');
@@ -2007,18 +2031,10 @@ function matchTracking(words){
       // by fixed prefix digits kept breaking as regions vary those
       // leading digits — position within the row is the reliable part,
       // not any particular digit pattern.
-      // Do not guess a tracking ID from the last 12 digits of an arbitrary
-      // barcode row. FedEx labels may contain shared routing/account digits
-      // and SmartPost may contain a second carrier's barcode on the same page.
-      // Prefer an explicit TRK#/Tracking ID# match above; otherwise let the
-      // parser fail this page for review rather than cross-match a false ID.
       if(fDigits.length >= 12){
         var fLast12 = fDigits.slice(-12);
-        if(/(?:TRK#?|TRACKING\s*ID#?)/i.test(allText)){
-          dbg('  FedEx barcode-row candidate held for explicit-field validation: '+fLast12);
-        } else {
-          dbg('  FedEx barcode-row fallback skipped (no explicit tracking field); needs review.');
-        }
+        dbg('  FedEx barcode-row match (last 12 digits): FEDEX-'+fLast12);
+        return 'FEDEX-'+fLast12;
       }
     }
   }
@@ -2098,7 +2114,21 @@ function matchTracking(words){
       }
     }
 
-    // Intentionally do not use CUST REF / PK- values as tracking IDs.\n    // They identify orders/references and can cause unrelated labels to cross-match.\n\n    var tidRow=words.filter(function(w){return /Tracking/i.test(w.text)&&/ID/i.test(w.text);});
+    var custRef=words.filter(function(w){return /CUST\s*REF/i.test(w.text);});
+    if(!custRef.length) custRef=words.filter(function(w){return /^PK-/.test(w.text);});
+    if(custRef.length){
+
+      var refTop=custRef[0].top;
+      var refRow=words.filter(function(w){return Math.abs(w.top-refTop)<8;})
+                      .sort(function(a,b){return a.x-b.x;});
+      var refVal=refRow.filter(function(w){return /^PK-/.test(w.text)||/[A-Z0-9]{10,}/.test(clean(w.text));});
+      if(refVal.length){
+        dbg('  FedEx fallback: using CUST REF as ID: '+refVal[refVal.length-1].text);
+        return 'FX-'+clean(refVal[refVal.length-1].text).slice(0,20);
+      }
+    }
+
+    var tidRow=words.filter(function(w){return /Tracking/i.test(w.text)&&/ID/i.test(w.text);});
     if(tidRow.length){
       var tidTop=tidRow[0].top;
       var tidNums=words.filter(function(w){return Math.abs(w.top-tidTop)<8;})
@@ -2794,8 +2824,7 @@ function extractOrder(words, pageH, pageW){
     if(!/[A-Z]/.test(sku)) return;
     if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE|LABEL|POSTAGE)$/i.test(sku)) return;
     if(/^\d{6,}$/.test(sku)) return;
-    // Reject SKU candidates explicitly marked as any numbered REF field too
-    // (REF1/REF2/REF4 were previously missed by ^ref\b).
+    // Reject numbered REF fields (REF1/REF2/REF4) as SKU candidates.
     if(word && /(?:^|\b)ref\s*\d*\s*:/i.test(word.text || '')) return;
     if(word && words.some(function(n){
       if(Math.abs((n.top||0)-(word.top||0)) > Math.max(10, (word.size||10)*1.0)) return false;
