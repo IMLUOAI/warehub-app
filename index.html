@@ -1646,9 +1646,18 @@ function todayISO(){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function todaysImportedOrders(){
+  // Pack Station's large counter is for the active PDF import batch, not
+  // every order that happens to have today's calendar date. The local
+  // `orders` array is set to the freshly parsed batch by initOrders(parsed).
+  // Use it when available so older unreadable labels in the cloud/day list
+  // cannot replace a 102-label batch with a 10-order subset.
+  if (Array.isArray(orders) && orders.length) return orders;
+  // On a pack-only monitor with no local batch loaded, fall back to today's
+  // cloud orders.
   var today = todayISO();
-  var source = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
-  return source.filter(function(o){ return o.importedOn===today; });
+  return (window._accountTodayOrders || []).filter(function(o){
+    return o.importedOn === today;
+  });
 }
 function renderPackRemaining(){
   var leftEl = document.getElementById('pack-left');
