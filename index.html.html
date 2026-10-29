@@ -1646,33 +1646,18 @@ function todayISO(){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function todaysImportedOrders(){
+  // Pack Station's large counter is for the active PDF import batch, not
+  // every order that happens to have today's calendar date. The local
+  // `orders` array is set to the freshly parsed batch by initOrders(parsed).
+  // Use it when available so older unreadable labels in the cloud/day list
+  // cannot replace a 102-label batch with a 10-order subset.
+  if (Array.isArray(orders) && orders.length) return orders;
+  // On a pack-only monitor with no local batch loaded, fall back to today's
+  // cloud orders.
   var today = todayISO();
-  // The local import can contain the full PDF batch while the cloud/API
-  // account list may contain only a subset. Do not let a non-empty cloud
-  // list replace the full local batch. Merge both lists by tracking ID.
-  var merged = Object.create(null);
-  (orders || []).forEach(function(o){
-    if(!o || !o.tracking || o.importedOn !== today) return;
-    merged[o.tracking] = o;
+  return (window._accountTodayOrders || []).filter(function(o){
+    return o.importedOn === today;
   });
-  (window._accountTodayOrders || []).forEach(function(o){
-    if(!o || !o.tracking || o.importedOn !== today) return;
-    var existing = merged[o.tracking];
-    if(!existing) {
-      merged[o.tracking] = o;
-    } else {
-      // Prefer cloud completion/assignment state, but preserve local fields
-      // that may not yet have been synced.
-      existing.status = o.status || existing.status;
-      existing.apiId = o.apiId || existing.apiId;
-      existing.assignedTo = o.assignedTo || existing.assignedTo;
-      existing.packedBy = o.packedBy || existing.packedBy;
-      existing.completedAt = o.completedAt || existing.completedAt;
-      if(!existing.skus || !existing.skus.length) existing.skus = o.skus || [];
-      if(!existing.shelf) existing.shelf = o.shelf || '';
-    }
-  });
-  return Object.keys(merged).map(function(k){ return merged[k]; });
 }
 function renderPackRemaining(){
   var leftEl = document.getElementById('pack-left');
@@ -2824,11 +2809,9 @@ function extractOrder(words, pageH, pageW){
     if(!/[A-Z]/.test(sku)) return;
     if(/^(USPS|UPS|FEDEX|FEDERAL|TRACK|TRACKING|TRK|GROUND|PRIORITY|DELIVER|SIGNATURE|HAZMAT|FROM|SHIP|REF|REFERENCE|CUST|PARCEL|SELECT|ADVANTAGE|LABEL|POSTAGE)$/i.test(sku)) return;
     if(/^\d{6,}$/.test(sku)) return;
-    // Reject numbered REF fields (REF1/REF2/REF4) as SKU candidates.
-    if(word && /(?:^|\b)ref\s*\d*\s*:/i.test(word.text || '')) return;
     if(word && words.some(function(n){
-      if(Math.abs((n.top||0)-(word.top||0)) > Math.max(10, (word.size||10)*1.0)) return false;
-      return /reference|^ref\s*\d*\s*:?$|cust\s*ref/i.test((n.text||'').trim());
+      if(Math.abs((n.top||0)-(word.top||0)) > Math.max(8, (word.size||10)*0.8)) return false;
+      return /reference|^ref\b|cust\s*ref/i.test(n.text);
     })) return;
     found.push({sku:sku, qty:qty, size:word&&word.size||0, top:word&&word.top||0});
   }
