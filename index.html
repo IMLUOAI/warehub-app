@@ -2849,6 +2849,22 @@ function extractOrder(words, pageH, pageW){
     if(bottomTop - (s.top||0) > band) return false;
     return true;
   });
+  var collapsedSkus = [];
+  bottomSkus.forEach(function(s){
+    var hit = null;
+    for(var ci=0; ci<collapsedSkus.length; ci++){
+      if(s.sku!==collapsedSkus[ci].sku && typeof codeMatchesSku==='function' && codeMatchesSku(s.sku, collapsedSkus[ci].sku)){
+        hit = collapsedSkus[ci];
+        break;
+      }
+    }
+    if(!hit){ collapsedSkus.push(s); return; }
+    if((s.size||0) > (hit.size||0) || (/^(X00|B0)/.test(hit.sku) && !/^(X00|B0)/.test(s.sku))){
+      hit.sku = s.sku;
+      hit.size = s.size || hit.size;
+    }
+  });
+  bottomSkus = collapsedSkus;
   var skuMerged={};
   var skuOrder=[];
   bottomSkus.forEach(function(s){
@@ -4405,18 +4421,42 @@ function expandSkuLines(order){
   });
   return out.length ? out : [{sku:'UNKNOWN', qty:1}];
 }
+function collapseSameItems(lines){
+  var out = [];
+  (lines||[]).forEach(function(s){
+    var sku = String(s.sku||'').toUpperCase();
+    var qty = parseInt(s.qty,10)||1;
+    if(!sku || sku==='UNKNOWN') return;
+    var alias = null;
+    for(var i=0;i<out.length;i++){
+      if(out[i].sku!==sku && codeMatchesSku(out[i].sku, sku)){ alias = out[i]; break; }
+    }
+    if(alias){
+      if(/^(X00|B0)/.test(alias.sku) && !/^(X00|B0)/.test(sku)) alias.sku = sku;
+      return;
+    }
+    var same = null;
+    for(var j=0;j<out.length;j++){ if(out[j].sku===sku){ same = out[j]; break; } }
+    if(same) same.qty += qty;
+    else out.push({ sku: sku, qty: qty });
+  });
+  return out.length ? out : [{ sku:'UNKNOWN', qty:1 }];
+}
 function beginItemVerify(order){
   activeOrder = order;
-  var lines = expandSkuLines(order);
+  var lines = collapseSameItems(expandSkuLines(order));
   order.skus = lines.map(function(s){ return {sku:s.sku, qty:s.qty, scanned:0, replaced:0}; });
   verifySkus = [];
-  order.skus.forEach(function(s){
-    verifySkus.push({ sku: s.sku, qty: parseInt(s.qty,10)||1, scanned: 0, replaced: false, spec: '' });
+  lines.forEach(function(s){
+    var n = parseInt(s.qty,10)||1;
+    for(var i=0;i<n;i++) verifySkus.push({ sku: s.sku, qty: 1, scanned: 0, replaced: false, spec: '' });
   });
   setPackState('verify-items');
   hidePairConfirm();
   clearErr();
-  setFb(openSkuKinds().length>1 ? 'Different items. Scan each SKU or FNSKU once.' : 'Label matched. Scan the item SKU or FNSKU.','var(--cy)');
+  var kinds = openSkuKinds().length;
+  var pieces = verifySkus.length;
+  setFb(kinds>1 ? 'Different items. Scan each SKU or FNSKU.' : (pieces>1 ? 'Scan this item '+pieces+' times. SKU or FNSKU.' : 'Label matched. Scan the item SKU or FNSKU.'),'var(--cy)');
   flash('ok');
   renderActiveCard();
   focusScan();
@@ -4805,6 +4845,13 @@ function applyItemScan(scanned){
     return true;
   }
   var code = cleanScanCode(scanned).replace(/[^A-Z0-9\-]/g,'');
+  var replaceBox = document.getElementById('replace-box');
+  if(replaceBox && replaceBox.style.display!=='none' && window._replaceSku){
+    var specEl = document.getElementById('replace-spec');
+    if(specEl) specEl.value = code || cleanScanCode(scanned);
+    saveReplacement();
+    return true;
+  }
   var open = openSkuKinds();
   if(!open.length) return false;
   var hitSku = matchOpenSku(code, open);
@@ -5173,21 +5220,11 @@ function doScan(raw){
       || (refPacker && refPacker.loginTime ? refPacker.loginTime : Date.now());
   }
 
-  // One large SKU: the shipping scan is enough, even when qty is more than 1.
-  // Two or more large SKUs: scan each of those once. The small reference
-  // SKU is not in this list.
-  var verifyLines = expandSkuLines(order);
-  var verifyKinds = {};
-  verifyLines.forEach(function(s){ if(s.sku && s.sku!=='UNKNOWN') verifyKinds[s.sku]=1; });
-  if(Object.keys(verifyKinds).length > 1){
-    beginItemVerify(order);
-    return;
-  }
-
-  // Complete immediately — single piece, no extra SKU scan
-  completeOrder(order, scanned);
+  // Every label waits for the item. One SKU is one scan, or one scan per piece.
+  // Two different SKUs each need their own scan. A linked FNSKU is the same item.
+  beginItemVerify(order);
+  return;
 }
-
 
 function completeOrder(order, scannedTracking){
   var now=Date.now();
@@ -6267,7 +6304,7 @@ function renderActiveCard(){
         return '<div class="ski-item '+(done?'scanned-item':'pending-item')+'" style="display:flex;align-items:center;gap:8px;margin:4px 0;flex-wrap:wrap;">'
           +'<div class="ski-check">'+(done?'✓':'○')+'</div>'
           +'<div class="ski-sku" style="font-family:monospace;font-weight:700;">'+sku+'</div>'
-          +'<div class="ski-qty">qty '+g.qty+(g.replaced?' · replaced':'')+'</div>'
+          +'<div class="ski-qty">'+(g.scanned+g.replaced)+' / '+g.total+(g.replaced?' · replaced':'')+'</div>'
           +(also.length ? '<span style="font-size:10px;color:var(--cy);font-family:monospace;">same as '+also.join(' / ')+'</span>' : '')
           +(done ? '' : '<button type="button" class="btn" onclick="openReplace(\''+safe+'\')">Sold out</button>')
           +'</div>';
@@ -14151,6 +14188,8 @@ function aiDoActions(actions){
     var today = todayISO();
     var doneLocal = {};
     (orders||[]).concat(window._accountTodayOrders||[]).forEach(function(o){ if(o.status==='done') doneLocal[o.tracking]=o.completedAt; });
+    var manualPacked = window._manualPacked || {};
+    Object.keys(manualPacked).forEach(function(t){ if(!doneLocal[t]) doneLocal[t] = manualPacked[t]; });
     window._accountTodayOrders = mapped.filter(function(o){ return o.importedOn===today; });
     window._accountTodayOrders.forEach(function(o){ if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; } });
     if(!orders.length) orders = window._accountTodayOrders.slice();
@@ -14814,6 +14853,9 @@ function editExceptionOrder(tracking){
   if(!o.skus||!o.skus.length) o.skus=[{sku:String(nextSku).toUpperCase(), qty:1, scanned:0}];
   else o.skus[0].sku = String(nextSku).toUpperCase();
   o.shelf = nextShelf;
+  (window._accountTodayOrders||[]).forEach(function(a){
+    if(a.tracking===o.tracking){ a.skus = o.skus; a.shelf = o.shelf; }
+  });
   renderExceptions();
 }
 function markOrderPacked(o, raw){
@@ -14821,6 +14863,8 @@ function markOrderPacked(o, raw){
   o.status='done';
   o.completedAt=o.completedAt || new Date().toLocaleTimeString();
   o.manualClose=true;
+  window._manualPacked = window._manualPacked || {};
+  window._manualPacked[o.tracking] = o.completedAt;
   o.scanAudit = o.scanAudit || [];
   o.scanAudit.push({at:new Date().toISOString(), raw:raw||'MANUAL-CONFIRM'});
   (window._accountTodayOrders||[]).forEach(function(a){
@@ -14843,7 +14887,7 @@ function confirmExceptionOrder(tracking){
   renderExceptions();
 }
 function refreshExceptions(){
-  var reload = (window.apiLoadOrders ? window.apiLoadOrders() : Promise.resolve());
+  var reload = (window.apiLoadOrders ? window.apiLoadOrders(true) : Promise.resolve());
   Promise.resolve(reload).then(function(){
     renderExceptions();
     renderPackRemaining();
