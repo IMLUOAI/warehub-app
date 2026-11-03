@@ -1682,7 +1682,7 @@ function renderPackRemaining(){
   var split = document.getElementById('pack-split');
   var carriedOpen = dayOrders.filter(function(o){ return o.carried && o.status!=='done'; }).length;
   var todayCount = dayOrders.filter(function(o){ return !o.carried; }).length;
-  if(split) split.textContent = done+' finished · '+todayCount+' today'+(carriedOpen ? ' · '+carriedOpen+' carried over' : '');
+  if(split) split.textContent = done+' finished · '+todayCount+' today'+(carriedOpen ? ' · '+carriedOpen+' left from yesterday' : '');
   var bar = document.getElementById('pack-bar');
   if(bar) bar.style.width = (total ? Math.round(done/total*100) : 0)+'%';
   var pace = document.getElementById('pack-pace');
@@ -6607,7 +6607,7 @@ function exportPayrollCSV(){
 // time, instead of showing whatever was true the moment the page loaded.
 async function floorPoll(){
   if(typeof apiReady !== 'function' || !apiReady()) return;
-  var days = recentDayISOs(7);
+  var days = recentDayISOs(2);
   var results = await Promise.all(days.map(function(day){
     return apiCall('GET', '/api/orders?day='+encodeURIComponent(day)).catch(function(){ return null; });
   }));
@@ -6617,7 +6617,7 @@ async function floorPoll(){
     if(!result || !result.orders) return;
     result.orders.forEach(function(apiOrder){
       var importedOn = days[idx];
-      if(importedOn!==today && apiOrder.status==='done') return;
+      if(importedOn!==today && (importedOn!==days[1] || apiOrder.status==='done')) return;
       rows.push({ apiOrder: apiOrder, importedOn: importedOn });
     });
   });
@@ -14216,7 +14216,7 @@ function aiDoActions(actions){
       refreshAfterPack();
       return;
     }
-    var days = recentDayISOs(7);
+    var days = recentDayISOs(2);
     var results = await Promise.all(days.map(function(day){
       return apiCall('GET', '/api/orders?day='+encodeURIComponent(day)).catch(function(){ return null; });
     }));
@@ -14227,6 +14227,7 @@ function aiDoActions(actions){
     if(!mapped.length && !(results[0] && results[0].orders)) return;
     window._ordersFetchedAt = Date.now();
     var today = todayISO();
+    var yesterday = days[1];
     var doneLocal = {};
     (orders||[]).concat(window._accountTodayOrders||[]).forEach(function(o){ if(o.status==='done') doneLocal[o.tracking]=o.completedAt; });
     var manualPacked = window._manualPacked || {};
@@ -14238,17 +14239,23 @@ function aiDoActions(actions){
       if(!prev || String(o.importedOn||'') >= String(prev.importedOn||'')) byTrack[o.tracking] = o;
     });
     window._accountTodayOrders = Object.keys(byTrack).map(function(k){ return byTrack[k]; }).filter(function(o){
-      return o.importedOn===today || o.status!=='done';
+      return o.importedOn===today || (o.importedOn===yesterday && o.status!=='done');
     });
     window._accountTodayOrders.forEach(function(o){
-      o.carried = !!(o.importedOn && o.importedOn!==today);
+      o.carried = o.importedOn===yesterday;
       if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; o.carried=false; }
     });
     window._accountTodayOrders = window._accountTodayOrders.filter(function(o){
-      return o.importedOn===today || o.status!=='done';
+      return o.importedOn===today || (o.carried && o.status!=='done');
     });
     window._carriedOpen = window._accountTodayOrders.filter(function(o){ return o.carried && o.status!=='done'; });
-    var localToday = (orders||[]).some(function(o){ return o.importedOn===today; });
+    var keepCarry = {};
+    window._carriedOpen.forEach(function(o){ keepCarry[o.tracking] = 1; });
+    for(var oi=orders.length-1; oi>=0; oi--){
+      var old = orders[oi];
+      if(old && old.carried && !keepCarry[old.tracking]) orders.splice(oi, 1);
+    }
+    var localToday = (orders||[]).some(function(o){ return o.importedOn===today && !o.carried; });
     if(!orders.length || !localToday) orders = window._accountTodayOrders.slice();
     else {
       var seen = {};
