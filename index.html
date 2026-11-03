@@ -1645,6 +1645,15 @@ function todayISO(){
   var d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function recentDayISOs(n){
+  var out = [];
+  for(var i=0;i<(n||7);i++){
+    var d = new Date();
+    d.setDate(d.getDate()-i);
+    out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+  }
+  return out;
+}
 function todaysImportedOrders(){
   // Pack Station's large counter is for the active PDF import batch, not
   // every order that happens to have today's calendar date. The local
@@ -1671,7 +1680,9 @@ function renderPackRemaining(){
   var lbl = document.getElementById('pack-left-lbl');
   if(lbl){ lbl.textContent = left ? 'LEFT' : 'CLEAR'; lbl.style.color = leftEl.style.color; }
   var split = document.getElementById('pack-split');
-  if(split) split.textContent = done+' finished · '+total+' imported today';
+  var carriedOpen = dayOrders.filter(function(o){ return o.carried && o.status!=='done'; }).length;
+  var todayCount = dayOrders.filter(function(o){ return !o.carried; }).length;
+  if(split) split.textContent = done+' finished · '+todayCount+' today'+(carriedOpen ? ' · '+carriedOpen+' carried over' : '');
   var bar = document.getElementById('pack-bar');
   if(bar) bar.style.width = (total ? Math.round(done/total*100) : 0)+'%';
   var pace = document.getElementById('pack-pace');
@@ -6371,6 +6382,7 @@ function renderQueue(){
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
         +'<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">'
           +'<span class="bdg" style="color:'+col+';border-color:'+col+';font-size:8px;">'+o.carrier+'</span>'
+          +(o.carried?'<span style="font-size:7px;padding:1px 5px;border:1px solid var(--am);color:var(--am);border-radius:2px;margin-left:4px;">FROM '+(o.importedOn||'EARLIER')+'</span>':'')
           +fdxBadge
         +'</div>'
         +(assignedP?'<span style="font-size:8px;color:'+packerColor(assignedP)+';">'+assignedP.name+'</span>':'')
@@ -6595,30 +6607,48 @@ function exportPayrollCSV(){
 // time, instead of showing whatever was true the moment the page loaded.
 async function floorPoll(){
   if(typeof apiReady !== 'function' || !apiReady()) return;
-  var result = await apiCall('GET', '/api/orders?day='+encodeURIComponent(todayISO())).catch(function(){ return null; });
-  if(!result || !result.orders) return;
+  var days = recentDayISOs(7);
+  var results = await Promise.all(days.map(function(day){
+    return apiCall('GET', '/api/orders?day='+encodeURIComponent(day)).catch(function(){ return null; });
+  }));
+  var today = todayISO();
+  var rows = [];
+  results.forEach(function(result, idx){
+    if(!result || !result.orders) return;
+    result.orders.forEach(function(apiOrder){
+      var importedOn = days[idx];
+      if(importedOn!==today && apiOrder.status==='done') return;
+      rows.push({ apiOrder: apiOrder, importedOn: importedOn });
+    });
+  });
+  if(!rows.length && !(results[0] && results[0].orders)) return;
   var byTracking = {};
   orders.forEach(function(o){ byTracking[o.tracking] = o; });
-  result.orders.forEach(function(apiOrder){
+  rows.forEach(function(row){
+    var apiOrder = row.apiOrder;
     var local = byTracking[apiOrder.tracking];
     if(local){
       local.status      = apiOrder.status || local.status;
       local.packedBy    = apiOrder.packed_by || local.packedBy;
       local.assignedTo  = apiOrder.assigned_to || local.assignedTo;
       local.completedAt = apiOrder.completed_at || local.completedAt;
-    } else {
-      // On the server but not in this device's local session — e.g. this
-      // is a dedicated monitor that never imported today's PDF itself.
-      orders.push({
+      if(!local.importedOn) local.importedOn = row.importedOn;
+      local.carried = !!(local.importedOn && local.importedOn!==today);
+    } else if(row.importedOn===today || apiOrder.status!=='done') {
+      var added = {
         tracking: apiOrder.tracking, carrier: apiOrder.carrier, shelf: apiOrder.shelf||'',
         skus: apiOrder.skus||[], status: apiOrder.status||'pending',
         assignedTo: apiOrder.assigned_to||null, packedBy: apiOrder.packed_by||null,
         completedAt: apiOrder.completed_at||null, apiId: apiOrder.id,
+        importedOn: row.importedOn, carried: row.importedOn!==today,
         orderStartTime: null, orderEndTime: null
-      });
+      };
+      orders.push(added);
+      byTracking[added.tracking] = added;
     }
   });
   renderFloor();
+  if(typeof renderPackRemaining==='function') renderPackRemaining();
 }
 
 // ── Floor Display: live rack map + activity ticker ──────────────────
@@ -14134,6 +14164,11 @@ function aiDoActions(actions){
         window._accountTodayOrders = fresh.orders.map(accountOrderFromApi).filter(function(o){
           return o.importedOn===todayISO();
         });
+        (window._carriedOpen||[]).forEach(function(o){
+          if(window._accountTodayOrders.some(function(t){ return t.tracking===o.tracking; })) return;
+          window._accountTodayOrders.push(o);
+          if(!orders.some(function(x){ return x.tracking===o.tracking; })) orders.push(o);
+        });
         window._ordersFetchedAt = Date.now();
         if(typeof refreshAfterPack==='function') refreshAfterPack();
       }
@@ -14181,19 +14216,45 @@ function aiDoActions(actions){
       refreshAfterPack();
       return;
     }
-    var result = await apiCall('GET', '/api/orders?day='+encodeURIComponent(todayISO()));
-    if(!result || !result.orders) return;
+    var days = recentDayISOs(7);
+    var results = await Promise.all(days.map(function(day){
+      return apiCall('GET', '/api/orders?day='+encodeURIComponent(day)).catch(function(){ return null; });
+    }));
+    var mapped = [];
+    results.forEach(function(result){
+      if(result && result.orders) mapped = mapped.concat(result.orders.map(accountOrderFromApi));
+    });
+    if(!mapped.length && !(results[0] && results[0].orders)) return;
     window._ordersFetchedAt = Date.now();
-    var mapped = result.orders.map(accountOrderFromApi);
     var today = todayISO();
     var doneLocal = {};
     (orders||[]).concat(window._accountTodayOrders||[]).forEach(function(o){ if(o.status==='done') doneLocal[o.tracking]=o.completedAt; });
     var manualPacked = window._manualPacked || {};
     Object.keys(manualPacked).forEach(function(t){ if(!doneLocal[t]) doneLocal[t] = manualPacked[t]; });
-    window._accountTodayOrders = mapped.filter(function(o){ return o.importedOn===today; });
-    window._accountTodayOrders.forEach(function(o){ if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; } });
-    if(!orders.length) orders = window._accountTodayOrders.slice();
-    else orders.forEach(function(o){ if(doneLocal[o.tracking]) o.status='done'; });
+    var byTrack = {};
+    mapped.forEach(function(o){
+      if(!o || !o.tracking) return;
+      var prev = byTrack[o.tracking];
+      if(!prev || String(o.importedOn||'') >= String(prev.importedOn||'')) byTrack[o.tracking] = o;
+    });
+    window._accountTodayOrders = Object.keys(byTrack).map(function(k){ return byTrack[k]; }).filter(function(o){
+      return o.importedOn===today || o.status!=='done';
+    });
+    window._accountTodayOrders.forEach(function(o){
+      o.carried = !!(o.importedOn && o.importedOn!==today);
+      if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; o.carried=false; }
+    });
+    window._accountTodayOrders = window._accountTodayOrders.filter(function(o){
+      return o.importedOn===today || o.status!=='done';
+    });
+    window._carriedOpen = window._accountTodayOrders.filter(function(o){ return o.carried && o.status!=='done'; });
+    var localToday = (orders||[]).some(function(o){ return o.importedOn===today; });
+    if(!orders.length || !localToday) orders = window._accountTodayOrders.slice();
+    else {
+      var seen = {};
+      orders.forEach(function(o){ seen[o.tracking]=1; if(doneLocal[o.tracking]) o.status='done'; });
+      window._carriedOpen.forEach(function(o){ if(!seen[o.tracking]) orders.push(o); });
+    }
     refreshAfterPack();
   };
 
