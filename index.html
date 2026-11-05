@@ -962,6 +962,7 @@ body.station-mode #pack-left{font-size:120px;}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn" onclick="exportPackHandoff()">Export pack CSV</button>
+        <button type="button" class="btn" style="border-color:var(--am);color:var(--am);" onclick="markOpenExceptionsOutOfStock()">Unfinished to out of stock</button>
         <button type="button" class="btn" onclick="refreshExceptions()">Refresh</button>
       </div>
     </div>
@@ -1674,17 +1675,18 @@ function renderPackRemaining(){
   var dayOrders = todaysImportedOrders();
   var total = dayOrders.length;
   var done = dayOrders.filter(function(o){ return o.status==='done'; }).length;
-  var left = Math.max(0, total-done);
+  var oosCount = dayOrders.filter(function(o){ return o.status==='oos'; }).length;
+  var left = dayOrders.filter(function(o){ return o.status!=='done' && o.status!=='oos'; }).length;
   leftEl.textContent = total ? String(left) : '—';
   leftEl.style.color = left ? 'var(--am)' : 'var(--gn)';
   var lbl = document.getElementById('pack-left-lbl');
   if(lbl){ lbl.textContent = left ? 'LEFT' : 'CLEAR'; lbl.style.color = leftEl.style.color; }
   var split = document.getElementById('pack-split');
-  var carriedOpen = dayOrders.filter(function(o){ return o.carried && o.status!=='done'; }).length;
+  var carriedOpen = dayOrders.filter(function(o){ return o.carried && o.status!=='done' && o.status!=='oos'; }).length;
   var todayCount = dayOrders.filter(function(o){ return !o.carried; }).length;
-  if(split) split.textContent = done+' finished · '+todayCount+' today'+(carriedOpen ? ' · '+carriedOpen+' left from yesterday' : '');
+  if(split) split.textContent = done+' finished · '+todayCount+' today'+(carriedOpen ? ' · '+carriedOpen+' left from yesterday' : '')+(oosCount ? ' · '+oosCount+' out of stock' : '');
   var bar = document.getElementById('pack-bar');
-  if(bar) bar.style.width = (total ? Math.round(done/total*100) : 0)+'%';
+  if(bar) bar.style.width = (total ? Math.round((done+oosCount)/total*100) : 0)+'%';
   var pace = document.getElementById('pack-pace');
   if(!pace) return;
   if(!total){ pace.textContent = 'No labels imported today'; return; }
@@ -6617,7 +6619,7 @@ async function floorPoll(){
     if(!result || !result.orders) return;
     result.orders.forEach(function(apiOrder){
       var importedOn = days[idx];
-      if(importedOn!==today && (importedOn!==days[1] || apiOrder.status==='done')) return;
+      if(importedOn!==today && (importedOn!==days[1] || apiOrder.status==='done' || apiOrder.status==='oos')) return;
       rows.push({ apiOrder: apiOrder, importedOn: importedOn });
     });
   });
@@ -6634,7 +6636,7 @@ async function floorPoll(){
       local.completedAt = apiOrder.completed_at || local.completedAt;
       if(!local.importedOn) local.importedOn = row.importedOn;
       local.carried = !!(local.importedOn && local.importedOn!==today);
-    } else if(row.importedOn===today || apiOrder.status!=='done') {
+    } else if(row.importedOn===today || (apiOrder.status!=='done' && apiOrder.status!=='oos')) {
       var added = {
         tracking: apiOrder.tracking, carrier: apiOrder.carrier, shelf: apiOrder.shelf||'',
         skus: apiOrder.skus||[], status: apiOrder.status||'pending',
@@ -14239,16 +14241,16 @@ function aiDoActions(actions){
       if(!prev || String(o.importedOn||'') >= String(prev.importedOn||'')) byTrack[o.tracking] = o;
     });
     window._accountTodayOrders = Object.keys(byTrack).map(function(k){ return byTrack[k]; }).filter(function(o){
-      return o.importedOn===today || (o.importedOn===yesterday && o.status!=='done');
+      return o.importedOn===today || (o.importedOn===yesterday && o.status!=='done' && o.status!=='oos');
     });
     window._accountTodayOrders.forEach(function(o){
       o.carried = o.importedOn===yesterday;
       if(doneLocal[o.tracking] && o.status!=='done'){ o.status='done'; o.completedAt=doneLocal[o.tracking]; o.carried=false; }
     });
     window._accountTodayOrders = window._accountTodayOrders.filter(function(o){
-      return o.importedOn===today || (o.carried && o.status!=='done');
+      return o.importedOn===today || (o.carried && o.status!=='done' && o.status!=='oos');
     });
-    window._carriedOpen = window._accountTodayOrders.filter(function(o){ return o.carried && o.status!=='done'; });
+    window._carriedOpen = window._accountTodayOrders.filter(function(o){ return o.carried && o.status!=='done' && o.status!=='oos'; });
     var keepCarry = {};
     window._carriedOpen.forEach(function(o){ keepCarry[o.tracking] = 1; });
     for(var oi=orders.length-1; oi>=0; oi--){
@@ -14858,7 +14860,7 @@ function renderExceptions(){
   }
   var openSource = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
   openSource.forEach(function(o){
-    if(o.status==='done') return;
+    if(o.status==='done' || o.status==='oos') return;
     bucket(o.carrier || exceptionCarrier(o.tracking)).open.push(o);
   });
   (window._skippedPages||[]).forEach(function(p){
@@ -14886,6 +14888,7 @@ function renderExceptions(){
         + ' <span style="color:#fbbf24;">'+escHtml(o.shelf||'no shelf')+'</span></div>'
         + '<div style="display:flex;gap:6px;">'
         + '<button class="btn" onclick="editExceptionOrder(decodeURIComponent(\''+id+'\'))">Edit</button>'
+        + '<button class="btn" style="border-color:#fbbf24;color:#fbbf24;" onclick="markExceptionOutOfStock(decodeURIComponent(\''+id+'\'))">Out of stock</button>'
         + '<button class="btn" style="border-color:#86efac;color:#86efac;" onclick="confirmExceptionOrder(decodeURIComponent(\''+id+'\'))">Confirm packed</button>'
         + '</div></div>';
     }
@@ -14898,7 +14901,7 @@ function renderExceptions(){
     return '<section style="border:1px solid '+col+';border-radius:8px;padding:12px;">'
       + '<div style="font-weight:800;margin-bottom:8px;color:'+col+';">'+escHtml(car)+'</div>'
       + '<div style="font-size:11px;letter-spacing:1px;color:#fbbf24;font-weight:700;">UNFINISHED '+g.open.length+'</div>'
-      + '<div style="font-size:11px;color:var(--td);margin:2px 0 6px;">Gun could not read these. Edit the SKU if it is wrong, then confirm packed.</div>'
+      + '<div style="font-size:11px;color:var(--td);margin:2px 0 6px;">Still here at the end of the day: mark out of stock, or confirm packed if the gun could not read it.</div>'
       + (g.open.map(rowOpen).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
       + '<div style="font-size:11px;letter-spacing:1px;color:#fb7185;font-weight:700;margin-top:10px;">UNREADABLE PAGES '+g.unread.length+'</div>'
       + (g.unread.map(rowUnread).join('') || '<div style="font-size:12px;color:var(--td);">None</div>')
@@ -14908,7 +14911,7 @@ function renderExceptions(){
   }).join('');
 }
 function findOpenException(tracking){
-  return (orders||[]).find(function(o){ return o.tracking===tracking && o.status!=='done'; });
+  return (orders||[]).find(function(o){ return o.tracking===tracking && o.status!=='done' && o.status!=='oos'; });
 }
 function editExceptionOrder(tracking){
   var o = findOpenException(tracking);
@@ -14946,13 +14949,74 @@ function markOrderPacked(o, raw){
 }
 function confirmExceptionOrder(tracking){
   var o = findOpenException(tracking);
-  if(!o && window._accountTodayOrders) o = window._accountTodayOrders.find(function(x){ return x.tracking===tracking && x.status!=='done'; });
+  if(!o && window._accountTodayOrders) o = window._accountTodayOrders.find(function(x){ return x.tracking===tracking && x.status!=='done' && x.status!=='oos'; });
   if(!o) return;
   if(!window.confirm('Mark '+tracking+' packed without a scan?')) return;
   markOrderPacked(o, 'MANUAL-CONFIRM');
   try { renderQueue(); } catch(e){}
   try { renderDash(); } catch(e){}
   renderExceptions();
+}
+function openExceptionOrders(){
+  var source = (window._accountTodayOrders && window._accountTodayOrders.length) ? window._accountTodayOrders : (orders||[]);
+  var seen = {};
+  var list = [];
+  source.concat(orders||[]).forEach(function(o){
+    if(!o || !o.tracking || seen[o.tracking]) return;
+    if(o.status==='done' || o.status==='oos') return;
+    seen[o.tracking] = 1;
+    list.push(o);
+  });
+  return list;
+}
+async function closeOrderAsOutOfStock(o){
+  if(!o || !o.tracking) return;
+  if(!window.warehubApi) throw new Error('Sign in first');
+  var sku = (o.skus||[]).map(function(s){ return s.sku; }).filter(Boolean).join(', ') || 'UNKNOWN';
+  var result = await window.warehubApi('POST', '/api/out-of-stock', {
+    tracking: o.tracking,
+    sku: sku,
+    carrier: o.carrier || '',
+    order_id: o.apiId || null,
+    reported_by: (typeof currentPacker!=='undefined' && currentPacker) ? currentPacker.name : '',
+    notes: 'Left unfinished at end of day'
+  });
+  if(!result || result.error) throw new Error((result && result.error) || 'Could not log out of stock');
+  o.status = 'oos';
+  o.outOfStock = true;
+  (window._accountTodayOrders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
+  (orders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
+  var id = o.apiId;
+  if(!id){
+    var looked = await window.warehubApi('GET', '/api/orders/lookup?tracking='+encodeURIComponent(o.tracking)).catch(function(){ return null; });
+    if(looked && looked.order) id = looked.order.id;
+  }
+  if(id) await window.warehubApi('PATCH', '/api/orders/'+id, { status:'oos' }).catch(function(){});
+}
+async function markExceptionOutOfStock(tracking){
+  var o = findOpenException(tracking);
+  if(!o && window._accountTodayOrders) o = window._accountTodayOrders.find(function(x){ return x.tracking===tracking && x.status!=='done' && x.status!=='oos'; });
+  if(!o) return;
+  if(!window.confirm('Move '+tracking+' to out of stock and take it off the queue?')) return;
+  try { await closeOrderAsOutOfStock(o); }
+  catch(e){ alert(e.message || 'Could not log out of stock'); return; }
+  try { renderQueue(); } catch(err){}
+  try { renderPackRemaining(); } catch(err){}
+  renderExceptions();
+}
+async function markOpenExceptionsOutOfStock(){
+  var list = openExceptionOrders();
+  if(!list.length){ alert('No unfinished labels in the queue.'); return; }
+  if(!window.confirm('Move '+list.length+' unfinished label'+(list.length===1?'':'s')+' to out of stock? They leave today\'s queue and are not counted as packed.')) return;
+  var failed = 0;
+  for(var i=0;i<list.length;i++){
+    try { await closeOrderAsOutOfStock(list[i]); }
+    catch(e){ failed++; }
+  }
+  try { renderQueue(); } catch(err){}
+  try { renderPackRemaining(); } catch(err){}
+  renderExceptions();
+  if(failed) alert(failed+' label'+(failed===1?'':'s')+' could not be logged.');
 }
 function refreshExceptions(){
   var reload = (window.apiLoadOrders ? window.apiLoadOrders(true) : Promise.resolve());
