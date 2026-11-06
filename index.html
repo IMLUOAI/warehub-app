@@ -1426,7 +1426,7 @@ function bpLogin(){ bp(660,.05,'sine',.2); setTimeout(function(){ bp(990,.08,'si
 
 var CR = {
   GOFO:   {c:'#818cf8', t:function(s){return /^GFUS/i.test(s);}},
-  FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|FX-|FEDEX-)/.test(s);}},
+  FedEx:  {c:'#c77dff', t:function(s){return /^(96\d{18,22}|61\d{17,20}|7[245]\d{14,18}|8\d{11}|FX-|FEDEX-)/.test(s);}},
   UPS:    {c:'#ffb300', t:function(s){return /^1Z/i.test(s);}},
   USPS:   {c:'#00ff88', t:function(s){return /^9[0-9]\d{18,22}$/.test(s)||/^\d{20,22}$/.test(s)||/^70\d{14}$/.test(s);}},
   SWIFT:  {c:'#eab308', t:function(s){return /^SW/i.test(s);}},
@@ -1466,6 +1466,27 @@ function whDigitish(s){
     .replace(/[^0-9]/g,'');
 }
 
+function fedexTrackingDigits(digits){
+  digits = String(digits||'').replace(/\D/g,'');
+  // Express prints a 4-digit form code, such as 0430, in the box beside TRK#.
+  // Glued onto the real number it becomes 0430879830753919. The tracking is the next 12.
+  if(digits.length >= 16 && digits.length <= 20 && /^0\d{3}/.test(digits)) return digits.slice(4, 16);
+  if(digits.length === 12) return digits;
+  if(digits.length > 12) return digits.slice(-12);
+  return '';
+}
+function fedexBarcodeWindows(digits){
+  digits = String(digits||'').replace(/\D/g,'');
+  var out = [];
+  function add(v){ if(v && v.length===12 && out.indexOf(v)<0) out.push(v); }
+  if(digits.length>=12) add(digits.slice(-12));
+  if(digits.length>=14) add(digits.slice(-14,-2));
+  if(digits.length>=16 && /^0\d{3}/.test(digits)) add(digits.slice(4,16));
+  if(digits.length>=20) add(digits.slice(8,20));
+  if(digits.length>=28) add(digits.slice(16,28));
+  if(digits.length>=32) add(digits.slice(20,32));
+  return out;
+}
 function whPushTrackingCandidate(list, tracking, carrier, score, source){
   if(!tracking) return;
   tracking = String(tracking).toUpperCase().replace(/[^A-Z0-9-]/g,'');
@@ -1503,9 +1524,11 @@ function whExtractTrackingCandidates(rawText){
   addRegex(compact, /(TBA\d{10,18}|1DS\d{10,18})/gi, 'Amazon', 0.94);
   addRegex(compact, /(GM\d{16,18}|JD\d{18,22})/gi, 'DHL', 0.92);
 
-  var explicitFedEx = upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*(\d{4}\s?\d{4}\s?\d{4})\b/i)
-                   || upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*(\d{12})\b/i);
-  if(explicitFedEx) whPushTrackingCandidate(out, explicitFedEx[1].replace(/\s+/g,''), 'FedEx', 0.99, 'fedex-label-field');
+  var explicitFedEx = upperRaw.match(/(?:TRK#|TRACKING\s*ID#|MSTR#)\s*[:.]?\s*((?:0\d{3}\s+)?(?:\d{4}\s*){3,4}|\d{12,16})/i);
+  if(explicitFedEx){
+    var explicitDigits = fedexTrackingDigits(explicitFedEx[1]);
+    if(explicitDigits) whPushTrackingCandidate(out, explicitDigits, 'FedEx', 0.99, 'fedex-label-field');
+  }
 
   // Bare "8774" + 8 digits — FedEx's TRK# format (seen on both domestic
   // Home Delivery and International Connect Plus labels). The check above
@@ -1526,14 +1549,9 @@ function whExtractTrackingCandidates(rawText){
   // run regardless of source, but the substring comparison against real
   // stored order tracking numbers later in the matching chain is what
   // actually prevents a false-positive match, not this pattern being narrow.
-  if(digits.length >= 12) whPushTrackingCandidate(out, digits.slice(-12), 'FedEx', 0.8, 'last-12-digits');
-  // Express 34-digit barcode: unique serial is not the last 12 (those include
-  // the check digit). Ground 34-digit GSN does use last-12. Emit both, plus
-  // the 15-digit ground form, so the gun payload can hit the stored TRK#.
-  if(digits.length >= 14) whPushTrackingCandidate(out, digits.slice(-14, -2), 'FedEx', 0.78, 'fedex-serial-before-check');
-  if(digits.length >= 15) whPushTrackingCandidate(out, digits.slice(-15), 'FedEx', 0.74, 'fedex-15');
-  if(digits.length >= 22) whPushTrackingCandidate(out, digits.slice(-22), 'FedEx', 0.7, 'fedex-22');
-  if(digits.length >= 32) whPushTrackingCandidate(out, digits.slice(20, 32), 'FedEx', 0.76, 'fedex-34-mid');
+  if(digits.length >= 12) fedexBarcodeWindows(digits).forEach(function(win){
+    whPushTrackingCandidate(out, win, 'FedEx', win===digits.slice(-12) ? 0.8 : 0.76, 'fedex-window');
+  });
 
   addRegex(digits, /(96\d{18,22}|61\d{17,20}|7[245]\d{14,18})/g, 'FedEx', hintFedEx ? 0.96 : 0.72);
   if(!hintFedEx){
@@ -1971,30 +1989,26 @@ function matchTracking(words){
       var trkTop = trkRow[0].top;
       // Wider bidirectional window (±60) so the number line is found regardless
       // of whether PDF.js reports the TRK# slightly above or below the digits.
-      var nearbyRows = rowKeys.filter(function(rk){ return Math.abs(rk - trkTop) <= 60; })
-        .sort(function(a,b){ return a-b; });
+      var nearbyRows = rowKeys.filter(function(rk){ return Math.abs(rk - trkTop) <= 28; })
+        .sort(function(a,b){ return Math.abs(a-trkTop) - Math.abs(b-trkTop); });
       for(var tri=0; tri<nearbyRows.length; tri++){
         var trkConcat = rows[nearbyRows[tri]].sort(function(a,b){return a.x-b.x;})
           .map(function(w){return clean(w.text);}).join('');
         var trkDigits = trkConcat.replace(/[^0-9]/g,'');
-        // Prefer a clean 12-digit run (the real unique TRK#). Also accept
-        // 12 digits embedded in a longer string on the same visual line.
-        var trkM = trkDigits.match(/(\d{12})/);
-        if(trkM){
-          var trkFinal = trkM[1];
-          if(trkFinal.length===12){
-            dbg('  FedEx TRK# match (preferred, reliably unique): FEDEX-'+trkFinal);
-            return 'FEDEX-'+trkFinal;
-          }
+        if(trkDigits.length < 12 || trkDigits.length > 20) continue;
+        var trkFinal = fedexTrackingDigits(trkDigits);
+        if(trkFinal.length===12){
+          dbg('  FedEx TRK# match (preferred, reliably unique): FEDEX-'+trkFinal);
+          return 'FEDEX-'+trkFinal;
         }
       }
     }
 
     // Also try a full-text regex for "TRK# 8778 3307 8380" style (handles cases
     // where the number is on the same text item as the label).
-    var fullTextTrk = allText.match(/(?:TRK#?|TRACKING\s*ID#?)\s*[:.]?\s*(\d{4}\s*\d{4}\s*\d{4}|\d{12})/i);
+    var fullTextTrk = allText.match(/(?:TRK#?|TRACKING\s*ID#?)\s*[:.]?\s*((?:0\d{3}\s+)?(?:\d{4}\s*){3,4}|\d{12,16})/i);
     if(fullTextTrk){
-      var ftDigits = fullTextTrk[1].replace(/[^0-9]/g,'');
+      var ftDigits = fedexTrackingDigits(fullTextTrk[1]);
       if(ftDigits.length === 12){
         dbg('  FedEx TRK# match (full-text regex): FEDEX-'+ftDigits);
         return 'FEDEX-'+ftDigits;
@@ -3008,11 +3022,7 @@ function extractOrder(words, pageH, pageW){
   var digitRuns = pageCompact.match(/\d{12,40}/g) || [];
   digitRuns.forEach(function(d){
     addAlias(d);
-    if(d.length>=12) addAlias(d.slice(-12));
-    if(d.length>=14) addAlias(d.slice(-14,-2));
-    if(d.length>=15) addAlias(d.slice(-15));
-    if(d.length>=22) addAlias(d.slice(-22));
-    if(d.length>=32) addAlias(d.slice(20,32));
+    fedexBarcodeWindows(d).forEach(addAlias);
   });
 
   return{tracking:tracking, carrier:carrier, hub:hubW?hubW.text:'',
