@@ -1674,18 +1674,17 @@ function recentDayISOs(n){
   return out;
 }
 function todaysImportedOrders(){
-  // Pack Station's large counter is for the active PDF import batch, not
-  // every order that happens to have today's calendar date. The local
-  // `orders` array is set to the freshly parsed batch by initOrders(parsed).
-  // Use it when available so older unreadable labels in the cloud/day list
-  // cannot replace a 102-label batch with a 10-order subset.
-  if (Array.isArray(orders) && orders.length) return orders;
-  // On a pack-only monitor with no local batch loaded, fall back to today's
-  // cloud orders.
   var today = todayISO();
-  return (window._accountTodayOrders || []).filter(function(o){
-    return o.importedOn === today;
+  var src = (Array.isArray(orders) && orders.length) ? orders : (window._accountTodayOrders || []);
+  var seen = {};
+  var out = [];
+  src.forEach(function(o){
+    if(!o || !o.tracking || seen[o.tracking]) return;
+    if(o.importedOn && o.importedOn!==today && !o.carried) return;
+    seen[o.tracking] = 1;
+    out.push(o);
   });
+  return out;
 }
 function renderPackRemaining(){
   var leftEl = document.getElementById('pack-left');
@@ -2399,6 +2398,20 @@ async function idbSaveBatch(pdfArrayBuffer, ordersArray){
     var me = (window._clerkUser && window._clerkUser.id) || '';
     if(me) await idbPut('ordersOwner', me);
   }catch(e){ console.warn('[idbSaveBatch]', e); }
+}
+
+async function idbPatchOrder(tracking, patch){
+  try{
+    var meta = await idbGet('orders');
+    if(!meta || !meta.length || !tracking) return;
+    var hit = false;
+    meta.forEach(function(o){
+      if(o.tracking!==tracking) return;
+      Object.keys(patch||{}).forEach(function(k){ o[k] = patch[k]; });
+      hit = true;
+    });
+    if(hit) await idbPut('orders', meta);
+  }catch(e){}
 }
 
 async function idbClearBatch(){
@@ -4377,7 +4390,7 @@ function mainScanKeyHandler(e){
   window._scanTimer = setTimeout(function(){
     var v = el.value.trim();
     var elapsedMs = Date.now() - _mainScanTypeStart;
-    if(v && v.length>=10 && !/\s/.test(v) && elapsedMs < 600) doScan(v);
+    if(v && v.length>=8 && elapsedMs < 1200) doScan(v);
   }, 300);
 }
 
@@ -5139,49 +5152,47 @@ function doScan(raw){
   addScanCand(scannedExtracted);
   addScanCand(scanned);
   whExtractTrackingCandidates(scannedExtracted).forEach(function(c){ addScanCand(c.tracking); });
-  whExtractTrackingCandidates(scanned).forEach(function(c){ addScanCand(c.tracking); });
-
-  // NOTE: rack scanning is handled entirely by its own dedicated input in the
-  // Rack Map tab (see rackScanState/rack-scan-input) — nothing here ever sets
-  // packState to 'rack-scan', so that branch was removed as dead code.
-
-  // ── SHIPPING LABEL SCAN — completes order immediately ──
-  var order = null;
-
-  // Match against every stored order by expanding BOTH sides the same way
-  // (norm + last-12). This makes FedEx scans succeed whether the order was
-  // stored as "FEDEX-877833078380", "877833078380", or a longer 96… barcode.
-  for(var i=0;i<orders.length;i++){
-    var stored = orders[i].tracking;
-    var storedNorms = [];
-    function addStored(v){
-      if(!v) return;
-      var n = norm(v);
-      if(n && n.length >= 8 && storedNorms.indexOf(n) < 0) storedNorms.push(n);
-      var l12 = last12(v);
-      if(l12 && l12.length === 12 && storedNorms.indexOf(l12) < 0) storedNorms.push(l12);
-    }
-    addStored(stored);
-    (orders[i].trackAliases||[]).forEach(addStored);
-
-    for(var si=0; si<storedNorms.length; si++){
-      var t = storedNorms[si];
-      if(t.length < 8) continue;
-      for(var ci=0; ci<scanCandidateNorms.length; ci++){
-        var c = scanCandidateNorms[ci];
-        // Exact only. Substring matching was completing a different order
-        // whose tracking merely contained these digits, so Pack Station
-        // showed that order's SKU instead of the label in hand.
-        if(c === t){
-          if(!order) order = orders[i];
-          else if(order !== orders[i]) order = 'AMBIGUOUS';
-          break;
-        }
-      }
-      if(order==='AMBIGUOUS') break;
-    }
-    if(order==='AMBIGUOUS') break;
+  // Try the raw scan and the printed tracking first. A dirty extra window
+  // that also hits a second order is skipped, so one real match still goes through.
+  var triedCand = {};
+  var scanSequence = [];
+  function pushScan(v){
+    var n = norm(v);
+    if(n && n.length>=8 && !triedCand[n]){ triedCand[n]=1; scanSequence.push(n); }
+    var bare = fedexTrackingDigits(String(v||'').replace(/\D/g,''));
+    if(bare && !triedCand[bare]){ triedCand[bare]=1; scanSequence.push(bare); }
   }
+  pushScan(scanned);
+  pushScan(scannedExtracted);
+  whExtractTrackingCandidates(scanned).forEach(function(c){ pushScan(c.tracking); });
+  whExtractTrackingCandidates(scannedExtracted).forEach(function(c){ pushScan(c.tracking); });
+
+  var order = null;
+  var sawAmbiguous = false;
+  for(var ci=0; ci<scanSequence.length && !order; ci++){
+    var cand = scanSequence[ci];
+    var hit = null;
+    for(var i=0;i<orders.length;i++){
+      var storedNorms = [];
+      function addStored(v){
+        if(!v) return;
+        var n = norm(v);
+        if(n && n.length >= 8 && storedNorms.indexOf(n) < 0) storedNorms.push(n);
+        var l12 = last12(v);
+        if(l12 && l12.length === 12 && storedNorms.indexOf(l12) < 0) storedNorms.push(l12);
+        var bareStored = fedexTrackingDigits(String(v).replace(/\D/g,''));
+        if(bareStored && storedNorms.indexOf(bareStored)<0) storedNorms.push(bareStored);
+      }
+      addStored(orders[i].tracking);
+      (orders[i].trackAliases||[]).forEach(addStored);
+      if(storedNorms.indexOf(cand)<0) continue;
+      if(!hit) hit = orders[i];
+      else if(hit !== orders[i]){ hit = 'AMBIGUOUS'; break; }
+    }
+    if(hit==='AMBIGUOUS'){ sawAmbiguous = true; continue; }
+    if(hit) order = hit;
+  }
+  if(!order && sawAmbiguous) order = 'AMBIGUOUS';
   if(order==='AMBIGUOUS'){
     bpErr(); flash('err');
     setErr('✗ Scan matched more than one order. Re-import this batch and check the debug log.');
@@ -5256,6 +5267,7 @@ function completeOrder(order, scannedTracking){
   order.scanAudit = order.scanAudit || [];
   if(scannedTracking) order.scanAudit.push({at:new Date().toISOString(), raw:String(scannedTracking)});
   order.orderEndTime=now;
+  if(typeof idbPatchOrder==='function') idbPatchOrder(order.tracking, { status:'done', completedAt: order.completedAt });
 
   // Determine which packer to credit:
   // 1. The packer the order is assigned to (if they are currently clocked in)
@@ -14267,11 +14279,29 @@ function aiDoActions(actions){
       var old = orders[oi];
       if(old && old.carried && !keepCarry[old.tracking]) orders.splice(oi, 1);
     }
+    var aliasByTrack = {};
+    (orders||[]).forEach(function(o){
+      if(o && o.tracking && o.trackAliases && o.trackAliases.length) aliasByTrack[o.tracking] = o.trackAliases;
+    });
+    var serverByTrack = {};
+    window._accountTodayOrders.forEach(function(o){ serverByTrack[o.tracking] = o; });
     var localToday = (orders||[]).some(function(o){ return o.importedOn===today && !o.carried; });
-    if(!orders.length || !localToday) orders = window._accountTodayOrders.slice();
-    else {
+    if(!orders.length || !localToday){
+      orders = window._accountTodayOrders.slice();
+      orders.forEach(function(o){ if(aliasByTrack[o.tracking]) o.trackAliases = aliasByTrack[o.tracking]; });
+    } else {
       var seen = {};
-      orders.forEach(function(o){ seen[o.tracking]=1; if(doneLocal[o.tracking]) o.status='done'; });
+      orders.forEach(function(o){
+        seen[o.tracking]=1;
+        var srv = serverByTrack[o.tracking];
+        if(doneLocal[o.tracking]){
+          o.status='done';
+          o.completedAt = o.completedAt || doneLocal[o.tracking];
+        } else if(srv && (srv.status==='done' || srv.status==='oos')){
+          o.status = srv.status;
+          o.completedAt = srv.completedAt || o.completedAt;
+        }
+      });
       window._carriedOpen.forEach(function(o){ if(!seen[o.tracking]) orders.push(o); });
     }
     refreshAfterPack();
@@ -14946,6 +14976,7 @@ function markOrderPacked(o, raw){
   o.manualClose=true;
   window._manualPacked = window._manualPacked || {};
   window._manualPacked[o.tracking] = o.completedAt;
+  if(typeof idbPatchOrder==='function') idbPatchOrder(o.tracking, { status:'done', completedAt: o.completedAt });
   o.scanAudit = o.scanAudit || [];
   o.scanAudit.push({at:new Date().toISOString(), raw:raw||'MANUAL-CONFIRM'});
   (window._accountTodayOrders||[]).forEach(function(a){
@@ -14994,6 +15025,7 @@ async function closeOrderAsOutOfStock(o){
   if(!result || result.error) throw new Error((result && result.error) || 'Could not log out of stock');
   o.status = 'oos';
   o.outOfStock = true;
+  if(typeof idbPatchOrder==='function') idbPatchOrder(o.tracking, { status:'oos', outOfStock:true });
   (window._accountTodayOrders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
   (orders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
   var id = o.apiId;
