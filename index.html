@@ -1673,6 +1673,27 @@ function recentDayISOs(n){
   }
   return out;
 }
+function packedTodayKey(){
+  var uid = 'local';
+  try { uid = (window._clerkUser && window._clerkUser.id) || localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
+  return 'warehub_packed_today:'+uid+':'+todayISO();
+}
+function rememberPackedToday(tracking, status){
+  if(!tracking) return;
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem(packedTodayKey()) || '{}'); } catch(e){}
+  map[tracking] = status || 'done';
+  try { localStorage.setItem(packedTodayKey(), JSON.stringify(map)); } catch(e){}
+}
+function applyPackedToday(list){
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem(packedTodayKey()) || '{}'); } catch(e){}
+  (list||[]).forEach(function(o){
+    if(!o || !map[o.tracking]) return;
+    if(map[o.tracking]==='oos'){ o.status='oos'; o.outOfStock=true; }
+    else if(o.status!=='oos'){ o.status='done'; if(!o.completedAt) o.completedAt='saved'; }
+  });
+}
 function todaysImportedOrders(){
   var today = todayISO();
   var src = (Array.isArray(orders) && orders.length) ? orders : (window._accountTodayOrders || []);
@@ -1684,6 +1705,7 @@ function todaysImportedOrders(){
     seen[o.tracking] = 1;
     out.push(o);
   });
+  applyPackedToday(out);
   return out;
 }
 function renderPackRemaining(){
@@ -2432,6 +2454,7 @@ async function idbRestoreBatch(){
     var pdfAb = await idbGet('pdf');
     if(!pdfAb) return;
     initOrders(meta);
+    applyPackedToday(orders);
     pm('✓ Restored '+meta.length+' order(s) from last session. Re-rendering thumbnails…');
     renderThumbnailsFromPdf(pdfAb, meta).catch(function(e){ console.warn('[idbRestore]', e); });
   }catch(e){ console.warn('[idbRestoreBatch]', e); }
@@ -5268,6 +5291,7 @@ function completeOrder(order, scannedTracking){
   if(scannedTracking) order.scanAudit.push({at:new Date().toISOString(), raw:String(scannedTracking)});
   order.orderEndTime=now;
   if(typeof idbPatchOrder==='function') idbPatchOrder(order.tracking, { status:'done', completedAt: order.completedAt });
+  rememberPackedToday(order.tracking, 'done');
 
   // Determine which packer to credit:
   // 1. The packer the order is assigned to (if they are currently clocked in)
@@ -14256,6 +14280,10 @@ function aiDoActions(actions){
     (orders||[]).concat(window._accountTodayOrders||[]).forEach(function(o){ if(o.status==='done') doneLocal[o.tracking]=o.completedAt; });
     var manualPacked = window._manualPacked || {};
     Object.keys(manualPacked).forEach(function(t){ if(!doneLocal[t]) doneLocal[t] = manualPacked[t]; });
+    try {
+      var savedPacked = JSON.parse(localStorage.getItem(packedTodayKey()) || '{}');
+      Object.keys(savedPacked).forEach(function(t){ if(savedPacked[t]==='done' && !doneLocal[t]) doneLocal[t] = 'saved'; });
+    } catch(e){}
     var byTrack = {};
     mapped.forEach(function(o){
       if(!o || !o.tracking) return;
@@ -14977,6 +15005,7 @@ function markOrderPacked(o, raw){
   window._manualPacked = window._manualPacked || {};
   window._manualPacked[o.tracking] = o.completedAt;
   if(typeof idbPatchOrder==='function') idbPatchOrder(o.tracking, { status:'done', completedAt: o.completedAt });
+  rememberPackedToday(o.tracking, 'done');
   o.scanAudit = o.scanAudit || [];
   o.scanAudit.push({at:new Date().toISOString(), raw:raw||'MANUAL-CONFIRM'});
   (window._accountTodayOrders||[]).forEach(function(a){
@@ -15026,6 +15055,7 @@ async function closeOrderAsOutOfStock(o){
   o.status = 'oos';
   o.outOfStock = true;
   if(typeof idbPatchOrder==='function') idbPatchOrder(o.tracking, { status:'oos', outOfStock:true });
+  rememberPackedToday(o.tracking, 'oos');
   (window._accountTodayOrders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
   (orders||[]).forEach(function(a){ if(a.tracking===o.tracking) a.status='oos'; });
   var id = o.apiId;
