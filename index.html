@@ -77,7 +77,7 @@ body{
 }
 .more-wrap{position:relative;flex:1;min-width:76px;display:flex;}
 #more-tab{flex:1;}
-#more-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:300;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;min-width:190px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.35);}
+#more-menu{display:none;position:fixed;z-index:4000;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;min-width:200px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.45);}
 #more-menu button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--tx);font:inherit;font-size:13px;font-weight:600;padding:10px 12px;border-radius:8px;cursor:pointer;}
 #more-menu button:hover{background:#4c8dff18;}
 
@@ -977,15 +977,15 @@ body.station-mode #pack-left{font-size:120px;}
     <button class="tab" data-view="exceptions" onclick="gv('exceptions')">Exceptions</button>
     <div class="more-wrap">
       <button class="tab" id="more-tab" type="button" onclick="toggleMoreMenu(event)">More</button>
-      <div id="more-menu" onclick="event.stopPropagation()">
-        <button type="button" data-view="dash" onclick="gv('dash')">Dashboard</button>
-        <button type="button" data-view="locations" onclick="gv('locations')">Locations</button>
-        <button type="button" data-view="receiving" onclick="gv('receiving')">Receiving</button>
-        <button type="button" data-view="returns" onclick="gv('returns')">Returns</button>
-        <button type="button" data-view="vehicle" onclick="gv('vehicle')">Vehicle</button>
-        <button type="button" data-view="fba" onclick="gv('fba')">FBA Outbound</button>
-      </div>
     </div>
+  </div>
+  <div id="more-menu" onclick="event.stopPropagation()">
+    <button type="button" data-view="dash" onclick="gv('dash')">Dashboard</button>
+    <button type="button" data-view="locations" onclick="gv('locations')">Locations</button>
+    <button type="button" data-view="receiving" onclick="gv('receiving')">Receiving</button>
+    <button type="button" data-view="returns" onclick="gv('returns')">Returns</button>
+    <button type="button" data-view="vehicle" onclick="gv('vehicle')">Vehicle</button>
+    <button type="button" data-view="fba" onclick="gv('fba')">FBA Outbound</button>
   </div>
 </div>
 
@@ -1682,8 +1682,14 @@ function applyPlanUIGating(){
 function toggleMoreMenu(e){
   if(e) e.stopPropagation();
   var menu = document.getElementById('more-menu');
-  if(!menu) return;
-  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  var btn = document.getElementById('more-tab');
+  if(!menu || !btn) return;
+  if(menu.style.display === 'block'){ menu.style.display = 'none'; return; }
+  menu.style.display = 'block';
+  var r = btn.getBoundingClientRect();
+  var width = menu.offsetWidth || 200;
+  menu.style.top = (r.bottom + 6) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8)) + 'px';
 }
 document.addEventListener('click', function(){
   var menu = document.getElementById('more-menu');
