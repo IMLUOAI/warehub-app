@@ -1169,6 +1169,18 @@ body.station-mode #pack-left{font-size:120px;}
           <div class="bar" style="height:10px;margin-top:10px;"><div class="barf" id="pack-bar" style="width:0%;background:var(--gn);transition:width .35s;"></div></div>
           <div id="pack-pace">Import a batch to start the count</div>
         </div>
+        <div id="pickup-board" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div class="lbl" style="margin:0;">PICKUP ORDER</div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input id="pickup-add-name" placeholder="Carrier" style="width:110px;padding:6px 8px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>
+              <input id="pickup-add-time" type="time" style="padding:6px 8px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>
+              <button class="btn" type="button" onclick="addPickupCarrier()">Add</button>
+            </div>
+          </div>
+          <div id="pickup-now" style="font-size:13px;margin-top:8px;color:var(--td);">Set a pickup time. The carrier with the most packages per minute left goes first.</div>
+          <div id="pickup-rows" style="margin-top:8px;"></div>
+        </div>
         <div id="replace-sheet" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <div class="lbl" style="margin:0;">REPLACEMENT SHEET</div>
@@ -1739,6 +1751,105 @@ function renderPackRemaining(){
   var elapsed = Math.max(0, (Date.now()-start)/3600000);
   var leftHours = Math.max(0.25, 8-elapsed);
   pace.textContent = 'Need '+Math.ceil(left/leftHours)+' per hour for the rest of the 8-hour shift';
+  renderPickupOrder();
+}
+function pickupStoreKey(){
+  var uid = 'local';
+  try { uid = (window._clerkUser && window._clerkUser.id) || localStorage.getItem('warehub_active_user') || 'local'; } catch(e){}
+  return 'warehub_pickup:'+uid;
+}
+function loadPickupTimes(){
+  try { return JSON.parse(localStorage.getItem(pickupStoreKey()) || '{}'); } catch(e){ return {}; }
+}
+function savePickupTimes(map){
+  try { localStorage.setItem(pickupStoreKey(), JSON.stringify(map)); } catch(e){}
+  if(typeof window.apiSaveSettings === 'function') window.apiSaveSettings({ pickup_times: map }).catch(function(){});
+}
+function setPickupTime(carrier, hhmm){
+  var map = loadPickupTimes();
+  if(!hhmm) delete map[carrier];
+  else map[carrier] = hhmm;
+  savePickupTimes(map);
+  renderPickupOrder();
+}
+function addPickupCarrier(){
+  var nameEl = document.getElementById('pickup-add-name');
+  var timeEl = document.getElementById('pickup-add-time');
+  var name = nameEl ? nameEl.value.trim() : '';
+  var hhmm = timeEl ? timeEl.value : '';
+  if(!name || !hhmm) return;
+  setPickupTime(name, hhmm);
+  if(nameEl) nameEl.value = '';
+  if(timeEl) timeEl.value = '';
+}
+function minutesUntilPickup(hhmm, now){
+  if(!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
+  var parts = hhmm.split(':');
+  var when = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(parts[0],10), parseInt(parts[1],10), 0, 0);
+  return Math.round((when.getTime() - now.getTime()) / 60000);
+}
+function formatMins(mins){
+  if(mins == null) return 'no time';
+  if(mins <= 0) return Math.abs(mins) + ' min late';
+  if(mins < 60) return mins + ' min';
+  var h = Math.floor(mins / 60);
+  var m = mins % 60;
+  return h + 'h ' + m + 'm';
+}
+function escPickup(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&'+'quot;');
+}
+function renderPickupOrder(){
+  var host = document.getElementById('pickup-rows');
+  var nowEl = document.getElementById('pickup-now');
+  if(!host) return;
+  var times = loadPickupTimes();
+  var counts = {};
+  todaysImportedOrders().forEach(function(o){
+    if(!o || o.status==='done' || o.status==='oos') return;
+    var name = o.carrier || 'Unknown';
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  Object.keys(times).forEach(function(name){ if(counts[name] == null) counts[name] = 0; });
+  var now = new Date();
+  var rows = Object.keys(counts).map(function(name){
+    var mins = minutesUntilPickup(times[name], now);
+    var open = counts[name];
+    var pressure = mins == null ? 0 : open / Math.max(mins, 1);
+    return { name:name, open:open, mins:mins, time:times[name] || '', pressure:pressure };
+  }).filter(function(r){ return r.open > 0 || r.time; });
+  rows.sort(function(a,b){
+    var aTimed = a.mins != null, bTimed = b.mins != null;
+    if(aTimed !== bTimed) return aTimed ? -1 : 1;
+    if(aTimed){
+      var aLate = a.mins <= 0, bLate = b.mins <= 0;
+      if(aLate !== bLate) return aLate ? -1 : 1;
+      if(a.pressure !== b.pressure) return b.pressure - a.pressure;
+      return a.mins - b.mins;
+    }
+    return b.open - a.open;
+  });
+  if(nowEl){
+    if(!rows.length) nowEl.textContent = 'No open labels yet. Add a carrier and its pickup time.';
+    else if(rows[0].mins == null) nowEl.textContent = 'Set a pickup time. Until then, the biggest pile is listed first.';
+    else if(rows[0].mins <= 0) nowEl.textContent = rows[0].name + ' is first. The truck is already late, and ' + rows[0].open + ' packages are still open.';
+    else nowEl.textContent = 'Pack ' + rows[0].name + ' first. ' + rows[0].open + ' left, truck in ' + formatMins(rows[0].mins) + '.';
+    nowEl.style.color = rows[0] && rows[0].mins != null && rows[0].mins <= 30 ? 'var(--am)' : 'var(--tx)';
+  }
+  host.innerHTML = rows.map(function(r, i){
+    var late = r.mins != null && r.mins <= 0;
+    var soon = r.mins != null && r.mins > 0 && r.mins <= 45;
+    var color = late ? 'var(--rd)' : (i === 0 && r.mins != null ? 'var(--am)' : 'var(--tx)');
+    var tag = i === 0 && r.mins != null ? (late ? 'LATE' : 'FIRST') : (soon ? 'SOON' : '');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--bdr);">'
+      + '<div style="width:22px;font-weight:800;color:'+color+';">'+(i+1)+'</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:700;color:'+color+';">'+escPickup(r.name)+(tag ? ' · '+tag : '')+'</div>'
+      + '<div style="font-size:11px;color:var(--td);">'+r.open+' left'+(r.mins==null ? '' : ' · '+formatMins(r.mins))+'</div>'
+      + '</div>'
+      + '<input type="time" data-carrier="'+escPickup(r.name)+'" value="'+(r.time||'')+'" onchange="setPickupTime(this.getAttribute(\'data-carrier\'), this.value)" style="padding:6px 8px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:inherit;"/>'
+      + '</div>';
+  }).join('');
 }
 function refreshAfterPack(){
   (orders||[]).forEach(function(o){
@@ -13370,6 +13481,7 @@ window._appInitFn = async function(){try{
   setInterval(function(){
     if(document.getElementById('view-dash').classList.contains('on')) renderDash();
     if(document.getElementById('view-pack').classList.contains('on')) updatePackerBar();
+    if(document.getElementById('view-pack').classList.contains('on') && typeof renderPickupOrder==='function') renderPickupOrder();
     if(document.getElementById('view-payroll').classList.contains('on')) renderProductivity();
     if(document.getElementById('view-floor').classList.contains('on')) floorPoll();
   },10000);
@@ -14615,6 +14727,10 @@ function aiDoActions(actions){
     if(s.fedex_config){
       _fedexConfig = s.fedex_config;
       try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+    }
+    if(s.pickup_times && typeof s.pickup_times === 'object'){
+      try { localStorage.setItem(pickupStoreKey(), JSON.stringify(s.pickup_times)); } catch(e){}
+      if(typeof renderPickupOrder === 'function') renderPickupOrder();
     }
     if(s.company_info){
       window._companyInfo = s.company_info;
