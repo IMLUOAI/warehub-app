@@ -4597,7 +4597,9 @@ function loadReplacements(){
 }
 
 function saveReplacements(rows){
-  try { localStorage.setItem(replacementStoreKey(), JSON.stringify(rows.slice(0, 2000))); } catch(e){}
+  var kept = rows.slice(0, 300);
+  try { localStorage.setItem(replacementStoreKey(), JSON.stringify(kept)); } catch(e){}
+  if(typeof window.apiSaveSettings === 'function') window.apiSaveSettings({ replacement_log: kept }).catch(function(){});
 }
 
 function expandSkuLines(order){
@@ -5745,10 +5747,25 @@ async function userSignOut(){
 
 // ── Company Info (shown on exports) ──────────────────────────────
 window._companyInfo = { name:'', address:'', phone:'', logo:'' };
-try {
-  var _savedCompany = JSON.parse(localStorage.getItem('warehub_company_info') || 'null');
-  if(_savedCompany && typeof _savedCompany === 'object') window._companyInfo = _savedCompany;
-} catch(e){}
+function companyLocalKey(){
+  var id = (window._clerkUser && window._clerkUser.id) || '';
+  return id ? 'warehub_company_info:'+id : '';
+}
+function readScopedCompany(){
+  var key = companyLocalKey();
+  if(!key) return null;
+  try {
+    var saved = JSON.parse(localStorage.getItem(key) || 'null');
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch(e){ return null; }
+}
+function writeScopedCompany(info){
+  var key = companyLocalKey();
+  try {
+    if(key) localStorage.setItem(key, JSON.stringify(info));
+    localStorage.removeItem('warehub_company_info');
+  } catch(e){}
+}
 function applyBrandLogo(){
   var ci = window._companyInfo || {};
   var src = ci.logo || '';
@@ -5812,7 +5829,7 @@ async function companyInfoSave(){
     logo:    window._companyInfo.logo || '',
   };
   applyBrandLogo();
-  try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
+  try{ writeScopedCompany(window._companyInfo); }catch(e){}
   if(window.apiSaveSettings) await window.apiSaveSettings({ company_info: window._companyInfo });
   companyInfoClose();
   if(typeof pm === 'function') pm('✓ Company info saved');
@@ -11156,9 +11173,15 @@ var _fedexConfig = {clientId:'', clientSecret:''};
 var _fedexTokenData = null; // {token, expiresAt}
 var _fedexStatus = {};  // {tracking: {status, desc, ts}}
 
+function fedexLocalKey(){
+  var id = window._clerkUser && window._clerkUser.id;
+  return id ? 'warehub_fedex:'+id : '';
+}
 function fedexLoadConfig(){
   try{
-    var v = JSON.parse(localStorage.getItem('warehub_fedex')||'{}');
+    var key = fedexLocalKey();
+    var raw = key ? localStorage.getItem(key) : null;
+    var v = JSON.parse(raw || '{}');
     _fedexConfig = {clientId: v.clientId||'', clientSecret: v.clientSecret||''};
   }catch(e){ _fedexConfig = {clientId:'', clientSecret:''}; }
   var cEl = document.getElementById('fdx-client-id');
@@ -11172,7 +11195,11 @@ function fedexSaveConfig(){
   var sEl = document.getElementById('fdx-client-secret');
   _fedexConfig.clientId     = cEl ? cEl.value.trim() : '';
   _fedexConfig.clientSecret = sEl ? sEl.value.trim() : '';
-  try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+  try{
+    var key = fedexLocalKey();
+    if(key) localStorage.setItem(key, JSON.stringify(_fedexConfig));
+    localStorage.removeItem('warehub_fedex');
+  }catch(e){}
   _fedexTokenData = null; // invalidate cached token
   pm('✓ FedEx credentials saved.');
 }
@@ -14140,9 +14167,20 @@ function aiDoActions(actions){
     var last = '';
     try { last = localStorage.getItem('warehub_active_user') || ''; } catch(e){}
     if(last === userId) return;
+    if(!last){
+      try {
+        var legacyCompany = JSON.parse(localStorage.getItem('warehub_company_info') || 'null');
+        if(legacyCompany && typeof legacyCompany === 'object') localStorage.setItem('warehub_company_info:'+userId, JSON.stringify(legacyCompany));
+        var legacyFedex = localStorage.getItem('warehub_fedex');
+        if(legacyFedex) localStorage.setItem('warehub_fedex:'+userId, legacyFedex);
+      } catch(e){}
+    }
     ['warehub_packers','warehub_managers','warehub_currentPacker','warehub_inventory','warehub_receiving_log','warehub_returns','warehub_vehicle','warehub_fba','warehub_fba_reprints','warehub_company_info','warehub_vehicle_config','warehub_fedex'].forEach(function(k){
       try { localStorage.removeItem(k); } catch(e){}
     });
+    window._companyInfo = { name:'', address:'', phone:'', logo:'' };
+    if(typeof _fedexConfig !== 'undefined') _fedexConfig = {clientId:'', clientSecret:''};
+    if(typeof applyBrandLogo === 'function') applyBrandLogo();
     try { localStorage.setItem('warehub_active_user', userId); } catch(e){}
     window._accountSwitched = !!(last && last !== userId);
     packers = [];
@@ -14178,6 +14216,18 @@ function aiDoActions(actions){
     window._clerkUser = user;
     window.__clerk = window.Clerk;
     await isolateTenantCache(user.id);
+    var scopedCompany = (typeof readScopedCompany === 'function') ? readScopedCompany() : null;
+    if(!scopedCompany){
+      try {
+        var legacyCompany = JSON.parse(localStorage.getItem('warehub_company_info') || 'null');
+        if(legacyCompany && typeof legacyCompany === 'object' && (legacyCompany.name || legacyCompany.logo)) scopedCompany = legacyCompany;
+      } catch(e){}
+    }
+    if(scopedCompany){
+      window._companyInfo = scopedCompany;
+      if(typeof writeScopedCompany === 'function') writeScopedCompany(scopedCompany);
+    }
+    if(typeof applyBrandLogo === 'function') applyBrandLogo();
   
     // Register tenant on first sign-up (idempotent — safe to call every login)
     window._tenantPlan = 'trial';
@@ -14190,7 +14240,7 @@ function aiDoActions(actions){
       const name  = user.fullName || user.firstName || email;
       const regResp = await fetch(WORKER_URL + '/api/tenants/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _clerkToken },
         body: JSON.stringify({ name, email, clerkUserId: user.id }),
       });
       const regData = await regResp.json();
@@ -14804,17 +14854,32 @@ function aiDoActions(actions){
     if(typeof vehicleConfigLoad === 'function') vehicleConfigLoad();
     if(s.fedex_config){
       _fedexConfig = s.fedex_config;
-      try{ localStorage.setItem('warehub_fedex', JSON.stringify(_fedexConfig)); }catch(e){}
+      try{
+        var fkey = (window._clerkUser && window._clerkUser.id) ? 'warehub_fedex:'+window._clerkUser.id : '';
+        if(fkey) localStorage.setItem(fkey, JSON.stringify(_fedexConfig));
+        localStorage.removeItem('warehub_fedex');
+      }catch(e){}
+      if(typeof fedexLoadConfig === 'function') fedexLoadConfig();
     }
     if(s.pickup_times && typeof s.pickup_times === 'object'){
       try { localStorage.setItem(pickupStoreKey(), JSON.stringify(s.pickup_times)); } catch(e){}
       if(typeof renderPickupOrder === 'function') renderPickupOrder();
     }
-    if(s.company_info){
-      window._companyInfo = s.company_info;
-      try{ localStorage.setItem('warehub_company_info', JSON.stringify(window._companyInfo)); }catch(e){}
-      if(typeof applyBrandLogo === 'function') applyBrandLogo();
+    if(Array.isArray(s.replacement_log) && typeof saveReplacements === 'function'){
+      try { localStorage.setItem(replacementStoreKey(), JSON.stringify(s.replacement_log.slice(0, 300))); } catch(e){}
+      if(typeof renderReplacementSheet === 'function') renderReplacementSheet();
     }
+    if(s.company_info && typeof s.company_info === 'object' && (s.company_info.name || s.company_info.logo || s.company_info.address || s.company_info.phone)){
+      window._companyInfo = s.company_info;
+      writeScopedCompany(window._companyInfo);
+    } else if(window._companyInfo && (window._companyInfo.name || window._companyInfo.logo || window._companyInfo.address || window._companyInfo.phone)){
+      writeScopedCompany(window._companyInfo);
+      if(window.apiSaveSettings) window.apiSaveSettings({ company_info: window._companyInfo });
+    } else {
+      window._companyInfo = { name:'', address:'', phone:'', logo:'' };
+      writeScopedCompany(window._companyInfo);
+    }
+    if(typeof applyBrandLogo === 'function') applyBrandLogo();
     var me = window._clerkUser && window._clerkUser.id;
     window._inventoryData = (s.rack_inventory && typeof s.rack_inventory === 'object') ? s.rack_inventory : {};
     window._inventoryOwner = me;
