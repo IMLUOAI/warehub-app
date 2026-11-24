@@ -21,10 +21,10 @@
 html,body{height:100%;overflow:hidden;}
 
 body{
-  font-family:'Share Tech Mono',monospace;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg);
   color:var(--tx);
-  font-size:clamp(11px,1.5vw,13px);
+  font-size:clamp(13px,1.5vw,14px);
   display:grid;
   grid-template-rows:auto 1fr;
   grid-template-columns:1fr;
@@ -75,24 +75,29 @@ body{
   -webkit-overflow-scrolling:touch;
   scroll-snap-type:x mandatory;
 }
-.tabs::-webkit-scrollbar{display:none;}
+.more-wrap{position:relative;flex:1;min-width:76px;display:flex;}
+#more-tab{flex:1;}
+#more-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:300;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;min-width:190px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.35);}
+#more-menu button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--tx);font:inherit;font-size:13px;font-weight:600;padding:10px 12px;border-radius:8px;cursor:pointer;}
+#more-menu button:hover{background:#4c8dff18;}
 
 .tab{
   flex:1;
-  padding:6px 4px;
-  font-size:8.5px;
-  letter-spacing:1px;
+  padding:10px 12px;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:0;
   border:none;
-  border-right:1px solid var(--bdr);
+  border-bottom:2px solid transparent;
   cursor:pointer;
   font-family:inherit;
   white-space:nowrap;
-  text-transform:uppercase;
+  text-transform:none;
   background:transparent;
   color:var(--td);
-  transition:all .15s;
+  transition:color .15s,border-color .15s;
   text-align:center;
-  min-width:64px;
+  min-width:76px;
   scroll-snap-align:start;
 }
 .tab.plan-locked{
@@ -103,10 +108,10 @@ body{
 }
 
 :root{
-  --bg:#1a1f2e;--sur:#242937;--bdr:#323852;
-  --cy:#818cf8;--gn:#34d399;--am:#fbbf24;
-  --rd:#f87171;--pu:#a78bfa;--dim:#374162;
-  --tx:#e2e8f0;--td:#6b7a9e;
+  --bg:#101418;--sur:#181d24;--bdr:#2c3542;
+  --cy:#4c8dff;--gn:#3ecf8e;--am:#e2b340;
+  --rd:#f07373;--pu:#9aa6b6;--dim:#243040;
+  --tx:#e8edf2;--td:#8d99a8;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 /* ── APP LAYOUT ── */
@@ -123,7 +128,7 @@ body{
 
 /* ── HEADER ── */
 
-#logo{font-family:'Barlow',sans-serif;font-weight:900;font-size:17px;letter-spacing:6px;color:var(--cy);}
+#logo{font-family:'Barlow',sans-serif;font-weight:800;font-size:15px;letter-spacing:0.14em;color:var(--tx);}
 .brand-slot{width:32px;height:32px;border-radius:7px;border:1px solid var(--bdr);background:var(--sur);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
 .brand-slot .brand-logo{width:100%;height:100%;object-fit:contain;display:none;padding:3px;}
 .brand-sub{font-size:8px;letter-spacing:2px;color:var(--td);font-family:'Share Tech Mono',monospace;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -144,7 +149,8 @@ body.has-brand #logo{letter-spacing:3px;font-size:15px;}
 #badge{font-size:9px;letter-spacing:2px;padding:3px 9px;border:1px solid var(--am);color:var(--am);margin-left:10px;white-space:nowrap;}
 
 
-.tab:hover,.tab.on{border-color:var(--cy);background:#818cf812;color:var(--cy);}
+.tab:hover{color:var(--tx);}
+.tab.on{color:var(--tx);border-bottom-color:var(--cy);}
 
 /* ── LAYOUT ── */
 
@@ -153,16 +159,17 @@ body.has-brand #logo{letter-spacing:3px;font-size:15px;}
 
 
 /* ── SHARED ── */
-.card{background:var(--sur);border:1px solid var(--bdr);padding:15px;}
-.lbl{font-size:9px;letter-spacing:3px;color:var(--td);margin-bottom:6px;}
-.bar{background:var(--bdr);height:4px;}.barf{height:100%;transition:width .6s;}
-.bdg{display:inline-block;font-size:9px;padding:2px 7px;border:1px solid;border-radius:1px;}
-.btn{padding:6px 14px;font-size:9px;letter-spacing:2px;border:1px solid;cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .15s;}
-.btn-c{border-color:var(--cy);background:#818cf810;color:var(--cy);}.btn-c:hover{background:#818cf820;}
-.btn-r{border-color:var(--rd);background:#ff3d5a10;color:var(--rd);}.btn-r:hover{background:#ff3d5a20;}
-.btn-g{border-color:var(--gn);background:#00ff8810;color:var(--gn);}.btn-g:hover{background:#00ff8820;}
-.inp{background:var(--bg);border:1px solid var(--bdr);color:var(--tx);padding:7px 11px;font-size:12px;font-family:inherit;outline:none;}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:15px;}
+.lbl{font-size:11px;font-weight:600;letter-spacing:0.08em;color:var(--td);margin-bottom:6px;}
+.bar{background:var(--bdr);height:4px;border-radius:99px;overflow:hidden;}.barf{height:100%;transition:width .6s;}
+.bdg{display:inline-block;font-size:11px;padding:2px 7px;border:1px solid;border-radius:99px;}
+.btn{padding:8px 12px;font-size:12px;font-weight:600;letter-spacing:0;border:1px solid;border-radius:8px;cursor:pointer;font-family:inherit;text-transform:none;transition:background .15s;}
+.btn-c{border-color:var(--cy);background:transparent;color:var(--cy);}.btn-c:hover{background:#4c8dff22;}
+.btn-r{border-color:var(--rd);background:transparent;color:var(--rd);}.btn-r:hover{background:#f0737322;}
+.btn-g{border-color:var(--gn);background:transparent;color:var(--gn);}.btn-g:hover{background:#3ecf8e22;}
+.inp{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;color:var(--tx);padding:8px 11px;font-size:14px;font-family:inherit;outline:none;}
 .inp:focus{border-color:var(--cy);}
+#scan-in,#login-scan-in,.ski-sku,#ac-track{font-family:ui-monospace,"SF Mono",Consolas,monospace;}
 
 /* ── IMPORT ── */
 #dz{border:2px dashed var(--bdr);padding:36px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:10px;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
@@ -952,10 +959,7 @@ body.station-mode #pack-left{font-size:120px;}
       </div>
 
       <!-- AI Insights bell -->
-      <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="
-        position:relative;background:transparent;border:none;cursor:pointer;padding:4px;
-        color:var(--td);font-size:16px;line-height:1;flex-shrink:0;transition:color .15s;
-      " onmouseover="this.style.color='var(--cy)'" onmouseout="this.style.color='var(--td)'">
+      <button id="insights-btn" onclick="insightsToggle()" title="AI Insights" style="display:none;">
         🔔
         <span id="insights-badge" style="
           display:none;position:absolute;top:0;right:0;
@@ -967,17 +971,21 @@ body.station-mode #pack-left{font-size:120px;}
     </div>
   </div>
   <div class="tabs">
-    <button class="tab on"  data-view="import"   onclick="gv('import')" data-i18n="nav_import">Import</button>
-    <button class="tab"     data-view="manager"  onclick="gv('manager')" data-i18n="nav_packers">Packers</button>
-    <button class="tab"     data-view="pack"     onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
-    <button class="tab"     data-view="exceptions" onclick="gv('exceptions')">Exceptions</button>
-    <button class="tab"     data-view="dash"     onclick="gv('dash')" data-i18n="nav_dash">Dashboard</button>
-    <button class="tab"     data-view="payroll"  onclick="gv('payroll')" data-i18n="nav_stats">📊 Stats</button>
-    <button class="tab"     data-view="locations" onclick="gv('locations')" data-i18n="nav_locations">📍 Locations</button>
-    <button class="tab"     data-view="returns"  onclick="gv('returns')" data-i18n="nav_returns">📦 Returns</button>
-    <button class="tab"     data-view="receiving" onclick="gv('receiving')" data-i18n="nav_receiving">📥 Receiving</button>
-    <button class="tab"     data-view="vehicle"  onclick="gv('vehicle')" data-i18n="nav_vehicle">🚗 Vehicle</button>
-    <button class="tab" data-view="fba" onclick="gv('fba')" data-i18n="nav_fba">📤 FBA Outbound</button>
+    <button class="tab on" data-view="import" onclick="gv('import')" data-i18n="nav_import">Import</button>
+    <button class="tab" data-view="manager" onclick="gv('manager')" data-i18n="nav_packers">Packers</button>
+    <button class="tab" data-view="pack" onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
+    <button class="tab" data-view="exceptions" onclick="gv('exceptions')">Exceptions</button>
+    <div class="more-wrap">
+      <button class="tab" id="more-tab" type="button" onclick="toggleMoreMenu(event)">More</button>
+      <div id="more-menu" onclick="event.stopPropagation()">
+        <button type="button" data-view="dash" onclick="gv('dash')">Dashboard</button>
+        <button type="button" data-view="locations" onclick="gv('locations')">Locations</button>
+        <button type="button" data-view="receiving" onclick="gv('receiving')">Receiving</button>
+        <button type="button" data-view="returns" onclick="gv('returns')">Returns</button>
+        <button type="button" data-view="vehicle" onclick="gv('vehicle')">Vehicle</button>
+        <button type="button" data-view="fba" onclick="gv('fba')">FBA Outbound</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -995,6 +1003,16 @@ body.station-mode #pack-left{font-size:120px;}
       </div>
     </div>
     <div id="exceptions-body" style="display:flex;flex-direction:column;gap:16px;"></div>
+    <div id="replace-sheet" style="border:1px solid var(--bdr);border-radius:10px;padding:12px;background:var(--sur);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div class="lbl" style="margin:0;">REPLACEMENT SHEET</div>
+        <button class="btn" type="button" onclick="exportReplacementSheet()">Save Excel</button>
+      </div>
+      <div style="font-size:12px;color:var(--td);margin-top:4px;">Sold-out SKUs shipped as another item. Adjust inventory from this sheet.</div>
+      <div id="replace-summary" style="font-size:13px;margin-top:8px;color:var(--td);">No replacements yet.</div>
+      <div id="replace-rows" style="max-height:220px;overflow:auto;margin-top:6px;"></div>
+      <div id="replace-last" style="margin-top:8px;"></div>
+    </div>
   </div>
 
 
@@ -1211,26 +1229,6 @@ body.station-mode #pack-left{font-size:120px;}
           <div id="pickup-now" style="font-size:13px;margin-top:8px;color:var(--td);">Set a pickup time. The carrier with the most packages per minute left goes first.</div>
           <div id="pickup-rows" style="margin-top:8px;"></div>
         </div>
-        <div id="replace-sheet" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-            <div class="lbl" style="margin:0;">REPLACEMENT SHEET</div>
-            <button class="btn" type="button" onclick="exportReplacementSheet()">Save Excel</button>
-          </div>
-          <div style="font-size:10px;color:var(--td);margin-top:4px;">Sold-out SKUs shipped as another item. Adjust inventory from this sheet.</div>
-          <div id="replace-summary" style="font-size:12px;margin-top:8px;color:var(--td);">No replacements yet.</div>
-          <div id="replace-rows" style="max-height:160px;overflow:auto;margin-top:6px;"></div>
-          <div id="replace-last" style="margin-top:8px;"></div>
-        </div>
-        <div id="pair-sheet" style="margin-top:12px;border:1px solid var(--bdr);border-radius:8px;padding:10px 12px;background:var(--sur);">
-          <div class="lbl" style="margin:0;">SKU / FNSKU PAIRS</div>
-          <div style="font-size:10px;color:var(--td);margin-top:4px;">For items missing from the inventory sheet. Confirm a pair once. The next scan of either code passes.</div>
-          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-            <input id="pair-sku" placeholder="SKU" style="flex:1;min-width:120px;padding:7px 9px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:monospace;"/>
-            <input id="pair-fnsku" placeholder="FNSKU" style="flex:1;min-width:120px;padding:7px 9px;font-size:12px;border-radius:6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:monospace;"/>
-            <button class="btn" type="button" onclick="saveManualPair()">Save pair</button>
-          </div>
-          <div id="pair-rows" style="max-height:160px;overflow:auto;margin-top:8px;font-size:12px;color:var(--td);">No learned pairs yet.</div>
-        </div>
       </div>
       <div id="queue"></div>
     </div>
@@ -1347,9 +1345,9 @@ body.station-mode #pack-left{font-size:120px;}
             packers.forEach(function(p){ p.ordersCompleted=0;p.dailyOrdersDate='';p.dailyOrdersCompleted=0;p.skusScanned=0;p.orderTimes=[];p.totalPackTime=0;p.shiftSessions=[]; });
             saveStaff(); renderProductivity(); pm('✓ Shift stats reset.');
           " style="font-size:9px;">↺ RESET SHIFT</button>
-          <button id="excel-connect-btn" class="btn" style="border-color:#1D6F42;color:#1D6F42;font-size:9px;white-space:nowrap;" onclick="excelConnect()">⊞ CONNECT EXCEL</button>
-          <button id="excel-save-btn"    class="btn" style="border-color:#1D6F42;color:#1D6F42;background:#1D6F4215;font-size:9px;white-space:nowrap;display:none;" onclick="playClickSound();excelSavePayroll()">📊 SAVE STATS</button>
-          <button id="excel-settings-btn" style="border-color:var(--bdr);color:var(--td);display:none;padding:6px 8px;font-size:10px;cursor:pointer;background:transparent;border:1px solid;" onclick="excelConnect()" title="Change Excel file / Disconnect">⚙</button>
+          <button id="excel-connect-btn" class="btn" style="display:none;" onclick="excelConnect()">Connect Excel</button>
+          <button id="excel-save-btn" class="btn" style="display:none;" onclick="playClickSound();excelSavePayroll()">Save stats</button>
+          <button id="excel-settings-btn" style="display:none;" onclick="excelConnect()"></button>
         </div>
       </div>
 
@@ -1410,14 +1408,14 @@ body.station-mode #pack-left{font-size:120px;}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
         <div>
           <div style="font-size:10px;letter-spacing:3px;color:var(--td);">INVENTORY</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px;">📍 Locations</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">Locations</div>
           <div style="font-size:11px;color:var(--td);margin-top:4px;line-height:1.5;max-width:420px;">
             Each account imports its own sheet. A SKU cell can hold two codes, such as an FNSKU and the seller SKU in parentheses. Both are saved to that account, so a scan of either one matches.
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-c" onclick="inventoryTriggerUpload()" style="font-size:9px;">📦 IMPORT INVENTORY</button>
-          <button class="btn" onclick="gv('receiving')" style="font-size:9px;border-color:var(--cy);color:var(--cy);">📥 RECEIVE STOCK</button>
+          <button class="btn btn-c" onclick="inventoryTriggerUpload()">Import inventory</button>
+          <button class="btn" onclick="gv('receiving')" style="border-color:var(--cy);color:var(--cy);">Receive stock</button>
         </div>
       </div>
       <div id="loc-sync-status" style="font-size:10px;color:var(--td);margin-bottom:10px;min-height:14px;"></div>
@@ -1434,9 +1432,19 @@ body.station-mode #pack-left{font-size:120px;}
           <div id="loc-by-location" style="max-height:420px;overflow:auto;padding:8px;"></div>
         </div>
         <div style="border:1px solid var(--bdr);border-radius:10px;background:var(--sur);overflow:hidden;min-height:280px;">
-          <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);font-size:10px;letter-spacing:2px;color:var(--td);">🎯 PENDING PICKS BY LOCATION</div>
+          <div style="padding:10px 12px;border-bottom:1px solid var(--bdr);font-size:10px;letter-spacing:2px;color:var(--td);">PENDING PICKS BY LOCATION</div>
           <div id="loc-pick-queue" style="max-height:420px;overflow:auto;padding:8px;"></div>
         </div>
+      </div>
+      <div id="pair-sheet" style="margin-top:14px;border:1px solid var(--bdr);border-radius:10px;padding:12px;background:var(--sur);">
+        <div class="lbl" style="margin:0;">SKU / FNSKU PAIRS</div>
+        <div style="font-size:12px;color:var(--td);margin-top:4px;">For items missing from the inventory sheet. Confirm a pair once. The next scan of either code passes.</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          <input id="pair-sku" placeholder="SKU" style="flex:1;min-width:120px;padding:8px 10px;font-size:13px;border-radius:8px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:ui-monospace,monospace;"/>
+          <input id="pair-fnsku" placeholder="FNSKU" style="flex:1;min-width:120px;padding:8px 10px;font-size:13px;border-radius:8px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-family:ui-monospace,monospace;"/>
+          <button class="btn" type="button" onclick="saveManualPair()">Save pair</button>
+        </div>
+        <div id="pair-rows" style="max-height:220px;overflow:auto;margin-top:8px;font-size:13px;color:var(--td);">No learned pairs yet.</div>
       </div>
     </div>
   </div>
@@ -1671,7 +1679,18 @@ function applyPlanUIGating(){
   });
 }
 
+function toggleMoreMenu(e){
+  if(e) e.stopPropagation();
+  var menu = document.getElementById('more-menu');
+  if(!menu) return;
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', function(){
+  var menu = document.getElementById('more-menu');
+  if(menu) menu.style.display = 'none';
+});
 function gv(name){
+  if(name==='payroll') name = 'dash';
   var neededFeature = VIEW_FEATURE_MAP[name];
   if(neededFeature && !planAllows(neededFeature)){
     showUpgradePrompt(neededFeature);
@@ -1681,12 +1700,16 @@ function gv(name){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('on'); });
   var el=document.getElementById('view-'+name); if(el) el.classList.add('on');
   if(name==='vehicle'){ vehicleConfigLoad(); vehiclePopulateDrivers(); renderVehicleLog(); renderVehicleStats(); gmapsInit(); }
-  if(name==='locations'){ locationsRefreshFromAccount(); }
+  if(name==='locations'){ locationsRefreshFromAccount(); if(typeof renderPairTable==='function') renderPairTable(); }
   if(name==='receiving'){ /* inventory refresh after receive */ }
   if(name==='rackmap'){ /* legacy map removed — redirect */ gv('locations'); return; }
   if(name==='floor'){ /* legacy floor removed — redirect */ gv('locations'); return; }
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
+  var moreTab = document.getElementById('more-tab');
+  if(moreTab && {dash:1,locations:1,receiving:1,returns:1,vehicle:1,fba:1}[name]) moreTab.classList.add('on');
+  var moreMenu = document.getElementById('more-menu');
+  if(moreMenu) moreMenu.style.display = 'none';
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
   if(name==='pack')   { if(window.apiLoadOrders) window.apiLoadOrders(); renderPackRemaining(); renderQueue(); renderActive(); showLoginOrPack(); renderReplacementSheet(); if(typeof renderPairTable==='function') renderPairTable(); setTimeout(function(){var el=document.getElementById('login-scan-in');if(el)el.focus();},100); }
   if(name==='dash')   renderDash();
@@ -1699,7 +1722,7 @@ function gv(name){
   }
   if(name==='receiving'){ recvInitView(); }
   if(name==='import'){ dzUpdateNeonDate(); }
-  if(name==='exceptions'){ renderExceptions(); }
+  if(name==='exceptions'){ renderExceptions(); if(typeof renderReplacementSheet==='function') renderReplacementSheet(); }
 }
 
 function todayISO(){
@@ -1959,9 +1982,9 @@ function dzSetParsingGlow(isParsing){
 var I18N = {
   en: {
     nav_import: 'Import', nav_packers: 'Packers', nav_pack: 'Pack Station',
-    nav_dash: 'Dashboard', nav_stats: '📊 Stats', nav_locations: '📍 Locations', nav_floor: '📍 Locations',
-    nav_returns: '📦 Returns', nav_receiving: '📥 Receiving', nav_vehicle: '🚗 Vehicle', nav_rackmap: '📍 Locations',
-    nav_fba: '📤 FBA Outbound',
+    nav_dash: 'Dashboard', nav_stats: 'Stats', nav_locations: 'Locations', nav_floor: 'Locations',
+    nav_returns: 'Returns', nav_receiving: 'Receiving', nav_vehicle: 'Vehicle', nav_rackmap: 'Locations',
+    nav_fba: 'FBA Outbound',
 
     pack_title: 'PACK STATION',
     pack_out_of_stock: '⚠ OUT OF STOCK',
@@ -1973,9 +1996,9 @@ var I18N = {
   },
   zh: {
     nav_import: '匯入', nav_packers: '打包員', nav_pack: '打包站',
-    nav_dash: '儀表板', nav_stats: '📊 統計', nav_locations: '📍 庫位', nav_floor: '📍 庫位',
-    nav_returns: '📦 退貨', nav_receiving: '📥 收貨', nav_vehicle: '🚗 車輛', nav_rackmap: '📍 庫位',
-    nav_fba: '📤 FBA 出貨',
+    nav_dash: '儀表板', nav_stats: '統計', nav_locations: '庫位', nav_floor: '庫位',
+    nav_returns: '退貨', nav_receiving: '收貨', nav_vehicle: '車輛', nav_rackmap: '庫位',
+    nav_fba: 'FBA 出貨',
 
     pack_title: '打包站 — 兩步驟驗證',
     pack_out_of_stock: '⚠ 缺貨',
@@ -1987,9 +2010,9 @@ var I18N = {
   },
   es: {
     nav_import: 'Importar', nav_packers: 'Empacadores', nav_pack: 'Estación de Empaque',
-    nav_dash: 'Panel', nav_stats: '📊 Estadísticas', nav_locations: '📍 Ubicaciones', nav_floor: '📍 Ubicaciones',
-    nav_returns: '📦 Devoluciones', nav_receiving: '📥 Recepción', nav_vehicle: '🚗 Vehículo', nav_rackmap: '📍 Ubicaciones',
-    nav_fba: '📤 Envío FBA',
+    nav_dash: 'Panel', nav_stats: 'Estadísticas', nav_locations: 'Ubicaciones', nav_floor: 'Ubicaciones',
+    nav_returns: 'Devoluciones', nav_receiving: 'Recepción', nav_vehicle: 'Vehículo', nav_rackmap: 'Ubicaciones',
+    nav_fba: 'Envío FBA',
 
     pack_title: 'ESTACIÓN DE EMPAQUE — VERIFICACIÓN EN 2 PASOS',
     pack_out_of_stock: '⚠ SIN EXISTENCIAS',
@@ -7600,21 +7623,10 @@ async function msRefreshTokenSilent(){
 }
 
 function excelUpdateUI(){
-  var cb = document.getElementById('excel-connect-btn');
-  var sb = document.getElementById('excel-save-btn');
-  var gb = document.getElementById('excel-settings-btn');
-  if(!cb||!sb) return;
-  var ready = !!(_msalToken && _excelFileId);
-  cb.style.display = ready ? 'none' : '';
-  sb.style.display = ready ? '' : 'none';
-  if(gb) gb.style.display = ready ? '' : 'none';
-  if(_msalToken && !_excelFileId){
-    cb.textContent='⊞ PICK EXCEL FILE';
-    cb.style.borderColor='#f59e0b'; cb.style.color='#f59e0b';
-  } else {
-    cb.textContent='⊞ CONNECT EXCEL';
-    cb.style.borderColor='#1D6F42'; cb.style.color='#1D6F42';
-  }
+  ['excel-connect-btn','excel-save-btn','excel-settings-btn'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
 }
 
 function excelConnect(){ ensureMsal(function(){ _excelConnectInner(); }); }
