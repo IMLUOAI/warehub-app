@@ -77,9 +77,8 @@ body{
 }
 .more-wrap{position:relative;flex:1;min-width:76px;display:flex;}
 #more-tab{flex:1;}
-#more-menu{display:none;position:fixed;z-index:4000;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;min-width:200px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.45);}
-#more-menu button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--tx);font:inherit;font-size:13px;font-weight:600;padding:10px 12px;border-radius:8px;cursor:pointer;}
-#more-menu button:hover{background:#4c8dff18;}
+.more-link{display:block;width:100%;text-align:left;background:var(--sur);border:1px solid var(--bdr);color:var(--tx);font:inherit;font-size:16px;font-weight:600;padding:16px 14px;border-radius:10px;cursor:pointer;}
+.more-link span{display:block;font-size:12px;font-weight:500;color:var(--td);margin-top:3px;}
 
 .tab{
   flex:1;
@@ -976,20 +975,21 @@ body.station-mode #pack-left{font-size:120px;}
     <button class="tab" data-view="pack" onclick="gv('pack')" data-i18n="nav_pack">Pack Station</button>
     <button class="tab" data-view="exceptions" onclick="gv('exceptions')">Exceptions</button>
     <div class="more-wrap">
-      <button class="tab" id="more-tab" type="button" onclick="toggleMoreMenu(event)">More</button>
+      <button class="tab" id="more-tab" data-view="more" type="button" onclick="gv('more')">More</button>
     </div>
-  </div>
-  <div id="more-menu" onclick="event.stopPropagation()">
-    <button type="button" data-view="dash" onclick="gv('dash')">Dashboard</button>
-    <button type="button" data-view="locations" onclick="gv('locations')">Locations</button>
-    <button type="button" data-view="receiving" onclick="gv('receiving')">Receiving</button>
-    <button type="button" data-view="returns" onclick="gv('returns')">Returns</button>
-    <button type="button" data-view="vehicle" onclick="gv('vehicle')">Vehicle</button>
-    <button type="button" data-view="fba" onclick="gv('fba')">FBA Outbound</button>
   </div>
 </div>
 
 <div id="app" style="display:none;">
+  <div id="view-more" class="view" style="display:flex;flex-direction:column;padding:16px 18px;gap:10px;overflow-y:auto;">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">More</div>
+    <button class="more-link" type="button" onclick="gv('dash')">Dashboard<span>Today's orders, packers, and carriers</span></button>
+    <button class="more-link" type="button" onclick="gv('locations')">Locations<span>Bins, SKUs, and learned pairs</span></button>
+    <button class="more-link" type="button" onclick="gv('receiving')">Receiving<span>Stock that just came in</span></button>
+    <button class="more-link" type="button" onclick="gv('returns')">Returns<span>Packages coming back</span></button>
+    <button class="more-link" type="button" onclick="gv('vehicle')">Vehicle<span>Trips and mileage</span></button>
+    <button class="more-link" type="button" onclick="gv('fba')">FBA Outbound<span>Amazon shipments</span></button>
+  </div>
   <div id="view-exceptions" class="view" style="display:flex;flex-direction:column;padding:16px 18px;gap:14px;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
       <div>
@@ -1679,22 +1679,6 @@ function applyPlanUIGating(){
   });
 }
 
-function toggleMoreMenu(e){
-  if(e) e.stopPropagation();
-  var menu = document.getElementById('more-menu');
-  var btn = document.getElementById('more-tab');
-  if(!menu || !btn) return;
-  if(menu.style.display === 'block'){ menu.style.display = 'none'; return; }
-  menu.style.display = 'block';
-  var r = btn.getBoundingClientRect();
-  var width = menu.offsetWidth || 200;
-  menu.style.top = (r.bottom + 6) + 'px';
-  menu.style.left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8)) + 'px';
-}
-document.addEventListener('click', function(){
-  var menu = document.getElementById('more-menu');
-  if(menu) menu.style.display = 'none';
-});
 function gv(name){
   if(name==='payroll') name = 'dash';
   var neededFeature = VIEW_FEATURE_MAP[name];
@@ -1713,7 +1697,7 @@ function gv(name){
   if(name==='devpanel'){ devRender(); }
   document.querySelectorAll('.tab').forEach(function(b){ if(b.dataset.view===name) b.classList.add('on'); });
   var moreTab = document.getElementById('more-tab');
-  if(moreTab && {dash:1,locations:1,receiving:1,returns:1,vehicle:1,fba:1}[name]) moreTab.classList.add('on');
+  if(moreTab && {dash:1,locations:1,receiving:1,returns:1,vehicle:1,fba:1,more:1}[name]) moreTab.classList.add('on');
   var moreMenu = document.getElementById('more-menu');
   if(moreMenu) moreMenu.style.display = 'none';
   if(name==='manager'){ renderManagerPanel(); renderPackerPanel(); renderAssignPanel(); }
