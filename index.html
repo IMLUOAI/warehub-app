@@ -128,14 +128,14 @@ body{
 /* ── HEADER ── */
 
 #logo{font-family:'Barlow',sans-serif;font-weight:800;font-size:15px;letter-spacing:0.14em;color:var(--tx);}
-.brand-slot{width:32px;height:32px;border-radius:7px;border:1px solid var(--bdr);background:var(--sur);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;}
-.brand-slot .brand-logo{width:100%;height:100%;object-fit:contain;display:none;padding:3px;}
+.brand-slot{width:32px;height:32px;border-radius:7px;border:1px solid var(--bdr);background:var(--sur);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;padding:0;}
+.brand-slot .brand-logo{width:100%;height:100%;object-fit:cover;display:none;padding:0;}
 .brand-sub{font-size:8px;letter-spacing:2px;color:var(--td);font-family:'Share Tech Mono',monospace;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.brand-hero-logo{width:76px;height:76px;object-fit:contain;display:none;background:#fff;border:1px solid var(--bdr);border-radius:14px;padding:8px;}
+.brand-hero-logo{width:76px;height:76px;object-fit:cover;display:none;background:transparent;border:1px solid var(--bdr);border-radius:14px;padding:0;}
 .brand-hero-name{display:none;font-family:'Barlow',sans-serif;font-weight:800;letter-spacing:2px;color:var(--tx);font-size:14px;text-align:center;max-width:280px;}
-.brand-chip{width:18px;height:18px;object-fit:contain;display:none;border-radius:4px;background:#fff;border:1px solid var(--bdr);padding:1px;flex-shrink:0;}
-.brand-preview{width:48px;height:48px;object-fit:contain;display:none;border-radius:8px;border:1px solid var(--bdr);background:#fff;padding:4px;}
-body.has-brand .brand-slot{background:#fff;}
+.brand-chip{width:18px;height:18px;object-fit:cover;display:none;border-radius:4px;background:transparent;border:1px solid var(--bdr);padding:0;flex-shrink:0;}
+.brand-preview{width:48px;height:48px;object-fit:cover;display:none;border-radius:8px;border:1px solid var(--bdr);background:transparent;padding:0;}
+body.has-brand .brand-slot{background:transparent;}
 body.has-brand .brand-slot .brand-logo,
 body.has-brand .brand-hero-logo,
 body.has-brand .brand-chip,
